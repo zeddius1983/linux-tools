@@ -27,7 +27,7 @@ image_exists() {
 
 box_exists() {
     distrobox ls --no-color 2>/dev/null \
-        | awk 'NR>1 {print $1}' \
+        | awk -F'|' 'NR>1 { gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); print $2 }' \
         | grep -qx "$(box_name "$1")"
 }
 
