@@ -164,7 +164,7 @@ interactive() {
     done
 
     local selected
-    selected=$(whiptail --title "linux-tools Manager" \
+    selected=$(whiptail --title "linux-tools" \
         --checklist "Select apps  (SPACE = toggle, ENTER = confirm):" \
         20 72 10 "${checklist[@]}" 3>&1 1>&2 2>&3) || exit 0
 
@@ -177,7 +177,7 @@ interactive() {
     fi
 
     local action
-    action=$(whiptail --title "linux-tools Manager" \
+    action=$(whiptail --title "linux-tools" \
         --menu "Action for: ${selected_arr[*]}" 16 68 5 \
         "setup"  "Build image + create box + export to host" \
         "build"  "Build container image only" \
