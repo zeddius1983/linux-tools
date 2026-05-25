@@ -118,25 +118,28 @@ cmd_list() {
 setup_tui_theme() {
     export NEWT_COLORS='
 root=white,black
-border=cyan,black
-window=white,black
-shadow=black,black
-title=cyan,black
-button=black,cyan
-actbutton=black,white
-compactbutton=white,black
-checkbox=white,black
-actcheckbox=black,cyan
-entry=white,black
-label=cyan,black
-listbox=white,black
-actlistbox=black,cyan
+border=brown,black
+window=lightgray,black
+shadow=gray,black
+title=yellow,black
+button=yellow,brown
+actbutton=white,brown
+compactbutton=brown,black
+checkbox=lightgray,black
+actcheckbox=yellow,brown
+entry=yellow,brown
+disentry=gray,brown
+label=white,black
+listbox=gray,black
+actlistbox=black,brown
+sellistbox=lightgray,green
+actsellistbox=white,brown
 textbox=white,black
 acttextbox=black,cyan
-helpline=black,cyan
-roottext=white,black
-emptyscale=white,black
-fullscale=cyan,black
+emptyscale=,gray
+fullscale=,brown
+helpline=white,black
+roottext=lightgrey,black
 '
 }
 
