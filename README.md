@@ -2,6 +2,23 @@
 
 Manages Linux GUI and CLI applications inside [Distrobox](https://distrobox.it/) containers, keeping the host system clean. Each app lives in its own container and is exported to the host so it behaves like a natively installed application.
 
+## Testing on macOS (OrbStack)
+
+If you don't have a Linux machine handy, use [OrbStack](https://orbstack.dev) to spin up a lightweight Ubuntu VM:
+
+```bash
+# Install OrbStack, then:
+orb create ubuntu:24.04 linux-tools-test
+orb shell linux-tools-test
+
+# Inside the VM — clone the repo and run the setup script:
+git clone git@github.com:zeddius1983/linux-tools.git
+cd linux-tools
+bash scripts/setup-vm.sh
+```
+
+After setup, `./manage.sh` runs fully inside the VM. You can test building images, creating distroboxes, and exporting apps. Rendering GUI windows (e.g. Chrome opening visually) requires X11 forwarding and is easier to verify on a real Linux Mint machine.
+
 ## Prerequisites
 
 - [Distrobox](https://distrobox.it/#installation) installed on the host
