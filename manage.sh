@@ -115,7 +115,33 @@ cmd_list() {
 
 # ── Interactive TUI ──────────────────────────────────────────────────────────
 
+setup_tui_theme() {
+    export NEWT_COLORS='
+root=white,black
+border=cyan,black
+window=white,black
+shadow=black,black
+title=cyan,black
+button=black,cyan
+actbutton=black,white
+compactbutton=white,black
+checkbox=white,black
+actcheckbox=black,cyan
+entry=white,black
+label=cyan,black
+listbox=white,black
+actlistbox=black,cyan
+textbox=white,black
+acttextbox=black,cyan
+helpline=black,cyan
+roottext=white,black
+emptyscale=white,black
+fullscale=cyan,black
+'
+}
+
 interactive() {
+    setup_tui_theme
     command -v whiptail &>/dev/null || {
         echo "Error: whiptail not found. Install with: sudo apt install whiptail" >&2; exit 1
     }
