@@ -105,6 +105,7 @@ If you update the exports file, re-run:
 | App | Image | Box |
 |---|---|---|
 | Google Chrome | `linux-tools/chrome:latest` | `chrome-box` |
+| Claude Code CLI | `linux-tools/claude-code:latest` | `claude-code-box` |
 
 ## Adding a new app
 
