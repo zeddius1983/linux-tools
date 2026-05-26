@@ -2,4 +2,4 @@
 # app     - export existing container .desktop entry to host menu
 # bin     - export binary to ~/.local/bin
 # desktop - create terminal-launched app shortcut (place icon.png here for icon)
-app:lm-studio:LM Studio
+app:lmstudio:LM Studio

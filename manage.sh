@@ -77,7 +77,7 @@ cmd_create() {
         return
     fi
     echo "==> Creating distrobox '$box'..."
-    distrobox create --name "$box" --image "$image" --yes
+    distrobox create --name "$box" --image "$image" --yes --no-entry
 }
 
 cmd_export() {
@@ -93,26 +93,9 @@ cmd_export() {
     app_desc="$(app_description "$app")"
     mkdir -p "$desktop_dir"
 
-    # Always create a terminal shortcut for entering the container
-    local term_exec term_flag
-    if [[ -n "$t_prefix" ]]; then
-        term_exec="${t_prefix} distrobox enter ${box}"
-        term_flag="false"
-    else
-        term_exec="distrobox enter ${box}"
-        term_flag="true"
-    fi
-    cat > "$desktop_dir/${box}-terminal.desktop" << DESKTOPEOF
-[Desktop Entry]
-Name=${app_desc} (Terminal)
-Comment=Terminal entering ${box}
-Exec=${term_exec}
-Icon=utilities-terminal
-Terminal=${term_flag}
-Type=Application
-Categories=System;
-DESKTOPEOF
-    echo "==> Terminal shortcut: $desktop_dir/${box}-terminal.desktop"
+    # Remove terminal shortcut before running distrobox-export so it isn't
+    # visible in the shared home dir and re-exported with a doubled prefix.
+    rm -f "$desktop_dir/${box}-terminal.desktop"
 
     while IFS=: read -r type name extra <&3; do
         [[ -z "$type" || "$type" == \#* ]] && continue
@@ -123,8 +106,9 @@ DESKTOPEOF
                 local display_name="${extra:-$name}"
                 echo "==> Exporting desktop app '$name'..."
                 distrobox enter "$box" -- distrobox-export --app "$name"
-                local app_desktop="$HOME/.local/share/applications/${name}-${box}.desktop"
+                local app_desktop="$HOME/.local/share/applications/${box}-${name}.desktop"
                 if [[ -f "$app_desktop" ]]; then
+                    sed -i "s|^Name=.*|Name=${display_name} (on ${box})|" "$app_desktop"
                     ! grep -q '^Comment=' "$app_desktop" && \
                         sed -i "/^\[Desktop Entry\]/a Comment=Launching ${display_name} in ${box}" "$app_desktop"
                     local ext bundled_icon=""
@@ -134,6 +118,28 @@ DESKTOPEOF
                             break
                         fi
                     done
+                    if [[ -z "$bundled_icon" ]]; then
+                        local icon_dir icon_src
+                        icon_dir="$HOME/.local/share/icons/hicolor/256x256/apps"
+                        icon_src=$(distrobox enter "$box" -- bash -c "
+                            for f in \
+                                /usr/share/icons/hicolor/256x256/apps/${name}-code.png \
+                                /usr/share/icons/hicolor/256x256/apps/${name}.png \
+                                /usr/share/icons/hicolor/512x512/apps/${name}-code.png \
+                                /usr/share/icons/hicolor/512x512/apps/${name}.png \
+                                /usr/share/icons/hicolor/128x128/apps/${name}-code.png \
+                                /usr/share/icons/hicolor/128x128/apps/${name}.png \
+                                /usr/share/pixmaps/${name}-code.png \
+                                /usr/share/pixmaps/${name}.png; do
+                                [ -f \"\$f\" ] && echo \"\$f\" && exit 0
+                            done" 2>/dev/null | grep '^/') || true
+                        if [[ -n "$icon_src" ]]; then
+                            mkdir -p "$icon_dir"
+                            local extracted_icon="$icon_dir/${box}-${name}.png"
+                            distrobox enter "$box" -- cat "$icon_src" > "$extracted_icon" 2>/dev/null \
+                                && bundled_icon="$extracted_icon"
+                        fi
+                    fi
                     [[ -n "$bundled_icon" ]] && \
                         sed -i "s|^Icon=.*|Icon=${bundled_icon}|" "$app_desktop"
                     # Remove duplicate exports with a different desktop ID but same Name
@@ -223,6 +229,28 @@ DESKTOPEOF
                 ;;
         esac
     done 3< "$exports_file"
+
+    # Terminal shortcut is created after all app exports so distrobox-export
+    # doesn't pick it up from the shared home dir and double-export it.
+    local term_exec term_flag
+    if [[ -n "$t_prefix" ]]; then
+        term_exec="${t_prefix} distrobox enter ${box}"
+        term_flag="false"
+    else
+        term_exec="distrobox enter ${box}"
+        term_flag="true"
+    fi
+    cat > "$desktop_dir/${box}-terminal.desktop" << DESKTOPEOF
+[Desktop Entry]
+Name=${app_desc} (Terminal)
+Comment=Terminal entering ${box}
+Exec=${term_exec}
+Icon=utilities-terminal
+Terminal=${term_flag}
+Type=Application
+Categories=System;
+DESKTOPEOF
+    echo "==> Terminal shortcut: $desktop_dir/${box}-terminal.desktop"
 }
 
 cmd_rm() {
