@@ -1,0 +1,4 @@
+# Format: type:name[:Display Name]
+bin:corefreq-setup
+bin:corefreq-cli
+desktop:corefreq-cli:CoreFreq

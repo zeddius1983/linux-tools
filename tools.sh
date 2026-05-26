@@ -77,7 +77,15 @@ cmd_create() {
         return
     fi
     echo "==> Creating distrobox '$box'..."
-    distrobox create --name "$box" --image "$image" --yes --no-entry
+    local flags_file="$APPS_DIR/$app/create_flags"
+    if [[ -f "$flags_file" ]]; then
+        local extra_flags
+        extra_flags="$(cat "$flags_file")"
+        distrobox create --name "$box" --image "$image" --yes --no-entry \
+            --additional-flags "$extra_flags"
+    else
+        distrobox create --name "$box" --image "$image" --yes --no-entry
+    fi
 }
 
 cmd_export() {

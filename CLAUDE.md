@@ -34,6 +34,7 @@ Create `apps/<name>/` with three files:
 | `Dockerfile` | Container image definition |
 | `exports` | What to expose to the host (see export types below) |
 | `description` | One-line label shown in the interactive TUI (keep it short — the TUI is 72 cols wide; description + app name + status must fit) |
+| `create_flags` | Optional. Extra flags passed to the container engine via `distrobox create --additional-flags`. Use for privileged mode, device passthrough, or volume mounts needed at container creation time (e.g. `--privileged -v /usr/src:/usr/src:ro`). |
 
 Optionally add `icon.png` or `icon.svg` — if present, it overrides whatever icon the container has. All export types share the same bundled icon.
 
@@ -64,12 +65,47 @@ RUN mv /usr/bin/mytool /usr/bin/mytool-bin && \
     > /usr/bin/mytool && chmod +x /usr/bin/mytool
 ```
 
+### Build-environment container pattern
+
+Some tools must run on bare metal (kernel modules, hardware monitors) and can't be containerized at runtime. Use the container as a **build environment only**: compile inside, run the artifacts on the host.
+
+Key points:
+- Clone source at image-build time (`git clone` in `Dockerfile`) so the image is self-contained
+- Build at runtime (not image-build time) because the host kernel version isn't known until then
+- Copy build artifacts to `~/.local/<app>/` — Distrobox's shared `$HOME` makes them immediately visible on the host
+- Use `distrobox-host-exec` in wrapper scripts for any operation that needs real host privileges (see below)
+
+Example: `apps/corefreq/` — container provides `build-essential` + CoreFreq source; `corefreq-setup` builds the kernel module inside the container and copies it to `~/.local/corefreq/` on the host.
+
+### `distrobox-host-exec` pattern
+
+`distrobox-host-exec <cmd>` runs a command on the host from inside a container. Use it whenever a wrapper script needs host-level operations that container capabilities can't provide:
+
+```bash
+# load a kernel module on the host
+distrobox-host-exec sudo insmod "$HOME/.local/corefreq/corefreqk.ko"
+
+# check host process list
+distrobox-host-exec pgrep -x corefreqd
+
+# start a background daemon on the host
+distrobox-host-exec sudo bash -c "nohup ${DAEMON} &>/dev/null &"
+```
+
+Pipe output from host commands normally — only the command runs on the host, stdout flows back to the container:
+```bash
+distrobox-host-exec lsmod | grep -q "^corefreqk "
+```
+
+**When to use it:** rootless Podman containers with `--privileged` do not get `CAP_SYS_MODULE`, so `insmod`/`rmmod` fail even inside a privileged container. `distrobox-host-exec` bypasses this by delegating to the host's sudo.
+
 ### Base image selection
 
 | Situation | Base image |
 |---|---|
 | AMD GPU access, Vulkan, GUI rendering (egui/WGPU) | `registry.fedoraproject.org/fedora:43` |
 | App with official Ubuntu/Debian APT repo | `ubuntu:24.04` |
+| Kernel module compilation (must match host ABI) | `ubuntu:24.04` |
 | x86-only app on a mixed-arch host | `FROM --platform=linux/amd64 ubuntu:24.04` |
 
 For AMD GPU GUI apps, the minimum required packages are:
@@ -112,3 +148,6 @@ Distrobox mounts the host's `$HOME` inside the container. This means:
 - **`/usr/local/bin` not in system PATH**: `command -pv` (used to locate binaries for `bin:`, `desktop:`, `gui:` exports) searches the system default PATH. Place wrapper scripts in `/usr/bin/`, not `/usr/local/bin/`.
 - **WGPU / egui GUI apps**: Require `vulkan-loader` + `mesa-vulkan-drivers` in the container. Missing these produces `Failed to create surface for any enabled backend`.
 - **`libxkbcommon-x11`**: A separate package from `libxkbcommon` on Fedora — both are needed for any Rust GUI using xkbcommon.
+- **Kernel module builds**: Distrobox does NOT auto-share `/lib/modules` or `/usr/src`. Add both to `create_flags`: `--privileged -v /usr/src:/usr/src:ro -v /lib/modules:/lib/modules:ro`. Without `/usr/src`, the `/lib/modules/$(uname -r)/build` symlink is broken inside the container.
+- **`insmod` in rootless Podman**: `--privileged` does not grant `CAP_SYS_MODULE` in rootless mode. Use `distrobox-host-exec sudo insmod` to load modules via the host's sudo instead.
+- **Daemon IPC across container boundary**: `corefreqd` (host) and `corefreq-cli` (container) communicate via POSIX shared memory. This works because Distrobox shares `/dev/shm` with the host. However, `pgrep` inside the container won't find host processes — check with `distrobox-host-exec pgrep` instead.
