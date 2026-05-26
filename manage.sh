@@ -43,6 +43,23 @@ app_status_label() {
     echo "$img  $box"
 }
 
+# ── Terminal detection ───────────────────────────────────────────────────────
+
+pick_terminal() {
+    for t in ghostty kitty alacritty gnome-terminal xfce4-terminal mate-terminal konsole xterm; do
+        command -v "$t" &>/dev/null && echo "$t" && return
+    done
+}
+
+terminal_exec_prefix() {
+    case "${1:-}" in
+        ghostty|kitty|alacritty) echo "$1 -e" ;;
+        gnome-terminal|mate-terminal|xfce4-terminal|konsole) echo "$1 --" ;;
+        xterm) echo "xterm -e" ;;
+        *) echo "" ;;
+    esac
+}
+
 # ── Commands ─────────────────────────────────────────────────────────────────
 
 cmd_build() {
@@ -68,9 +85,39 @@ cmd_export() {
     box="$(box_name "$app")"
     local exports_file="$APPS_DIR/$app/exports"
     [[ -f "$exports_file" ]] || { echo "No exports file found, skipping"; return; }
-    while IFS=: read -r type name; do
+
+    local term t_prefix desktop_dir app_desc
+    term=$(pick_terminal)
+    t_prefix=$(terminal_exec_prefix "$term")
+    desktop_dir="$HOME/.local/share/applications"
+    app_desc="$(app_description "$app")"
+    mkdir -p "$desktop_dir"
+
+    # Always create a terminal shortcut for entering the container
+    local term_exec term_flag
+    if [[ -n "$t_prefix" ]]; then
+        term_exec="${t_prefix} distrobox enter ${box}"
+        term_flag="false"
+    else
+        term_exec="distrobox enter ${box}"
+        term_flag="true"
+    fi
+    cat > "$desktop_dir/${box}-terminal.desktop" << DESKTOPEOF
+[Desktop Entry]
+Name=${app_desc} (Terminal)
+Comment=Terminal entering ${box}
+Exec=${term_exec}
+Icon=utilities-terminal
+Terminal=${term_flag}
+Type=Application
+Categories=System;
+DESKTOPEOF
+    echo "==> Terminal shortcut: $desktop_dir/${box}-terminal.desktop"
+
+    while IFS=: read -r type name extra <&3; do
         [[ -z "$type" || "$type" == \#* ]] && continue
         name="$(echo "$name" | xargs)"
+        extra="$(echo "$extra" | xargs)"
         case "$type" in
             app)
                 echo "==> Exporting desktop app '$name'..."
@@ -78,13 +125,82 @@ cmd_export() {
                 ;;
             bin)
                 echo "==> Exporting binary '$name' to ~/.local/bin..."
-                distrobox enter "$box" -- distrobox-export --bin "$name" --export-path ~/.local/bin
+                local bin_path
+                bin_path=$(distrobox enter "$box" -- bash -c "command -pv '$name'" 2>/dev/null | grep '^/') || true
+                if [[ -z "$bin_path" ]]; then
+                    echo "Error: cannot find '$name' inside container" >&2
+                    continue
+                fi
+                distrobox enter "$box" -- distrobox-export --bin "$bin_path" --export-path ~/.local/bin
+                ;;
+            desktop)
+                local display_name="${extra:-$name}"
+                echo "==> Creating desktop entry for '$display_name'..."
+                local bin_path local_icon=""
+                bin_path=$(distrobox enter "$box" -- bash -c "command -pv '$name'" 2>/dev/null | grep '^/') || true
+                if [[ -z "$bin_path" ]]; then
+                    echo "Error: cannot find '$name' inside container" >&2
+                    continue
+                fi
+
+                # Prefer project-bundled icon, fall back to searching the container
+                local ext
+                for ext in png svg; do
+                    if [[ -f "$APPS_DIR/$app/icon.$ext" ]]; then
+                        local_icon="$APPS_DIR/$app/icon.$ext"
+                        break
+                    fi
+                done
+                if [[ -z "$local_icon" ]]; then
+                    local icon_dir icon_src
+                    icon_dir="$HOME/.local/share/icons/hicolor/256x256/apps"
+                    icon_src=$(distrobox enter "$box" -- bash -c "
+                        for f in \
+                            /usr/share/icons/hicolor/256x256/apps/${name}-code.png \
+                            /usr/share/icons/hicolor/256x256/apps/${name}.png \
+                            /usr/share/icons/hicolor/512x512/apps/${name}-code.png \
+                            /usr/share/icons/hicolor/512x512/apps/${name}.png \
+                            /usr/share/icons/hicolor/128x128/apps/${name}-code.png \
+                            /usr/share/icons/hicolor/128x128/apps/${name}.png \
+                            /usr/share/pixmaps/${name}-code.png \
+                            /usr/share/pixmaps/${name}.png; do
+                            [ -f \"\$f\" ] && echo \"\$f\" && exit 0
+                        done" 2>/dev/null | grep '^/') || true
+                    if [[ -n "$icon_src" ]]; then
+                        mkdir -p "$icon_dir"
+                        local_icon="$icon_dir/${box}-${name}.png"
+                        distrobox enter "$box" -- cat "$icon_src" > "$local_icon" 2>/dev/null \
+                            || local_icon=""
+                    fi
+                fi
+
+                local app_exec app_flag
+                if [[ -n "$t_prefix" ]]; then
+                    app_exec="${t_prefix} distrobox enter ${box} -- ${bin_path}"
+                    app_flag="false"
+                else
+                    app_exec="distrobox enter ${box} -- ${bin_path}"
+                    app_flag="true"
+                fi
+                cat > "$desktop_dir/${box}-${name}.desktop" << DESKTOPEOF
+[Desktop Entry]
+Name=${display_name}
+Comment=Launching ${name} in ${box}
+Exec=${app_exec}
+Icon=${local_icon:-utilities-terminal}
+Terminal=${app_flag}
+Type=Application
+Categories=Development;
+DESKTOPEOF
+                echo "   Created: $desktop_dir/${box}-${name}.desktop"
+                [[ -n "$local_icon" ]] && echo "   Icon:    $local_icon" \
+                    || echo "   Icon:    not found, place icon.png in apps/${app}/ to set one"
                 ;;
             *)
                 echo "Warning: unknown export type '$type'" >&2
                 ;;
         esac
-    done < "$exports_file"
+    done 3< "$exports_file"
 }
 
 cmd_rm() {
