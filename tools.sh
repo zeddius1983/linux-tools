@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 APPS_DIR="$SCRIPT_DIR/apps"
 
 # ── Runtime detection ────────────────────────────────────────────────────────
@@ -324,6 +324,26 @@ cmd_setup() {
     echo "Done. '$app' is ready. Log out and back in if it doesn't appear in your app menu."
 }
 
+cmd_install() {
+    local bin_dir="$HOME/.local/bin"
+    local target="$bin_dir/tools"
+    local completion_line="source \"$SCRIPT_DIR/completion/tools.bash\""
+
+    mkdir -p "$bin_dir"
+    ln -sf "$SCRIPT_DIR/tools.sh" "$target"
+    echo "==> Linked: $target -> $SCRIPT_DIR/tools.sh"
+
+    if grep -qF "$completion_line" "$HOME/.bashrc" 2>/dev/null; then
+        echo "==> Completion already in ~/.bashrc"
+    else
+        printf '\n# linux-tools completion\n%s\n' "$completion_line" >> "$HOME/.bashrc"
+        echo "==> Added completion to ~/.bashrc"
+    fi
+
+    echo ""
+    echo "Done. Open a new shell or run: source ~/.bashrc"
+}
+
 cmd_list() {
     printf "%-20s %-30s %-12s %s\n" "APP" "DESCRIPTION" "IMAGE" "BOX"
     printf "%-20s %-30s %-12s %s\n" "───────────────────" "─────────────────────────────" "───────────" "──────────"
@@ -431,7 +451,8 @@ Usage: $0 [command] [app]
   (no args)        Launch interactive TUI manager
 
 Commands:
-  setup  <app>     Install (removes existing box+image first)
+  install          Symlink as 'tools' in ~/.local/bin + set up completion
+  setup  <app>     Install app (removes existing box+image first)
   build  <app>     Build container image only
   create <app>     Create distrobox from built image
   export <app>     Export apps/bins to host menu
@@ -453,6 +474,11 @@ command_="$1"
 
 if [[ "$command_" == "list" ]]; then
     cmd_list
+    exit 0
+fi
+
+if [[ "$command_" == "install" ]]; then
+    cmd_install
     exit 0
 fi
 

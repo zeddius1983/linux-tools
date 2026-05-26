@@ -4,23 +4,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this project does
 
-Packages Linux GUI and CLI applications into [Distrobox](https://distrobox.it/) containers and exports them to the host so they behave like natively installed apps. Each app lives under `apps/<name>/` and is managed via `manage.sh`.
+Packages Linux GUI and CLI applications into [Distrobox](https://distrobox.it/) containers and exports them to the host so they behave like natively installed apps. Each app lives under `apps/<name>/` and is managed via `tools.sh`.
 
 ## Common commands
 
 ```bash
-./manage.sh setup <app>    # full install: remove existing box+image, build, create, export
-./manage.sh export <app>   # re-export after editing an exports file
-./manage.sh list           # show all apps with image/box status
-./manage.sh rm <app>       # remove distrobox only (image kept)
-distrobox enter <app>-box  # open a shell inside a running box
+./tools.sh install        # symlink as 'tools' in ~/.local/bin + set up completion
+tools setup <app>         # full install: remove existing box+image, build, create, export
+tools export <app>        # re-export after editing an exports file
+tools list                # show all apps with image/box status
+tools rm <app>            # remove distrobox only (image kept)
+distrobox enter <app>-box # open a shell inside a running box
 ```
 
 `setup` is idempotent — it always removes any existing box and image before rebuilding, so it doubles as a rebuild command.
 
 `make setup-<app>` / `make build-<app>` etc. are thin wrappers around the above.
 
-Bash completion is in `completion/manage.bash` — source it from `~/.bashrc`.
+Bash completion is in `completion/tools.bash` — source it from `~/.bashrc`.
 
 ## Architecture
 
@@ -36,7 +37,7 @@ Create `apps/<name>/` with three files:
 
 Optionally add `icon.png` or `icon.svg` — if present, it overrides whatever icon the container has. All export types share the same bundled icon.
 
-`manage.sh` auto-discovers apps by listing `apps/`; no registration needed.
+`tools.sh` auto-discovers apps by listing `apps/`; no registration needed.
 
 ### Export types
 
@@ -96,14 +97,14 @@ Distrobox mounts the host's `$HOME` inside the container. This means:
 
 ### Icon resolution order
 
-`manage.sh` resolves icons in this order for all export types:
+`tools.sh` resolves icons in this order for all export types:
 1. `apps/<name>/icon.png` or `apps/<name>/icon.svg` (bundled — preferred)
 2. Standard icon paths searched inside the container (`hicolor/256x256`, `512x512`, `128x128`, `pixmaps`)
 3. Falls back to `utilities-terminal`
 
 ### Interactive TUI
 
-`./manage.sh` with no arguments opens a `whiptail` checklist. The TUI window is **72 columns wide** — keep `description` files short (under ~25 chars) so the app name + description + `[image:OK  box:OK]` status fits on one line.
+`./tools.sh` with no arguments opens a `whiptail` checklist. The TUI window is **72 columns wide** — keep `description` files short (under ~25 chars) so the app name + description + `[image:OK  box:OK]` status fits on one line.
 
 ## Known pitfalls
 

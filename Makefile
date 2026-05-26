@@ -12,13 +12,13 @@ help:
 	@echo "Available apps: $(APPS)"
 
 setup-%:
-	./manage.sh setup $*
+	./tools.sh setup $*
 
 build-%:
-	./manage.sh build $*
+	./tools.sh build $*
 
 export-%:
-	./manage.sh export $*
+	./tools.sh export $*
 
 rm-%:
-	./manage.sh rm $*
+	./tools.sh rm $*

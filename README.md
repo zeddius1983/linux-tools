@@ -12,20 +12,31 @@ Manages Linux GUI and CLI applications inside [Distrobox](https://distrobox.it/)
 ### Interactive TUI (recommended)
 
 ```bash
-./manage.sh
+./tools.sh
 ```
 
 A checklist shows all available apps with their current status (`image:OK / image:--` and `box:OK / box:--`). Use **SPACE** to toggle, **ENTER** to confirm, then pick an action.
 
+### Install (one-time)
+
+Symlinks `tools` into `~/.local/bin` and wires up bash completion in `~/.bashrc`:
+
+```bash
+./tools.sh install
+source ~/.bashrc
+```
+
+After that, use `tools` from anywhere instead of `./tools.sh`.
+
 ### CLI
 
 ```bash
-./manage.sh setup <app>    # full install — removes any existing box+image first
-./manage.sh export <app>   # re-export after editing an exports file
-./manage.sh build <app>    # build container image only
-./manage.sh create <app>   # create distrobox from built image
-./manage.sh rm <app>       # remove distrobox (image is kept)
-./manage.sh list           # show status of all apps
+tools setup <app>    # full install — removes any existing box+image first
+tools export <app>   # re-export after editing an exports file
+tools build <app>    # build container image only
+tools create <app>   # create distrobox from built image
+tools rm <app>       # remove distrobox (image is kept)
+tools list           # show status of all apps
 ```
 
 `make setup-<app>`, `make build-<app>`, etc. are available as shortcuts.
@@ -36,14 +47,6 @@ After setup, apps appear in your system application menu. Log out and back in if
 
 ```bash
 distrobox enter <app>-box
-```
-
-### Bash completion
-
-Source from `~/.bashrc` to get tab-completion for subcommands and app names:
-
-```bash
-source ~/path/to/linux-tools/completion/manage.bash
 ```
 
 ## Available apps
@@ -93,7 +96,7 @@ Optionally add **`icon.png`** or **`icon.svg`** to use a custom icon for all exp
 Then run:
 
 ```bash
-./manage.sh setup myapp
+./tools.sh setup myapp
 ```
 
 ## Testing on macOS (OrbStack)
@@ -107,7 +110,7 @@ orb shell linux-tools-test
 git clone git@github.com:zeddius1983/linux-tools.git
 cd linux-tools
 bash scripts/setup-vm.sh
-./manage.sh
+./tools.sh
 ```
 
 Rendering GUI windows requires X11 forwarding and is easier to verify on a real Linux machine.
