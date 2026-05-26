@@ -90,7 +90,7 @@ cmd_export() {
 cmd_rm() {
     local app="$1"
     echo "==> Removing distrobox '$(box_name "$app")'..."
-    distrobox rm --name "$(box_name "$app")" --force
+    distrobox rm --force "$(box_name "$app")"
 }
 
 cmd_setup() {

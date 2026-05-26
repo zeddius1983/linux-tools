@@ -1,0 +1,4 @@
+# Format: type:name
+# type "app" exports a .desktop entry to the host app menu
+# type "bin" exports a binary to ~/.local/bin
+app:lm-studio
