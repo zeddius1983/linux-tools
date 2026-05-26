@@ -38,7 +38,7 @@ RUN printf '#!/usr/bin/env bash\n\
 set -euo pipefail\n\
 BIN="$HOME/.local/corefreq/corefreq-cli"\n\
 [[ -x "$BIN" ]] || { echo "Not built. Run: corefreq-setup" >&2; exit 1; }\n\
-if ! distrobox-host-exec lsmod | grep -q "^corefreqk "; then\n\
+if ! distrobox-host-exec test -d /sys/module/corefreqk; then\n\
     echo "==> Loading corefreqk..." >&2\n\
     distrobox-host-exec sudo insmod "$HOME/.local/corefreq/corefreqk.ko"\n\
 fi\n\
