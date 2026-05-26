@@ -224,6 +224,60 @@ DESKTOPEOF
                 [[ -n "$local_icon" ]] && echo "   Icon:    $local_icon" \
                     || echo "   Icon:    not found, place icon.png in apps/${app}/ to set one"
                 ;;
+            gui)
+                local display_name="${extra:-$name}"
+                echo "==> Creating GUI desktop entry for '$display_name'..."
+                local bin_path local_icon=""
+                bin_path=$(distrobox enter "$box" -- bash -c "command -pv '$name'" 2>/dev/null | grep '^/') || true
+                if [[ -z "$bin_path" ]]; then
+                    echo "Error: cannot find '$name' inside container" >&2
+                    continue
+                fi
+
+                local ext
+                for ext in png svg; do
+                    if [[ -f "$APPS_DIR/$app/icon.$ext" ]]; then
+                        local_icon="$APPS_DIR/$app/icon.$ext"
+                        break
+                    fi
+                done
+                if [[ -z "$local_icon" ]]; then
+                    local icon_dir icon_src
+                    icon_dir="$HOME/.local/share/icons/hicolor/256x256/apps"
+                    icon_src=$(distrobox enter "$box" -- bash -c "
+                        for f in \
+                            /usr/share/icons/hicolor/256x256/apps/${name}-code.png \
+                            /usr/share/icons/hicolor/256x256/apps/${name}.png \
+                            /usr/share/icons/hicolor/512x512/apps/${name}-code.png \
+                            /usr/share/icons/hicolor/512x512/apps/${name}.png \
+                            /usr/share/icons/hicolor/128x128/apps/${name}-code.png \
+                            /usr/share/icons/hicolor/128x128/apps/${name}.png \
+                            /usr/share/pixmaps/${name}-code.png \
+                            /usr/share/pixmaps/${name}.png; do
+                            [ -f \"\$f\" ] && echo \"\$f\" && exit 0
+                        done" 2>/dev/null | grep '^/') || true
+                    if [[ -n "$icon_src" ]]; then
+                        mkdir -p "$icon_dir"
+                        local_icon="$icon_dir/${box}-${name}.png"
+                        distrobox enter "$box" -- cat "$icon_src" > "$local_icon" 2>/dev/null \
+                            || local_icon=""
+                    fi
+                fi
+
+                cat > "$desktop_dir/${box}-${name}.desktop" << DESKTOPEOF
+[Desktop Entry]
+Name=${display_name}
+Comment=Launching ${display_name} in ${box}
+Exec=distrobox enter ${box} -- ${bin_path}
+Icon=${local_icon:-utilities-terminal}
+Terminal=false
+Type=Application
+Categories=System;
+DESKTOPEOF
+                echo "   Created: $desktop_dir/${box}-${name}.desktop"
+                [[ -n "$local_icon" ]] && echo "   Icon:    $local_icon" \
+                    || echo "   Icon:    not found, place icon.png in apps/${app}/ to set one"
+                ;;
             *)
                 echo "Warning: unknown export type '$type'" >&2
                 ;;
@@ -260,11 +314,14 @@ cmd_rm() {
 }
 
 cmd_setup() {
-    cmd_build  "$1"
-    cmd_create "$1"
-    cmd_export "$1"
+    local app="$1"
+    box_exists   "$app" && distrobox rm --force "$(box_name "$app")"
+    image_exists "$app" && $RUNTIME rmi "$(image_name "$app")"
+    cmd_build  "$app"
+    cmd_create "$app"
+    cmd_export "$app"
     echo ""
-    echo "Done. '$1' is ready. Log out and back in if it doesn't appear in your app menu."
+    echo "Done. '$app' is ready. Log out and back in if it doesn't appear in your app menu."
 }
 
 cmd_list() {
@@ -348,7 +405,7 @@ interactive() {
     local action
     action=$(whiptail --title "linux-tools" \
         --menu "Action for: ${selected_arr[*]}" 16 68 5 \
-        "setup"  "Build image + create box + export to host" \
+        "setup"  "Install  (removes existing box+image first)" \
         "build"  "Build container image only" \
         "create" "Create distrobox from built image" \
         "export" "Re-export apps/bins to host" \
@@ -374,7 +431,7 @@ Usage: $0 [command] [app]
   (no args)        Launch interactive TUI manager
 
 Commands:
-  setup  <app>     Build + create + export (full install)
+  setup  <app>     Install (removes existing box+image first)
   build  <app>     Build container image only
   create <app>     Create distrobox from built image
   export <app>     Export apps/bins to host menu

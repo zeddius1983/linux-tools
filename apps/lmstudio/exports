@@ -2,4 +2,5 @@
 # app     - export existing container .desktop entry to host menu
 # bin     - export binary to ~/.local/bin
 # desktop - create terminal-launched app shortcut (place icon.png here for icon)
+# gui     - create non-terminal shortcut for GUI apps
 app:lmstudio:LM Studio
