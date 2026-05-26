@@ -1,6 +1,6 @@
 # Format: type:name[:Display Name]
-# app     - export existing container .desktop entry to host menu
+# app     - export container .desktop entry to host menu
 # bin     - export binary to ~/.local/bin
-# desktop - create terminal-launched app shortcut (place icon.png here for icon)
+# desktop - create terminal-launched shortcut (place icon.png here for icon)
 bin:claude
 desktop:claude:Claude Code

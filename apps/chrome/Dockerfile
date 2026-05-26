@@ -6,6 +6,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     gnupg \
+    libpulse0 \
+    libasound2t64 \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -fsSL https://dl-ssl.google.com/linux/linux_signing_key.pub \

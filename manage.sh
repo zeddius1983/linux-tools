@@ -120,8 +120,30 @@ DESKTOPEOF
         extra="$(echo "$extra" | xargs)"
         case "$type" in
             app)
+                local display_name="${extra:-$name}"
                 echo "==> Exporting desktop app '$name'..."
                 distrobox enter "$box" -- distrobox-export --app "$name"
+                local app_desktop="$HOME/.local/share/applications/${name}-${box}.desktop"
+                if [[ -f "$app_desktop" ]]; then
+                    ! grep -q '^Comment=' "$app_desktop" && \
+                        sed -i "/^\[Desktop Entry\]/a Comment=Launching ${display_name} in ${box}" "$app_desktop"
+                    local ext bundled_icon=""
+                    for ext in png svg; do
+                        if [[ -f "$APPS_DIR/$app/icon.$ext" ]]; then
+                            bundled_icon="$APPS_DIR/$app/icon.$ext"
+                            break
+                        fi
+                    done
+                    [[ -n "$bundled_icon" ]] && \
+                        sed -i "s|^Icon=.*|Icon=${bundled_icon}|" "$app_desktop"
+                    # Remove duplicate exports with a different desktop ID but same Name
+                    local canonical_name
+                    canonical_name=$(grep -m1 '^Name=' "$app_desktop" | cut -d= -f2-)
+                    for f in "$desktop_dir/"*"${box}"*.desktop; do
+                        [[ "$f" == "$app_desktop" || "$f" == "$desktop_dir/${box}-terminal.desktop" ]] && continue
+                        [[ "$(grep -m1 '^Name=' "$f" 2>/dev/null | cut -d= -f2-)" == "$canonical_name" ]] && rm -f "$f"
+                    done
+                fi
                 ;;
             bin)
                 echo "==> Exporting binary '$name' to ~/.local/bin..."
