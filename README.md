@@ -53,10 +53,12 @@ distrobox enter <app>-box
 
 | App | Description | Box |
 |---|---|---|
+| `amdgpu_top` | AMD GPU monitor — TUI + GUI | `amdgpu_top-box` |
 | `chrome` | Google Chrome browser | `chrome-box` |
 | `claude-code` | Claude Code CLI | `claude-code-box` |
-| `lmstudio` | LM Studio (AMD GPU) | `lmstudio-box` |
-| `amdgpu_top` | AMD GPU monitor — TUI + GUI | `amdgpu_top-box` |
+| `copilot-cli` | GitHub Copilot CLI | `copilot-cli-box` |
+| `corefreq` | CPU frequency and performance monitor | `corefreq-box` |
+| `lmstudio` | LM Studio (local AI, AMD GPU) | `lmstudio-box` |
 
 ## Adding a new app
 
