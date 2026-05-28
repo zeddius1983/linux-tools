@@ -43,6 +43,15 @@ app_status_label() {
     echo "$img  $box"
 }
 
+list_apps() {
+    local app_dir app
+    for app_dir in "$APPS_DIR"/*/; do
+        [[ -d "$app_dir" ]] || continue
+        app="${app_dir%/}"
+        printf '%s\n' "${app##*/}"
+    done
+}
+
 # ── Terminal detection ───────────────────────────────────────────────────────
 
 pick_terminal() {
@@ -58,6 +67,44 @@ terminal_exec_prefix() {
         xterm) echo "xterm -e" ;;
         *) echo "" ;;
     esac
+}
+
+# ── Desktop helpers ──────────────────────────────────────────────────────────
+
+desktop_escape() {
+    local s="${1//\\/\\\\}"
+    printf '%s' "${s//$'\n'/\\n}"
+}
+
+resolve_icon() {
+    local app="$1" box="$2" name="$3"
+    local ext
+    for ext in png svg; do
+        if [[ -f "$APPS_DIR/$app/icon.$ext" ]]; then
+            printf '%s' "$APPS_DIR/$app/icon.$ext"
+            return
+        fi
+    done
+    local icon_dir icon_src
+    icon_dir="$HOME/.local/share/icons/hicolor/256x256/apps"
+    icon_src=$(distrobox enter "$box" -- bash -c '
+        for f in \
+            "/usr/share/icons/hicolor/256x256/apps/$1-code.png" \
+            "/usr/share/icons/hicolor/256x256/apps/$1.png" \
+            "/usr/share/icons/hicolor/512x512/apps/$1-code.png" \
+            "/usr/share/icons/hicolor/512x512/apps/$1.png" \
+            "/usr/share/icons/hicolor/128x128/apps/$1-code.png" \
+            "/usr/share/icons/hicolor/128x128/apps/$1.png" \
+            "/usr/share/pixmaps/$1-code.png" \
+            "/usr/share/pixmaps/$1.png"; do
+            [ -f "$f" ] && echo "$f" && exit 0
+        done' _ "$name" 2>/dev/null | grep '^/') || true
+    if [[ -n "$icon_src" ]]; then
+        mkdir -p "$icon_dir"
+        local extracted="$icon_dir/${box}-${name}.png"
+        distrobox enter "$box" -- cat "$icon_src" > "$extracted" 2>/dev/null \
+            && printf '%s' "$extracted"
+    fi
 }
 
 # ── Commands ─────────────────────────────────────────────────────────────────
@@ -119,41 +166,14 @@ cmd_export() {
                     sed -i "s|^Name=.*|Name=${display_name} (on ${box})|" "$app_desktop"
                     ! grep -q '^Comment=' "$app_desktop" && \
                         sed -i "/^\[Desktop Entry\]/a Comment=Launching ${display_name} in ${box}" "$app_desktop"
-                    local ext bundled_icon=""
-                    for ext in png svg; do
-                        if [[ -f "$APPS_DIR/$app/icon.$ext" ]]; then
-                            bundled_icon="$APPS_DIR/$app/icon.$ext"
-                            break
-                        fi
-                    done
-                    if [[ -z "$bundled_icon" ]]; then
-                        local icon_dir icon_src
-                        icon_dir="$HOME/.local/share/icons/hicolor/256x256/apps"
-                        icon_src=$(distrobox enter "$box" -- bash -c "
-                            for f in \
-                                /usr/share/icons/hicolor/256x256/apps/${name}-code.png \
-                                /usr/share/icons/hicolor/256x256/apps/${name}.png \
-                                /usr/share/icons/hicolor/512x512/apps/${name}-code.png \
-                                /usr/share/icons/hicolor/512x512/apps/${name}.png \
-                                /usr/share/icons/hicolor/128x128/apps/${name}-code.png \
-                                /usr/share/icons/hicolor/128x128/apps/${name}.png \
-                                /usr/share/pixmaps/${name}-code.png \
-                                /usr/share/pixmaps/${name}.png; do
-                                [ -f \"\$f\" ] && echo \"\$f\" && exit 0
-                            done" 2>/dev/null | grep '^/') || true
-                        if [[ -n "$icon_src" ]]; then
-                            mkdir -p "$icon_dir"
-                            local extracted_icon="$icon_dir/${box}-${name}.png"
-                            distrobox enter "$box" -- cat "$icon_src" > "$extracted_icon" 2>/dev/null \
-                                && bundled_icon="$extracted_icon"
-                        fi
-                    fi
-                    [[ -n "$bundled_icon" ]] && \
-                        sed -i "s|^Icon=.*|Icon=${bundled_icon}|" "$app_desktop"
+                    local icon
+                    icon=$(resolve_icon "$app" "$box" "$name")
+                    [[ -n "$icon" ]] && sed -i "s|^Icon=.*|Icon=${icon}|" "$app_desktop"
                     # Remove duplicate exports with a different desktop ID but same Name
-                    local canonical_name
+                    local canonical_name f
                     canonical_name=$(grep -m1 '^Name=' "$app_desktop" | cut -d= -f2-)
                     for f in "$desktop_dir/"*"${box}"*.desktop; do
+                        [[ -e "$f" ]] || continue
                         [[ "$f" == "$app_desktop" || "$f" == "$desktop_dir/${box}-terminal.desktop" ]] && continue
                         [[ "$(grep -m1 '^Name=' "$f" 2>/dev/null | cut -d= -f2-)" == "$canonical_name" ]] && rm -f "$f"
                     done
@@ -162,7 +182,7 @@ cmd_export() {
             bin)
                 echo "==> Exporting binary '$name' to ~/.local/bin..."
                 local bin_path
-                bin_path=$(distrobox enter "$box" -- bash -c "command -pv '$name'" 2>/dev/null | grep '^/') || true
+                bin_path=$(distrobox enter "$box" -- bash -c 'command -pv "$1"' _ "$name" 2>/dev/null | grep '^/') || true
                 if [[ -z "$bin_path" ]]; then
                     echo "Error: cannot find '$name' inside container" >&2
                     continue
@@ -172,43 +192,15 @@ cmd_export() {
             desktop)
                 local display_name="${extra:-$name}"
                 echo "==> Creating desktop entry for '$display_name'..."
-                local bin_path local_icon=""
-                bin_path=$(distrobox enter "$box" -- bash -c "command -pv '$name'" 2>/dev/null | grep '^/') || true
+                local bin_path local_icon esc_display_name
+                local_icon=""
+                bin_path=$(distrobox enter "$box" -- bash -c 'command -pv "$1"' _ "$name" 2>/dev/null | grep '^/') || true
                 if [[ -z "$bin_path" ]]; then
                     echo "Error: cannot find '$name' inside container" >&2
                     continue
                 fi
-
-                # Prefer project-bundled icon, fall back to searching the container
-                local ext
-                for ext in png svg; do
-                    if [[ -f "$APPS_DIR/$app/icon.$ext" ]]; then
-                        local_icon="$APPS_DIR/$app/icon.$ext"
-                        break
-                    fi
-                done
-                if [[ -z "$local_icon" ]]; then
-                    local icon_dir icon_src
-                    icon_dir="$HOME/.local/share/icons/hicolor/256x256/apps"
-                    icon_src=$(distrobox enter "$box" -- bash -c "
-                        for f in \
-                            /usr/share/icons/hicolor/256x256/apps/${name}-code.png \
-                            /usr/share/icons/hicolor/256x256/apps/${name}.png \
-                            /usr/share/icons/hicolor/512x512/apps/${name}-code.png \
-                            /usr/share/icons/hicolor/512x512/apps/${name}.png \
-                            /usr/share/icons/hicolor/128x128/apps/${name}-code.png \
-                            /usr/share/icons/hicolor/128x128/apps/${name}.png \
-                            /usr/share/pixmaps/${name}-code.png \
-                            /usr/share/pixmaps/${name}.png; do
-                            [ -f \"\$f\" ] && echo \"\$f\" && exit 0
-                        done" 2>/dev/null | grep '^/') || true
-                    if [[ -n "$icon_src" ]]; then
-                        mkdir -p "$icon_dir"
-                        local_icon="$icon_dir/${box}-${name}.png"
-                        distrobox enter "$box" -- cat "$icon_src" > "$local_icon" 2>/dev/null \
-                            || local_icon=""
-                    fi
-                fi
+                local_icon=$(resolve_icon "$app" "$box" "$name")
+                esc_display_name=$(desktop_escape "$display_name")
 
                 local app_exec app_flag
                 if [[ -n "$t_prefix" ]]; then
@@ -220,8 +212,8 @@ cmd_export() {
                 fi
                 cat > "$desktop_dir/${box}-${name}.desktop" << DESKTOPEOF
 [Desktop Entry]
-Name=${display_name}
-Comment=Launching ${name} in ${box}
+Name=${esc_display_name}
+Comment=Launching $(desktop_escape "$name") in ${box}
 Exec=${app_exec}
 Icon=${local_icon:-utilities-terminal}
 Terminal=${app_flag}
@@ -235,47 +227,20 @@ DESKTOPEOF
             gui)
                 local display_name="${extra:-$name}"
                 echo "==> Creating GUI desktop entry for '$display_name'..."
-                local bin_path local_icon=""
-                bin_path=$(distrobox enter "$box" -- bash -c "command -pv '$name'" 2>/dev/null | grep '^/') || true
+                local bin_path local_icon esc_display_name
+                local_icon=""
+                bin_path=$(distrobox enter "$box" -- bash -c 'command -pv "$1"' _ "$name" 2>/dev/null | grep '^/') || true
                 if [[ -z "$bin_path" ]]; then
                     echo "Error: cannot find '$name' inside container" >&2
                     continue
                 fi
-
-                local ext
-                for ext in png svg; do
-                    if [[ -f "$APPS_DIR/$app/icon.$ext" ]]; then
-                        local_icon="$APPS_DIR/$app/icon.$ext"
-                        break
-                    fi
-                done
-                if [[ -z "$local_icon" ]]; then
-                    local icon_dir icon_src
-                    icon_dir="$HOME/.local/share/icons/hicolor/256x256/apps"
-                    icon_src=$(distrobox enter "$box" -- bash -c "
-                        for f in \
-                            /usr/share/icons/hicolor/256x256/apps/${name}-code.png \
-                            /usr/share/icons/hicolor/256x256/apps/${name}.png \
-                            /usr/share/icons/hicolor/512x512/apps/${name}-code.png \
-                            /usr/share/icons/hicolor/512x512/apps/${name}.png \
-                            /usr/share/icons/hicolor/128x128/apps/${name}-code.png \
-                            /usr/share/icons/hicolor/128x128/apps/${name}.png \
-                            /usr/share/pixmaps/${name}-code.png \
-                            /usr/share/pixmaps/${name}.png; do
-                            [ -f \"\$f\" ] && echo \"\$f\" && exit 0
-                        done" 2>/dev/null | grep '^/') || true
-                    if [[ -n "$icon_src" ]]; then
-                        mkdir -p "$icon_dir"
-                        local_icon="$icon_dir/${box}-${name}.png"
-                        distrobox enter "$box" -- cat "$icon_src" > "$local_icon" 2>/dev/null \
-                            || local_icon=""
-                    fi
-                fi
+                local_icon=$(resolve_icon "$app" "$box" "$name")
+                esc_display_name=$(desktop_escape "$display_name")
 
                 cat > "$desktop_dir/${box}-${name}.desktop" << DESKTOPEOF
 [Desktop Entry]
-Name=${display_name}
-Comment=Launching ${display_name} in ${box}
+Name=${esc_display_name}
+Comment=Launching ${esc_display_name} in ${box}
 Exec=distrobox enter ${box} -- ${bin_path}
 Icon=${local_icon:-utilities-terminal}
 Terminal=false
@@ -294,7 +259,8 @@ DESKTOPEOF
 
     # Terminal shortcut is created after all app exports so distrobox-export
     # doesn't pick it up from the shared home dir and double-export it.
-    local term_exec term_flag
+    local term_exec term_flag esc_app_desc
+    esc_app_desc=$(desktop_escape "$app_desc")
     if [[ -n "$t_prefix" ]]; then
         term_exec="${t_prefix} distrobox enter ${box}"
         term_flag="false"
@@ -304,7 +270,7 @@ DESKTOPEOF
     fi
     cat > "$desktop_dir/${box}-terminal.desktop" << DESKTOPEOF
 [Desktop Entry]
-Name=${app_desc} (Terminal)
+Name=${esc_app_desc} (Terminal)
 Comment=Terminal entering ${box}
 Exec=${term_exec}
 Icon=utilities-terminal
@@ -355,13 +321,14 @@ cmd_install() {
 cmd_list() {
     printf "%-20s %-30s %-12s %s\n" "APP" "DESCRIPTION" "IMAGE" "BOX"
     printf "%-20s %-30s %-12s %s\n" "───────────────────" "─────────────────────────────" "───────────" "──────────"
-    for app in $(ls "$APPS_DIR" 2>/dev/null); do
+    local app
+    while IFS= read -r app; do
         local desc img_status box_status
         desc="$(app_description "$app")"
         image_exists "$app" && img_status="built" || img_status="--"
         box_exists   "$app" && box_status="running" || box_status="--"
         printf "%-20s %-30s %-12s %s\n" "$app" "$desc" "$img_status" "$box_status"
-    done
+    done < <(list_apps)
 }
 
 # ── Interactive TUI ──────────────────────────────────────────────────────────
@@ -401,7 +368,7 @@ interactive() {
     }
 
     local apps=()
-    mapfile -t apps < <(ls "$APPS_DIR" 2>/dev/null)
+    mapfile -t apps < <(list_apps)
 
     if [[ ${#apps[@]} -eq 0 ]]; then
         whiptail --title "linux-tools" --msgbox "No apps found in $APPS_DIR" 8 50
@@ -452,7 +419,7 @@ interactive() {
 
 usage() {
     local apps
-    apps="$(ls "$APPS_DIR" 2>/dev/null | tr '\n' ' ')"
+    apps="$(list_apps | tr '\n' ' ')"
     cat <<EOF
 Usage: $0 [command] [app]
 

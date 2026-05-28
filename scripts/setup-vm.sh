@@ -58,5 +58,5 @@ echo -n "  distrobox: "; distrobox --version 2>&1 | head -1
 echo -n "  whiptail:  "; whiptail --version 2>&1 | head -1
 
 echo ""
-echo "All done. You can now run ./manage.sh from the project root."
+echo "All done. You can now run ./tools.sh from the project root."
 echo "Tip: if podman complains about user namespaces, log out and back in first."

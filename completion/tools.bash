@@ -20,7 +20,13 @@ _tools_complete() {
             ;;
         2)
             [[ "$prev" == "list" || "$prev" == "install" ]] && return
-            apps="$(ls "$apps_dir" 2>/dev/null | tr '\n' ' ')"
+            local app_dir
+            apps=""
+            for app_dir in "$apps_dir"/*/; do
+                [[ -d "$app_dir" ]] || continue
+                app_dir="${app_dir%/}"
+                apps+="${app_dir##*/} "
+            done
             COMPREPLY=($(compgen -W "$apps" -- "$cur"))
             ;;
     esac
