@@ -301,11 +301,6 @@ cmd_setup() {
     image_exists "$app" && $RUNTIME rmi "$(image_name "$app")"
     cmd_build  "$app"
     cmd_create "$app"
-    # Trigger distrobox-init so the container is fully initialized before we
-    # probe for binaries; without this, the first-ever 'distrobox enter' runs
-    # init concurrently with 'command -pv' and the probe returns empty.
-    echo "==> Initializing box '$(box_name "$app")'..."
-    distrobox enter "$(box_name "$app")" -- true
     cmd_export "$app"
     echo ""
     echo "Done. '$app' is ready. Log out and back in if it doesn't appear in your app menu."
