@@ -6,6 +6,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Packages Linux GUI and CLI applications into [Distrobox](https://distrobox.it/) containers and exports them to the host so they behave like natively installed apps. Each app lives under `apps/<name>/` and is managed via `tools.sh`.
 
+## Runtime environment
+
+Claude Code runs inside `claude-code-box`, a Distrobox container (`linux-tools/claude-code:latest`). All shell commands execute inside that container by default.
+
+Commands that interact with the host — running `tools`, `podman`, `distrobox`, or anything that needs to see the host filesystem or process tree — must be prefixed with `distrobox-host-exec`:
+
+```bash
+distrobox-host-exec tools setup <app>
+distrobox-host-exec tools list
+distrobox-host-exec podman images
+distrobox-host-exec distrobox list
+```
+
+Plain shell commands (file edits, `git`, `grep`, etc.) run fine inside the container without the prefix because `$HOME` is shared.
+
 ## Common commands
 
 ```bash
