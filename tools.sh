@@ -182,7 +182,7 @@ cmd_export() {
             bin)
                 echo "==> Exporting binary '$name' to ~/.local/bin..."
                 local bin_path
-                bin_path=$(distrobox enter "$box" -- bash -c "[ -x /usr/bin/$name ] && echo /usr/bin/$name || [ -x /bin/$name ] && echo /bin/$name || [ -x /usr/local/bin/$name ] && echo /usr/local/bin/$name || command -v $name 2>/dev/null" 2>/dev/null | grep -m1 '^/') || true
+                bin_path=$(distrobox enter "$box" -- bash -c "command -pv '$name'" 2>/dev/null | grep '^/') || true
                 if [[ -z "$bin_path" ]]; then
                     echo "Error: cannot find '$name' inside container" >&2
                     continue
@@ -194,7 +194,7 @@ cmd_export() {
                 echo "==> Creating desktop entry for '$display_name'..."
                 local bin_path local_icon esc_display_name
                 local_icon=""
-                bin_path=$(distrobox enter "$box" -- bash -c "[ -x /usr/bin/$name ] && echo /usr/bin/$name || [ -x /bin/$name ] && echo /bin/$name || [ -x /usr/local/bin/$name ] && echo /usr/local/bin/$name || command -v $name 2>/dev/null" 2>/dev/null | grep -m1 '^/') || true
+                bin_path=$(distrobox enter "$box" -- bash -c "command -pv '$name'" 2>/dev/null | grep '^/') || true
                 if [[ -z "$bin_path" ]]; then
                     echo "Error: cannot find '$name' inside container" >&2
                     continue
@@ -229,7 +229,7 @@ DESKTOPEOF
                 echo "==> Creating GUI desktop entry for '$display_name'..."
                 local bin_path local_icon esc_display_name
                 local_icon=""
-                bin_path=$(distrobox enter "$box" -- bash -c "[ -x /usr/bin/$name ] && echo /usr/bin/$name || [ -x /bin/$name ] && echo /bin/$name || [ -x /usr/local/bin/$name ] && echo /usr/local/bin/$name || command -v $name 2>/dev/null" 2>/dev/null | grep -m1 '^/') || true
+                bin_path=$(distrobox enter "$box" -- bash -c "command -pv '$name'" 2>/dev/null | grep '^/') || true
                 if [[ -z "$bin_path" ]]; then
                     echo "Error: cannot find '$name' inside container" >&2
                     continue
