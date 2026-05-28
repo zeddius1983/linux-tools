@@ -142,6 +142,15 @@ Distrobox mounts the host's `$HOME` inside the container. This means:
 
 `./tools.sh` with no arguments opens a `whiptail` checklist. The TUI window is **72 columns wide** — keep `description` files short (under ~25 chars) so the app name + description + `[image:OK  box:OK]` status fits on one line.
 
+## Branching policy
+
+- Primary branch is `main` — all branches are cut from `main` and PRed back to `main`
+- Always create a dedicated branch for every task (feature, fix, or otherwise); never commit directly to `main`
+- Branch naming:
+  - `feature/<name>` — new apps or features (e.g. `feature/codex-cli`)
+  - `bugfix/<name>` — bug fixes (e.g. `bugfix/export-lookup`)
+- Pull `main` before branching to ensure the branch starts from the latest state
+
 ## Known pitfalls
 
 - **`app:` + manual `.desktop`**: `distrobox-export --app` cannot find `.desktop` files that weren't installed by the package manager. Use `gui:` + a wrapper script in `/usr/bin/` instead.

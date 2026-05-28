@@ -182,7 +182,7 @@ cmd_export() {
             bin)
                 echo "==> Exporting binary '$name' to ~/.local/bin..."
                 local bin_path
-                bin_path=$(distrobox enter "$box" -- bash -c 'command -pv "$1"' _ "$name" 2>/dev/null | grep '^/') || true
+                bin_path=$(distrobox enter "$box" -- bash -c "command -pv '$name'" 2>/dev/null | grep '^/') || true
                 if [[ -z "$bin_path" ]]; then
                     echo "Error: cannot find '$name' inside container" >&2
                     continue
@@ -194,7 +194,7 @@ cmd_export() {
                 echo "==> Creating desktop entry for '$display_name'..."
                 local bin_path local_icon esc_display_name
                 local_icon=""
-                bin_path=$(distrobox enter "$box" -- bash -c 'command -pv "$1"' _ "$name" 2>/dev/null | grep '^/') || true
+                bin_path=$(distrobox enter "$box" -- bash -c "command -pv '$name'" 2>/dev/null | grep '^/') || true
                 if [[ -z "$bin_path" ]]; then
                     echo "Error: cannot find '$name' inside container" >&2
                     continue
@@ -229,7 +229,7 @@ DESKTOPEOF
                 echo "==> Creating GUI desktop entry for '$display_name'..."
                 local bin_path local_icon esc_display_name
                 local_icon=""
-                bin_path=$(distrobox enter "$box" -- bash -c 'command -pv "$1"' _ "$name" 2>/dev/null | grep '^/') || true
+                bin_path=$(distrobox enter "$box" -- bash -c "command -pv '$name'" 2>/dev/null | grep '^/') || true
                 if [[ -z "$bin_path" ]]; then
                     echo "Error: cannot find '$name' inside container" >&2
                     continue
@@ -283,8 +283,16 @@ DESKTOPEOF
 
 cmd_rm() {
     local app="$1"
-    echo "==> Removing distrobox '$(box_name "$app")'..."
-    distrobox rm --force "$(box_name "$app")"
+    local box
+    box="$(box_name "$app")"
+
+    # distrobox rm handles exported binaries; we handle the desktop files it leaves behind
+    echo "==> Removing distrobox '$box'..."
+    distrobox rm --force "$box"
+
+    echo "==> Removing desktop shortcuts for '$box'..."
+    rm -f "$HOME/.local/share/applications/${box}"-*.desktop
+    rm -f "$HOME/.local/share/icons/hicolor/256x256/apps/${box}"-*.png
 }
 
 cmd_setup() {
