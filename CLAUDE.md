@@ -169,7 +169,7 @@ Distrobox mounts the host's `$HOME` inside the container. This means:
 ## Known pitfalls
 
 - **`app:` + manual `.desktop`**: `distrobox-export --app` cannot find `.desktop` files that weren't installed by the package manager. Use `gui:` + a wrapper script in `/usr/bin/` instead.
-- **`/usr/local/bin` not in system PATH**: `command -pv` (used to locate binaries for `bin:`, `desktop:`, `gui:` exports) searches the system default PATH. Place wrapper scripts in `/usr/bin/`, not `/usr/local/bin/`.
+- **`/usr/local/bin` not in system PATH**: `command -pv` is used intentionally (not `command -v`) to locate binaries for `bin:`, `desktop:`, and `gui:` exports. It searches the compiled-in system default PATH rather than the current shell's `$PATH`, which can vary depending on how the container shell was invoked (login vs. non-login, interactive vs. not). This makes export behaviour predictable regardless of container shell config. Consequence: wrapper scripts must live in `/usr/bin/`, not `/usr/local/bin/`.
 - **WGPU / egui GUI apps**: Require `vulkan-loader` + `mesa-vulkan-drivers` in the container. Missing these produces `Failed to create surface for any enabled backend`.
 - **`libxkbcommon-x11`**: A separate package from `libxkbcommon` on Fedora — both are needed for any Rust GUI using xkbcommon.
 - **Kernel module builds**: Distrobox does NOT auto-share `/lib/modules` or `/usr/src`. Add both to `create_flags`: `--privileged -v /usr/src:/usr/src:ro -v /lib/modules:/lib/modules:ro`. Without `/usr/src`, the `/lib/modules/$(uname -r)/build` symlink is broken inside the container.
