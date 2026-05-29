@@ -11,7 +11,7 @@ distrobox-host-exec podman run -d \\\n\
   --name crawl4ai \\\n\
   -p 11235:11235 \\\n\
   --shm-size=1g \\\n\
-  unclecode/crawl4ai:latest\n\
+  docker.io/unclecode/crawl4ai:latest\n\
 echo "Crawl4AI started"\n\
 echo "  Playground: http://localhost:11235/playground"\n\
 echo "  Dashboard:  http://localhost:11235/monitor"\n\
