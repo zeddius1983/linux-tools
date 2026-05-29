@@ -4,6 +4,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     ca-certificates \
     git \
+    jq \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
