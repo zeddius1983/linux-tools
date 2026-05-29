@@ -1,0 +1,3 @@
+Next step: run 'corefreq-setup' to build the kernel module and enable passwordless operation.
+You will be prompted for your sudo password twice (to install the sudoers file).
+After that, 'corefreq-cli' will run without any password prompts.

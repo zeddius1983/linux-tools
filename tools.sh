@@ -304,6 +304,8 @@ cmd_setup() {
     cmd_export "$app"
     echo ""
     echo "Done. '$app' is ready. Log out and back in if it doesn't appear in your app menu."
+    local hint="$APPS_DIR/$app/post-install"
+    [[ -f "$hint" ]] && echo "" && cat "$hint"
 }
 
 cmd_install() {
