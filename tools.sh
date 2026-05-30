@@ -395,17 +395,20 @@ roottext=lightgrey,black
 # Types: .mcp  → whiptail checklist; applies 'claude mcp add --scope global'
 #        (more types added as needed)
 
-declare -A _WIZARD_SELECTIONS=()
+declare -gA _WIZARD_SELECTIONS=()
 
 tui_run_wizards() {
     local app="$1" action="$2"
-    _WIZARD_SELECTIONS=()
+    # Explicitly reset the global associative array (plain `var=()` in a function
+    # coerces it to indexed, corrupting string-keyed writes from subfunctions).
+    unset _WIZARD_SELECTIONS
+    declare -gA _WIZARD_SELECTIONS
     local wizard_dir="$APPS_DIR/$app/wizard"
     [[ -d "$wizard_dir" ]] || return 0
     local page
     for page in "$wizard_dir"/[0-9][0-9]-*.*; do
         [[ -f "$page" ]] || continue
-        _wizard_run_page "$app" "$action" "$page"
+        _wizard_run_page "$app" "$action" "$page" || true
     done
 }
 
@@ -415,30 +418,46 @@ _wizard_run_page() {
     local ext="${fname##*.}"
     local pagename="${fname%.*}"
 
+    # Read header lines; strip CR so CRLF files work too
     local title prompt applicable
-    title="$(    sed -n '1p' "$page")"
-    prompt="$(   sed -n '2p' "$page")"
-    applicable="$(sed -n '3p' "$page")"
+    { IFS= read -r title; IFS= read -r prompt; IFS= read -r applicable; } < "$page"
+    title="${title%$'\r'}"
+    prompt="${prompt%$'\r'}"
+    applicable="${applicable%$'\r'}"
 
+    # Check if this action should trigger the page
     if [[ "$applicable" != "*" ]]; then
-        local matched=0
+        local matched=0 a
         IFS=',' read -ra acts <<< "$applicable"
-        local a
         for a in "${acts[@]}"; do
             [[ "${a// /}" == "$action" ]] && matched=1 && break
         done
         [[ $matched -eq 0 ]] && return 0
     fi
 
-    local current_names=()
-    mapfile -t current_names < <(_wizard_current_state "$app" "$ext")
+    # Query current state for pre-checking (safe empty-array idiom for set -u)
+    local -a current_names=()
+    if box_exists "$app"; then
+        case "$ext" in
+            mcp)
+                local line
+                while IFS= read -r line; do
+                    [[ -n "$line" ]] && current_names+=("$line")
+                done < <(distrobox enter "$(box_name "$app")" -- \
+                    claude mcp list 2>/dev/null \
+                    | grep -oP '^\s+\K[^:\s]+(?=\s*:)' || true)
+                ;;
+        esac
+    fi
 
-    local items=()
+    # Build whiptail item list
+    local -a items=()
     local name payload desc state cur
     while IFS='|' read -r name payload desc; do
+        name="${name%$'\r'}"; payload="${payload%$'\r'}"; desc="${desc%$'\r'}"
         [[ -z "$name" || "$name" == \#* ]] && continue
         state="OFF"
-        for cur in "${current_names[@]}"; do
+        for cur in "${current_names[@]+"${current_names[@]}"}"; do
             [[ "$cur" == "$name" ]] && state="ON" && break
         done
         items+=("$name" "$desc" "$state")
@@ -451,19 +470,7 @@ _wizard_run_page() {
         --checklist "$prompt  (SPACE = toggle, ENTER = confirm):" \
         20 72 10 "${items[@]}" 3>&1 1>&2 2>&3) || return 0
 
-    _WIZARD_SELECTIONS["$pagename"]="$(echo "$selected" | tr -d '"')"
-}
-
-_wizard_current_state() {
-    local app="$1" type="$2"
-    case "$type" in
-        mcp)
-            box_exists "$app" || return 0
-            distrobox enter "$(box_name "$app")" -- \
-                claude mcp list 2>/dev/null \
-                | grep -oP '^\s+\K[^:\s]+(?=\s*:)' || true
-            ;;
-    esac
+    _WIZARD_SELECTIONS["$pagename"]="$(tr -d '"' <<< "$selected")"
 }
 
 tui_apply_wizards() {
@@ -472,9 +479,13 @@ tui_apply_wizards() {
     local wizard_dir="$APPS_DIR/$app/wizard"
     local pagename
     for pagename in "${!_WIZARD_SELECTIONS[@]}"; do
-        local match
-        match=$(compgen -G "$wizard_dir/${pagename}.*" | head -1) || continue
-        [[ -f "$match" ]] || continue
+        # Find the wizard file by pagename (extension is the type)
+        local match=""
+        local f
+        for f in "$wizard_dir/$pagename".*; do
+            [[ -f "$f" ]] && match="$f" && break
+        done
+        [[ -n "$match" ]] || continue
         local ext="${match##*.}"
         case "$ext" in
             mcp) _wizard_apply_mcp "$app" "$match" "${_WIZARD_SELECTIONS[$pagename]}" ;;
@@ -483,16 +494,17 @@ tui_apply_wizards() {
 }
 
 _wizard_apply_mcp() {
-    local app="$1" page="$2" selected_str="$3"
-    local selected_arr=()
+    local app="$1" page="$2" selected_str="${3:-}"
+    local -a selected_arr=()
     [[ -n "$selected_str" ]] && read -ra selected_arr <<< "$selected_str"
     local box
     box="$(box_name "$app")"
     local name payload desc should_install s
     while IFS='|' read -r name payload desc; do
+        name="${name%$'\r'}"; payload="${payload%$'\r'}"
         [[ -z "$name" || "$name" == \#* ]] && continue
         should_install=0
-        for s in "${selected_arr[@]}"; do
+        for s in "${selected_arr[@]+"${selected_arr[@]}"}"; do
             [[ "$s" == "$name" ]] && should_install=1 && break
         done
         if [[ $should_install -eq 1 ]]; then
@@ -501,8 +513,8 @@ _wizard_apply_mcp() {
                 claude mcp add --scope global "$name" -- npx -y "$payload" \
                 || echo "Warning: failed to configure MCP server '$name'" >&2
         else
-            distrobox enter "$box" -- claude mcp remove --scope global "$name" \
-                2>/dev/null || true
+            distrobox enter "$box" -- \
+                claude mcp remove --scope global "$name" 2>/dev/null || true
         fi
     done < <(tail -n +4 "$page")
 }
@@ -523,17 +535,25 @@ interactive() {
         exit 0
     fi
 
-    local radiolist=()
-    local app
+    # Build menu: detail line as tag (what's displayed), app name as lookup key.
+    # --menu shows only the tag column when item is empty, giving a clean list
+    # without radio buttons or duplicate short names.
+    local -a menu_items=()
+    declare -A detail_to_app=()
+    local app detail
     for app in "${apps[@]}"; do
-        radiolist+=("$app" "$(app_status_detail "$app")" "OFF")
+        detail="$(app_status_detail "$app")"
+        menu_items+=("$detail" "")
+        detail_to_app["$detail"]="$app"
     done
 
-    local selected
-    selected=$(whiptail --title "linux-tools" \
-        --radiolist "Select app  (SPACE = select, ENTER = confirm):" \
-        20 104 10 "${radiolist[@]}" 3>&1 1>&2 2>&3) || exit 0
-    selected="${selected//\"/}"
+    local selected_detail
+    selected_detail=$(whiptail --title "linux-tools" \
+        --menu "Select app  (arrow keys, ENTER to confirm):" \
+        20 104 10 "${menu_items[@]}" 3>&1 1>&2 2>&3) || exit 0
+    [[ -z "$selected_detail" ]] && exit 0
+
+    local selected="${detail_to_app["$selected_detail"]}"
     [[ -z "$selected" ]] && exit 0
 
     local action
