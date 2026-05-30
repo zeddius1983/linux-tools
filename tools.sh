@@ -63,7 +63,16 @@ esac
 app="$2"
 
 case "$command_" in
-    setup)  cmd_setup  "$app" ;;
+    setup)
+        cmd_setup "$app"
+        # Run wizard post-setup when interactive and the app has wizard pages.
+        if [[ -t 0 ]] && command -v whiptail &>/dev/null \
+                       && [[ -d "$APPS_DIR/$app/wizard" ]]; then
+            setup_tui_theme
+            tui_run_wizards "$app" "setup"
+            tui_apply_wizards "$app" "setup"
+        fi
+        ;;
     build)  cmd_build  "$app" ;;
     create) cmd_create "$app" ;;
     export) cmd_export "$app" ;;
