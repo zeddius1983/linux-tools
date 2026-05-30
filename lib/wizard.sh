@@ -103,7 +103,7 @@ _wizard_apply_mcp() {
         if [[ $should_install -eq 1 ]]; then
             echo "==> Configuring MCP server: $name"
             distrobox enter "$box" -- \
-                claude mcp add --scope user "$name" -- npx -y "$payload" \
+                claude mcp add --transport stdio --scope user "$name" -- npx -y "$payload" \
                 || echo "Warning: failed to configure MCP server '$name'" >&2
         else
             distrobox enter "$box" -- \
