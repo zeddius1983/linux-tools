@@ -12,7 +12,7 @@ _tools_complete() {
     script_dir="$(dirname "$script_path")"
     apps_dir="${script_dir}/apps"
 
-    commands="install setup build create export rm list"
+    commands="install setup build create export enter rm list"
 
     case "$COMP_CWORD" in
         1)

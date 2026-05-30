@@ -15,7 +15,7 @@ Manages Linux GUI and CLI applications inside [Distrobox](https://distrobox.it/)
 ./tools.sh
 ```
 
-A checklist shows all available apps with their current status (`image:OK / image:--` and `box:OK / box:--`). Use **SPACE** to toggle, **ENTER** to confirm, then pick an action.
+Select an app with the arrow keys and press **ENTER**. Each app shows its description, image ID, image ref, and box name. After selecting, choose an action (Setup / Build / Create / Export / Enter / Remove). Apps with optional configuration (e.g. MCP servers for Claude Code) show a wizard before the final confirmation.
 
 ### Install (one-time)
 
@@ -35,6 +35,7 @@ tools setup <app>    # full install — removes any existing box+image first
 tools export <app>   # re-export after editing an exports file
 tools build <app>    # build container image only
 tools create <app>   # create distrobox from built image
+tools enter <app>    # open a shell inside the box
 tools rm <app>       # remove distrobox (image is kept)
 tools list           # show status of all apps
 ```
@@ -46,7 +47,8 @@ After setup, apps appear in your system application menu. Log out and back in if
 ### Shell access
 
 ```bash
-distrobox enter <app>-box
+tools enter <app>          # via tools (also available in the TUI)
+distrobox enter <app>-box  # directly via distrobox
 ```
 
 ## Available apps
