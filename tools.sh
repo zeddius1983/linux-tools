@@ -36,11 +36,24 @@ app_description() {
     [[ -f "$f" ]] && cat "$f" || echo "$1"
 }
 
-app_status_label() {
-    local img box
-    image_exists "$1" && img="image:OK" || img="image:--"
-    box_exists   "$1" && box="box:OK"   || box="box:--"
-    echo "$img  $box"
+app_status_detail() {
+    local app="$1"
+    local desc img_id img_ref box_str
+    desc="$(app_description "$app")"
+    desc="${desc:0:14}"
+    local img_name
+    img_name="$(image_name "$app")"
+    if image_exists "$app"; then
+        img_id="$($RUNTIME image inspect --format '{{.Id}}' "$img_name" 2>/dev/null \
+            | sed 's/^sha256://' | cut -c1-7)"
+        [[ -z "$img_id" ]] && img_id="?"
+        img_ref="$img_name"
+    else
+        img_id="—"
+        img_ref="—"
+    fi
+    box_exists "$app" && box_str="$(box_name "$app")" || box_str="—"
+    printf '%-14s  |  %-7s  |  %-32s  |  %s' "$desc" "$img_id" "$img_ref" "$box_str"
 }
 
 list_apps() {
@@ -295,6 +308,10 @@ cmd_rm() {
     rm -f "$HOME/.local/share/icons/hicolor/256x256/apps/${box}"-*.png
 }
 
+cmd_enter() {
+    distrobox enter "$(box_name "$1")"
+}
+
 cmd_setup() {
     local app="$1"
     box_exists   "$app" && distrobox rm --force "$(box_name "$app")"
@@ -371,6 +388,127 @@ roottext=lightgrey,black
 '
 }
 
+# ── Wizard system ─────────────────────────────────────────────────────────────
+# Wizard pages live in apps/<app>/wizard/NN-name.<type>
+# File format: line1=title, line2=prompt, line3=applicable actions (csv or *),
+#              remaining lines: name|payload|description
+# Types: .mcp  → whiptail checklist; applies 'claude mcp add --scope global'
+#        (more types added as needed)
+
+declare -A _WIZARD_SELECTIONS=()
+
+tui_run_wizards() {
+    local app="$1" action="$2"
+    _WIZARD_SELECTIONS=()
+    local wizard_dir="$APPS_DIR/$app/wizard"
+    [[ -d "$wizard_dir" ]] || return 0
+    local page
+    for page in "$wizard_dir"/[0-9][0-9]-*.*; do
+        [[ -f "$page" ]] || continue
+        _wizard_run_page "$app" "$action" "$page"
+    done
+}
+
+_wizard_run_page() {
+    local app="$1" action="$2" page="$3"
+    local fname="${page##*/}"
+    local ext="${fname##*.}"
+    local pagename="${fname%.*}"
+
+    local title prompt applicable
+    title="$(    sed -n '1p' "$page")"
+    prompt="$(   sed -n '2p' "$page")"
+    applicable="$(sed -n '3p' "$page")"
+
+    if [[ "$applicable" != "*" ]]; then
+        local matched=0
+        IFS=',' read -ra acts <<< "$applicable"
+        local a
+        for a in "${acts[@]}"; do
+            [[ "${a// /}" == "$action" ]] && matched=1 && break
+        done
+        [[ $matched -eq 0 ]] && return 0
+    fi
+
+    local current_names=()
+    mapfile -t current_names < <(_wizard_current_state "$app" "$ext")
+
+    local items=()
+    local name payload desc state cur
+    while IFS='|' read -r name payload desc; do
+        [[ -z "$name" || "$name" == \#* ]] && continue
+        state="OFF"
+        for cur in "${current_names[@]}"; do
+            [[ "$cur" == "$name" ]] && state="ON" && break
+        done
+        items+=("$name" "$desc" "$state")
+    done < <(tail -n +4 "$page")
+
+    [[ ${#items[@]} -eq 0 ]] && return 0
+
+    local selected
+    selected=$(whiptail --title "linux-tools — $title" \
+        --checklist "$prompt  (SPACE = toggle, ENTER = confirm):" \
+        20 72 10 "${items[@]}" 3>&1 1>&2 2>&3) || return 0
+
+    _WIZARD_SELECTIONS["$pagename"]="$(echo "$selected" | tr -d '"')"
+}
+
+_wizard_current_state() {
+    local app="$1" type="$2"
+    case "$type" in
+        mcp)
+            box_exists "$app" || return 0
+            distrobox enter "$(box_name "$app")" -- \
+                claude mcp list 2>/dev/null \
+                | grep -oP '^\s+\K[^:\s]+(?=\s*:)' || true
+            ;;
+    esac
+}
+
+tui_apply_wizards() {
+    local app="$1" action="$2"
+    [[ ${#_WIZARD_SELECTIONS[@]} -eq 0 ]] && return 0
+    local wizard_dir="$APPS_DIR/$app/wizard"
+    local pagename
+    for pagename in "${!_WIZARD_SELECTIONS[@]}"; do
+        local match
+        match=$(compgen -G "$wizard_dir/${pagename}.*" | head -1) || continue
+        [[ -f "$match" ]] || continue
+        local ext="${match##*.}"
+        case "$ext" in
+            mcp) _wizard_apply_mcp "$app" "$match" "${_WIZARD_SELECTIONS[$pagename]}" ;;
+        esac
+    done
+}
+
+_wizard_apply_mcp() {
+    local app="$1" page="$2" selected_str="$3"
+    local selected_arr=()
+    [[ -n "$selected_str" ]] && read -ra selected_arr <<< "$selected_str"
+    local box
+    box="$(box_name "$app")"
+    local name payload desc should_install s
+    while IFS='|' read -r name payload desc; do
+        [[ -z "$name" || "$name" == \#* ]] && continue
+        should_install=0
+        for s in "${selected_arr[@]}"; do
+            [[ "$s" == "$name" ]] && should_install=1 && break
+        done
+        if [[ $should_install -eq 1 ]]; then
+            echo "==> Configuring MCP server: $name"
+            distrobox enter "$box" -- \
+                claude mcp add --scope global "$name" -- npx -y "$payload" \
+                || echo "Warning: failed to configure MCP server '$name'" >&2
+        else
+            distrobox enter "$box" -- claude mcp remove --scope global "$name" \
+                2>/dev/null || true
+        fi
+    done < <(tail -n +4 "$page")
+}
+
+# ── Main TUI loop ─────────────────────────────────────────────────────────────
+
 interactive() {
     setup_tui_theme
     command -v whiptail &>/dev/null || {
@@ -385,44 +523,38 @@ interactive() {
         exit 0
     fi
 
-    # Build checklist entries: name  "description  [status]"  OFF
-    local checklist=()
+    local radiolist=()
+    local app
     for app in "${apps[@]}"; do
-        local desc status
-        desc="$(app_description "$app")"
-        status="$(app_status_label "$app")"
-        checklist+=("$app" "$desc  [$status]" "OFF")
+        radiolist+=("$app" "$(app_status_detail "$app")" "OFF")
     done
 
     local selected
     selected=$(whiptail --title "linux-tools" \
-        --checklist "Select apps  (SPACE = toggle, ENTER = confirm):" \
-        20 72 10 "${checklist[@]}" 3>&1 1>&2 2>&3) || exit 0
-
-    # whiptail wraps selections in quotes — strip them
-    read -ra selected_arr <<< "$(echo "$selected" | tr -d '"')"
-
-    if [[ ${#selected_arr[@]} -eq 0 ]]; then
-        whiptail --title "linux-tools" --msgbox "No apps selected." 8 40
-        exit 0
-    fi
+        --radiolist "Select app  (SPACE = select, ENTER = confirm):" \
+        20 104 10 "${radiolist[@]}" 3>&1 1>&2 2>&3) || exit 0
+    selected="${selected//\"/}"
+    [[ -z "$selected" ]] && exit 0
 
     local action
-    action=$(whiptail --title "linux-tools" \
-        --menu "Action for: ${selected_arr[*]}" 16 68 5 \
+    action=$(whiptail --title "linux-tools — $selected" \
+        --menu "Choose action:" 16 68 6 \
         "setup"  "Install  (removes existing box+image first)" \
         "build"  "Build container image only" \
         "create" "Create distrobox from built image" \
         "export" "Re-export apps/bins to host" \
+        "enter"  "Open shell inside box" \
         "rm"     "Remove distrobox  (image is kept)" \
         3>&1 1>&2 2>&3) || exit 0
 
-    whiptail --title "Confirm" \
-        --yesno "Run '$action' on: ${selected_arr[*]}?" 8 58 || exit 0
+    tui_run_wizards "$selected" "$action"
 
-    for app in "${selected_arr[@]}"; do
-        "cmd_$action" "$app"
-    done
+    whiptail --title "Confirm" \
+        --yesno "Run '$action' on '$selected'?" 8 58 || exit 0
+
+    "cmd_$action" "$selected"
+
+    tui_apply_wizards "$selected" "$action"
 }
 
 # ── Usage ────────────────────────────────────────────────────────────────────
@@ -441,6 +573,7 @@ Commands:
   build  <app>     Build container image only
   create <app>     Create distrobox from built image
   export <app>     Export apps/bins to host menu
+  enter  <app>     Open shell inside box
   rm     <app>     Remove distrobox (image is kept)
   list             Show status of all apps
 
@@ -475,6 +608,7 @@ case "$command_" in
     build)  cmd_build  "$app" ;;
     create) cmd_create "$app" ;;
     export) cmd_export "$app" ;;
+    enter)  cmd_enter  "$app" ;;
     rm)     cmd_rm     "$app" ;;
     *)      usage; exit 1 ;;
 esac
