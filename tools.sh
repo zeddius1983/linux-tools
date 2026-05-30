@@ -69,7 +69,7 @@ case "$command_" in
         if [[ -t 0 ]] && command -v whiptail &>/dev/null \
                        && [[ -d "$APPS_DIR/$app/wizard" ]]; then
             setup_tui_theme
-            tui_run_wizards "$app" "setup"
+            tui_run_wizards "$app" "setup" || exit 0
             tui_apply_wizards "$app" "setup"
         fi
         ;;

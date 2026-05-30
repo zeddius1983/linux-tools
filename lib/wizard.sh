@@ -20,7 +20,7 @@ tui_run_wizards() {
     local page
     for page in "$wizard_dir"/[0-9][0-9]-*.*; do
         [[ -f "$page" ]] || continue
-        _wizard_run_page "$app" "$action" "$page" || true
+        _wizard_run_page "$app" "$action" "$page" || return 1
     done
 }
 
@@ -63,7 +63,7 @@ _wizard_run_page() {
     local selected
     selected=$(whiptail --title "linux-tools — $title" \
         --checklist "$prompt  (SPACE = toggle, ENTER = confirm):" \
-        20 72 10 "${items[@]}" 3>&1 1>&2 2>&3) || return 0
+        20 72 10 "${items[@]}" 3>&1 1>&2 2>&3) || return 1
 
     _WIZARD_SELECTIONS["$pagename"]="$(tr -d '"' <<< "$selected")"
 }

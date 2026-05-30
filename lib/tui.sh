@@ -90,7 +90,7 @@ interactive() {
         "rm"     "Remove distrobox  (image is kept)" \
         3>&1 1>&2 2>&3) || exit 0
 
-    tui_run_wizards "$selected" "$action"
+    tui_run_wizards "$selected" "$action" || exit 0
 
     whiptail --title "Confirm" \
         --yesno "Run '$action' on '$selected'?" 8 58 || exit 0
