@@ -30,7 +30,6 @@ app_status_detail() {
     local app="$1"
     local desc img_id img_ref box_str
     desc="$(app_description "$app")"
-    desc="${desc:0:14}"
     local img_name
     img_name="$(image_name "$app")"
     if image_exists "$app"; then
@@ -43,7 +42,7 @@ app_status_detail() {
         img_ref="—"
     fi
     box_exists "$app" && box_str="$(box_name "$app")" || box_str="—"
-    printf '%-14s  |  %-7s  |  %-32s  |  %s' "$desc" "$img_id" "$img_ref" "$box_str"
+    printf '%-22s  |  %-7s  |  %-32s  |  %s' "$desc" "$img_id" "$img_ref" "$box_str"
 }
 
 interactive() {
