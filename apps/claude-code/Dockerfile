@@ -7,6 +7,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     git \
     jq \
+    nodejs \
+    npm \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
