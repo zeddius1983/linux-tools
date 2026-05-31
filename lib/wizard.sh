@@ -8,13 +8,14 @@
 # To add a new type: add a handler function _wizard_apply_<type>() and register
 # it in the case statement inside tui_apply_wizards().
 
-declare -gA _WIZARD_SELECTIONS=()
+declare -A _WIZARD_SELECTIONS=()
 
 tui_run_wizards() {
     local app="$1" action="$2"
-    # Reset via unset+declare to avoid coercing the associative array to indexed.
-    unset _WIZARD_SELECTIONS
-    declare -gA _WIZARD_SELECTIONS
+    # Clear previous selections in-place. Avoid unset+declare-gA inside a function
+    # — bash does not reliably re-create the global after unset in all versions.
+    local _k
+    for _k in "${!_WIZARD_SELECTIONS[@]}"; do unset '_WIZARD_SELECTIONS[$_k]'; done
     local wizard_dir="$APPS_DIR/$app/wizard"
     [[ -d "$wizard_dir" ]] || return 0
     local page
@@ -73,6 +74,8 @@ _wizard_run_page() {
 
 tui_apply_wizards() {
     local app="$1" action="$2"
+    # Guard against _WIZARD_SELECTIONS being unset (e.g. tui_run_wizards not called).
+    declare -p _WIZARD_SELECTIONS &>/dev/null || return 0
     [[ ${#_WIZARD_SELECTIONS[@]} -eq 0 ]] && return 0
     local wizard_dir="$APPS_DIR/$app/wizard"
     local pagename
