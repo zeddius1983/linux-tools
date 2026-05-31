@@ -61,6 +61,7 @@ distrobox enter <app>-box  # directly via distrobox
 | `copilot-cli` | GitHub Copilot CLI | `copilot-cli-box` |
 | `corefreq` | CPU frequency and performance monitor | `corefreq-box` |
 | `lmstudio` | LM Studio (local AI, AMD GPU) | `lmstudio-box` |
+| `telegram` | Telegram Desktop messenger | `telegram-box` |
 
 ## Adding a new app
 
