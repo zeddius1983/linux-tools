@@ -26,6 +26,9 @@ roottext=lightgrey,black
 '
 }
 
+# printf %-Ns counts bytes, not display columns; _fw corrects for multibyte chars.
+_fw() { local s=$1 w=$2 b c; b=$(printf '%s' "$s" | wc -c); c=$(printf '%s' "$s" | wc -m); printf "%-$(( w + b - c ))s" "$s"; }
+
 app_status_detail() {
     local app="$1"
     local desc img_id img_ref box_str
@@ -42,7 +45,8 @@ app_status_detail() {
         img_ref="—"
     fi
     box_exists "$app" && box_str="$(box_name "$app")" || box_str="—"
-    printf '%-22s  |  %-7s  |  %-32s  |  %s' "$desc" "$img_id" "$img_ref" "$box_str"
+    printf '%s  |  %s  |  %s  |  %s' \
+        "$(_fw "$desc" 22)" "$(_fw "$img_id" 7)" "$(_fw "$img_ref" 32)" "$box_str"
 }
 
 interactive() {

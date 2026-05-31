@@ -79,7 +79,7 @@ resolve_icon() {
     if [[ -n "$icon_src" ]]; then
         mkdir -p "$icon_dir"
         local extracted="$icon_dir/${box}-${name}.png"
-        distrobox enter "$box" -- cat "$icon_src" > "$extracted" 2>/dev/null \
+        distrobox enter "$box" -- cp "$icon_src" "$extracted" 2>/dev/null \
             && printf '%s' "$extracted"
     fi
 }
