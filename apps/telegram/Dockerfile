@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libdrm2 \
     && rm -rf /var/lib/apt/lists/*
 
-RUN curl -L https://telegram.org/dl/desktop/linux -o /tmp/tdesktop.tar.xz \
+RUN curl -fL https://telegram.org/dl/desktop/linux -o /tmp/tdesktop.tar.xz \
     && mkdir -p /opt/Telegram \
     && tar -xf /tmp/tdesktop.tar.xz -C /opt/Telegram --strip-components=1 \
     && rm /tmp/tdesktop.tar.xz \
