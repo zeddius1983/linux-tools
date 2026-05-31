@@ -1,6 +1,6 @@
 # Wizard pages live in apps/<app>/wizard/NN-name.<type>
 # File format: line1=title  line2=prompt  line3=applicable actions (csv or *)
-#              remaining lines: name|payload|description
+#              remaining lines: name|payload|description[|on|off]  (default: off)
 #
 # Supported types:
 #   .mcp   → checklist; applies 'claude mcp add --scope global' after action
@@ -47,15 +47,18 @@ _wizard_run_page() {
         [[ $matched -eq 0 ]] && return 0
     fi
 
-    # Build whiptail item list; all items start unchecked.
-    # Pre-checking current state would require querying the running box (slow),
-    # creating a visible delay between action selection and the wizard appearing.
+    # Build whiptail item list.
+    # Optional 4th field sets default state (on/off); omitting defaults to off.
+    # Use "on" for recommended items so users get a sensible default.
     local -a items=()
-    local name payload desc
-    while IFS='|' read -r name payload desc; do
-        name="${name%$'\r'}"; payload="${payload%$'\r'}"; desc="${desc%$'\r'}"
+    local name payload desc default_state
+    while IFS='|' read -r name payload desc default_state; do
+        name="${name%$'\r'}"; payload="${payload%$'\r'}"
+        desc="${desc%$'\r'}"; default_state="${default_state%$'\r'}"
         [[ -z "$name" || "$name" == \#* ]] && continue
-        items+=("$name" "$desc" "OFF")
+        local state="OFF"
+        [[ "${default_state,,}" == "on" ]] && state="ON"
+        items+=("$name" "$desc" "$state")
     done < <(tail -n +4 "$page")
 
     [[ ${#items[@]} -eq 0 ]] && return 0
@@ -102,10 +105,12 @@ _wizard_apply_mcp() {
         done
         if [[ $should_install -eq 1 ]]; then
             echo "==> Configuring MCP server: $name"
-            distrobox enter "$box" -- \
-                claude mcp add --transport stdio --scope user "$name" -- npx -y "$payload" \
-                || echo "Warning: failed to configure MCP server '$name'" >&2
+            if ! distrobox enter "$box" -- \
+                    claude mcp add --transport stdio --scope user "$name" -- npx -y "$payload"; then
+                echo "Warning: failed to configure MCP server '$name'" >&2
+            fi
         else
+            echo "==> Skipping MCP server: $name"
             distrobox enter "$box" -- \
                 claude mcp remove --scope user "$name" 2>/dev/null || true
         fi

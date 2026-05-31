@@ -1,5 +1,0 @@
-MCP Servers
-Select MCP servers to pre-install:
-setup
-context7|@upstash/context7-mcp@latest|Up-to-date library docs
-playwright|@playwright/mcp@latest|Browser automation
