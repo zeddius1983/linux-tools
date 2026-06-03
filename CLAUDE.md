@@ -42,7 +42,7 @@ Bash completion is in `completion/tools.bash` — source it from `~/.bashrc`.
 
 ### App memory file
 
-Every app directory must contain a `.memory.md` file. Keep it up to date as the app evolves.
+New app directories should include a `.memory.md` file, and existing ones should gain one when they are updated. Keep it up to date as the app evolves.
 
 **Required sections:**
 

@@ -3,7 +3,7 @@
 #              remaining lines: name|payload|description[|on|off]  (default: off)
 #
 # Supported types:
-#   .mcp      → checklist; applies 'claude mcp add --scope global' after action
+#   .mcp      → checklist; applies 'claude mcp add --scope user' after action
 #   .packages → checklist; calls '<app>/zsh-install --tools <selections>' after action
 #
 # To add a new type: add a handler function _wizard_apply_<type>() and register
