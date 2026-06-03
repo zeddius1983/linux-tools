@@ -190,6 +190,11 @@ cmd_enter() {
 
 cmd_setup() {
     local app="$1"
+    if [[ -f "$APPS_DIR/$app/host-only" ]]; then
+        echo "==> Note: '$app' is a HOST-ONLY install."
+        echo "    Binaries → ~/.local/bin   Config → ~/.config/zsh/   Shell → ~/.zshrc"
+        echo ""
+    fi
     box_exists   "$app" && distrobox rm --force "$(box_name "$app")"
     image_exists "$app" && $RUNTIME rmi "$(image_name "$app")"
     cmd_build  "$app"
@@ -228,8 +233,13 @@ cmd_list() {
     while IFS= read -r app; do
         local desc img_status box_status
         desc="$(app_description "$app")"
-        image_exists "$app" && img_status="built" || img_status="--"
-        box_exists   "$app" && box_status="running" || box_status="--"
+        if [[ -f "$APPS_DIR/$app/host-only" ]]; then
+            img_status="host-only"
+            box_status="host-only"
+        else
+            image_exists "$app" && img_status="built" || img_status="--"
+            box_exists   "$app" && box_status="running" || box_status="--"
+        fi
         printf "%-20s %-30s %-12s %s\n" "$app" "$desc" "$img_status" "$box_status"
     done < <(list_apps)
 }
