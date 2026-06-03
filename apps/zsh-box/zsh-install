@@ -1,0 +1,595 @@
+#!/usr/bin/env bash
+# zsh-install — host installer for zsh and optional shell utilities.
+# Run inside zsh-box container (distrobox enter zsh-box-box -- zsh-install).
+# Usage: zsh-install [--tools "tool1 tool2 ..."]
+set -euo pipefail
+
+TOOLS=""
+BIN_DIR="$HOME/.local/bin"
+PLUGINS_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/zsh/plugins"
+CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/zsh/conf.d"
+CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/zsh"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/zsh"
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --tools) TOOLS="$2"; shift 2 ;;
+        *) echo "Unknown option: $1" >&2; exit 1 ;;
+    esac
+done
+
+has_tool() { [[ " $TOOLS " == *" $1 "* ]]; }
+step()     { echo ""; echo "==> $*"; }
+
+mkdir -p "$BIN_DIR" "$PLUGINS_DIR" "$CONF_DIR" "$CACHE_DIR" "$STATE_DIR"
+
+# Remove binary and conf fragment for a tool that is no longer selected.
+# cleanup_absent <tool-name> <binary-name> [conf-fragment]
+cleanup_absent() {
+    local tool="$1" binary="$2" conf="${3:-}"
+    has_tool "$tool" && return
+    if [[ -f "$BIN_DIR/$binary" ]]; then
+        rm -f "$BIN_DIR/$binary"
+        echo "  removed $BIN_DIR/$binary"
+    fi
+    if [[ -n "$conf" && -f "$CONF_DIR/$conf" ]]; then
+        rm -f "$CONF_DIR/$conf"
+        echo "  removed $CONF_DIR/$conf"
+    fi
+}
+
+# ─── Cleanup deselected tools ─────────────────────────────────────────────────
+
+step "Cleaning up deselected tools"
+has_tool zsh-syntax-highlighting \
+    || { rm -rf "$PLUGINS_DIR/zsh-syntax-highlighting" && echo "  removed zsh-syntax-highlighting plugin"; } 2>/dev/null || true
+has_tool zsh-autosuggestions \
+    || { rm -rf "$PLUGINS_DIR/zsh-autosuggestions" && echo "  removed zsh-autosuggestions plugin"; } 2>/dev/null || true
+cleanup_absent fzf        fzf       10-fzf.zsh
+cleanup_absent bat        bat       11-bat.zsh
+cleanup_absent eza        eza       12-eza.zsh
+cleanup_absent zoxide     zoxide    13-zoxide.zsh
+# atuin may land in ~/.atuin/bin/ (old installs) or $BIN_DIR (new installs)
+if ! has_tool atuin; then
+    rm -f "$HOME/.atuin/bin/atuin" "$BIN_DIR/atuin"
+    rm -f "$CONF_DIR/14-atuin.zsh"
+    echo "  removed atuin"
+fi
+cleanup_absent direnv     direnv    15-direnv.zsh
+cleanup_absent glow       glow      16-glow.zsh
+cleanup_absent yazi       yazi      17-yazi.zsh
+cleanup_absent delta      delta     18-delta.zsh
+cleanup_absent tealdeer   tldr      19-tealdeer.zsh
+cleanup_absent ripgrep    rg        20-ripgrep.zsh
+cleanup_absent fd         fd        21-fd.zsh
+cleanup_absent starship   starship
+cleanup_absent lazygit    lazygit
+cleanup_absent dust       dust
+has_tool yazi || { rm -f "$BIN_DIR/ya"; } 2>/dev/null || true
+has_tool fzf  || rm -f \
+    "${XDG_DATA_HOME:-$HOME/.local/share}/fzf-key-bindings.zsh" \
+    "${XDG_DATA_HOME:-$HOME/.local/share}/fzf-completion.zsh" 2>/dev/null || true
+
+# Download latest GitHub release asset matching a pattern, extract named binary.
+# gh_download_latest <owner/repo> <jq-regex-pattern> <binary-in-archive> [dest-name]
+gh_download_latest() {
+    local repo="$1" pattern="$2" binary="$3" dest="${4:-$3}"
+    local url
+    url=$(curl -fsSL "https://api.github.com/repos/$repo/releases/latest" \
+        | jq -r --arg p "$pattern" \
+            '.assets[] | select(.name | test($p)) | .browser_download_url' \
+        | head -1)
+    [[ -z "$url" ]] && { echo "  ERROR: no asset matching '$pattern' in $repo" >&2; return 1; }
+    local tmp asset found
+    tmp=$(mktemp -d)
+    asset="${url##*/}"
+    step "Downloading $repo → $dest"
+    curl -fsSL "$url" -o "$tmp/$asset"
+    case "$asset" in
+        *.tar.gz|*.tgz) tar -xzf "$tmp/$asset" -C "$tmp" ;;
+        *.zip)          unzip -q  "$tmp/$asset" -d "$tmp" ;;
+        *)              cp "$tmp/$asset" "$tmp/$binary" ;;
+    esac
+    found=$(find "$tmp" -name "$binary" -type f | head -1)
+    [[ -z "$found" ]] && {
+        echo "  ERROR: binary '$binary' not found in archive" >&2
+        rm -rf "$tmp"; return 1
+    }
+    install -m 755 "$found" "$BIN_DIR/$dest"
+    rm -rf "$tmp"
+    echo "  ✓ $BIN_DIR/$dest"
+}
+
+# ─── 1. Install zsh on host ───────────────────────────────────────────────────
+
+step "Installing zsh on host"
+if distrobox-host-exec which zsh &>/dev/null; then
+    echo "  zsh already installed: $(distrobox-host-exec which zsh)"
+else
+    os_id=$(distrobox-host-exec bash -c \
+        'source /etc/os-release 2>/dev/null && echo "${ID:-unknown}"')
+    case "$os_id" in
+        ubuntu|debian|linuxmint|pop)
+            distrobox-host-exec sudo apt-get install -y zsh ;;
+        fedora|rhel|centos|rocky|almalinux)
+            distrobox-host-exec sudo dnf install -y zsh ;;
+        arch|manjaro|endeavouros)
+            distrobox-host-exec sudo pacman -S --noconfirm zsh ;;
+        opensuse*|sles)
+            distrobox-host-exec sudo zypper install -y zsh ;;
+        *)
+            echo "  Unknown OS '$os_id'. Install zsh manually, then re-run." >&2 ;;
+    esac
+fi
+
+# ─── 2. Zsh plugins ──────────────────────────────────────────────────────────
+
+if has_tool zsh-syntax-highlighting; then
+    step "zsh-syntax-highlighting"
+    rm -rf "$PLUGINS_DIR/zsh-syntax-highlighting"
+    git clone --depth=1 \
+        https://github.com/zsh-users/zsh-syntax-highlighting \
+        "$PLUGINS_DIR/zsh-syntax-highlighting"
+    echo "  ✓ $PLUGINS_DIR/zsh-syntax-highlighting"
+fi
+
+if has_tool zsh-autosuggestions; then
+    step "zsh-autosuggestions"
+    rm -rf "$PLUGINS_DIR/zsh-autosuggestions"
+    git clone --depth=1 \
+        https://github.com/zsh-users/zsh-autosuggestions \
+        "$PLUGINS_DIR/zsh-autosuggestions"
+    echo "  ✓ $PLUGINS_DIR/zsh-autosuggestions"
+fi
+
+# ─── 3. Static binary tools ──────────────────────────────────────────────────
+
+ARCH=$(uname -m)
+case "$ARCH" in
+    x86_64)  MUSL_TRIPLE="x86_64-unknown-linux-musl" ;;
+    aarch64) MUSL_TRIPLE="aarch64-unknown-linux-musl" ;;
+    *)       MUSL_TRIPLE="${ARCH}-unknown-linux-musl" ;;
+esac
+
+if has_tool fzf; then
+    case "$ARCH" in
+        x86_64)  FZF_ARCH="linux_amd64" ;;
+        aarch64) FZF_ARCH="linux_arm64" ;;
+        *)       FZF_ARCH="linux_${ARCH}" ;;
+    esac
+    gh_download_latest "junegunn/fzf" \
+        "^fzf-[^-]+-${FZF_ARCH}\\.tar\\.gz$" "fzf"
+    fzf_tag=$(curl -fsSL \
+        "https://api.github.com/repos/junegunn/fzf/releases/latest" \
+        | jq -r '.tag_name')
+    curl -fsSL \
+        "https://raw.githubusercontent.com/junegunn/fzf/${fzf_tag}/shell/key-bindings.zsh" \
+        -o "${XDG_DATA_HOME:-$HOME/.local/share}/fzf-key-bindings.zsh"
+    curl -fsSL \
+        "https://raw.githubusercontent.com/junegunn/fzf/${fzf_tag}/shell/completion.zsh" \
+        -o "${XDG_DATA_HOME:-$HOME/.local/share}/fzf-completion.zsh"
+fi
+
+if has_tool bat; then
+    gh_download_latest "sharkdp/bat" \
+        "^bat-v[^-]+-${MUSL_TRIPLE}\\.tar\\.gz$" "bat"
+fi
+
+if has_tool eza; then
+    case "$ARCH" in
+        x86_64)  EZA_ARCH="x86_64" ;;
+        aarch64) EZA_ARCH="aarch64" ;;
+        *)       EZA_ARCH="$ARCH" ;;
+    esac
+    gh_download_latest "eza-community/eza" \
+        "^eza_${EZA_ARCH}-unknown-linux-musl\\.tar\\.gz$" "eza"
+fi
+
+if has_tool ripgrep; then
+    gh_download_latest "BurntSushi/ripgrep" \
+        "^ripgrep-[^-]+-${MUSL_TRIPLE}\\.tar\\.gz$" "rg"
+fi
+
+if has_tool fd; then
+    gh_download_latest "sharkdp/fd" \
+        "^fd-v[^-]+-${MUSL_TRIPLE}\\.tar\\.gz$" "fd"
+fi
+
+if has_tool delta; then
+    gh_download_latest "dandavison/delta" \
+        "^delta-[^-]+-${MUSL_TRIPLE}\\.tar\\.gz$" "delta"
+fi
+
+if has_tool zoxide; then
+    step "zoxide (install script)"
+    curl -sSfL https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh \
+        | env ZOXIDE_INSTALL_DIR="$BIN_DIR" bash
+fi
+
+if has_tool atuin; then
+    step "atuin (install script)"
+    curl -sSfL https://setup.atuin.sh \
+        | env ATUIN_NO_MODIFY_SHELL=1 ATUIN_INSTALL_DIR="$BIN_DIR" bash
+fi
+
+if has_tool starship; then
+    step "starship (install script)"
+    curl -sSfL https://starship.rs/install.sh \
+        | sh -s -- --bin-dir "$BIN_DIR" --yes
+fi
+
+if has_tool glow; then
+    case "$ARCH" in
+        x86_64)  GLOW_ARCH="x86_64" ;;
+        aarch64) GLOW_ARCH="arm64" ;;
+        *)       GLOW_ARCH="$ARCH" ;;
+    esac
+    gh_download_latest "charmbracelet/glow" \
+        "^glow_[^_]+_Linux_${GLOW_ARCH}\\.tar\\.gz$" "glow"
+fi
+
+if has_tool tealdeer; then
+    step "tealdeer"
+    case "$ARCH" in
+        x86_64)  TLDR_ARCH="x86_64-unknown-linux-musl" ;;
+        aarch64) TLDR_ARCH="aarch64-unknown-linux-musl" ;;
+        *)       TLDR_ARCH="${ARCH}-unknown-linux-musl" ;;
+    esac
+    tldr_url=$(curl -fsSL \
+        "https://api.github.com/repos/dbrgn/tealdeer/releases/latest" \
+        | jq -r --arg a "tealdeer-linux-${TLDR_ARCH}" \
+            '.assets[] | select(.name == $a) | .browser_download_url')
+    [[ -z "$tldr_url" ]] && tldr_url=$(curl -fsSL \
+        "https://api.github.com/repos/dbrgn/tealdeer/releases/latest" \
+        | jq -r '.assets[] | select(.name | test("linux.*musl")) | .browser_download_url' \
+        | head -1)
+    curl -fsSL "$tldr_url" -o "$BIN_DIR/tldr"
+    chmod +x "$BIN_DIR/tldr"
+    echo "  ✓ $BIN_DIR/tldr"
+fi
+
+if has_tool yazi; then
+    case "$ARCH" in
+        x86_64)  YAZI_TRIPLE="x86_64-unknown-linux-musl" ;;
+        aarch64) YAZI_TRIPLE="aarch64-unknown-linux-musl" ;;
+        *)       YAZI_TRIPLE="${ARCH}-unknown-linux-musl" ;;
+    esac
+    yazi_url=$(curl -fsSL \
+        "https://api.github.com/repos/sxyazi/yazi/releases/latest" \
+        | jq -r --arg p "yazi-${YAZI_TRIPLE}.zip" \
+            '.assets[] | select(.name == $p) | .browser_download_url')
+    yazi_tmp=$(mktemp -d)
+    step "yazi"
+    curl -fsSL "$yazi_url" -o "$yazi_tmp/yazi.zip"
+    unzip -q "$yazi_tmp/yazi.zip" -d "$yazi_tmp"
+    install -m 755 "$yazi_tmp/yazi-${YAZI_TRIPLE}/yazi" "$BIN_DIR/yazi"
+    [[ -f "$yazi_tmp/yazi-${YAZI_TRIPLE}/ya" ]] \
+        && install -m 755 "$yazi_tmp/yazi-${YAZI_TRIPLE}/ya" "$BIN_DIR/ya"
+    rm -rf "$yazi_tmp"
+    echo "  ✓ $BIN_DIR/yazi"
+fi
+
+if has_tool lazygit; then
+    case "$ARCH" in
+        x86_64)  LG_ARCH="x86_64" ;;
+        aarch64) LG_ARCH="arm64" ;;
+        *)       LG_ARCH="$ARCH" ;;
+    esac
+    gh_download_latest "jesseduffield/lazygit" \
+        "^lazygit_[^_]+_linux_${LG_ARCH}\\.tar\\.gz$" "lazygit"
+fi
+
+if has_tool dust; then
+    gh_download_latest "bootandy/dust" \
+        "^dust-v[^-]+-${MUSL_TRIPLE}\\.tar\\.gz$" "dust"
+fi
+
+if has_tool direnv; then
+    step "direnv"
+    case "$ARCH" in
+        x86_64)  DIRENV_ARCH="amd64" ;;
+        aarch64) DIRENV_ARCH="arm64" ;;
+        *)       DIRENV_ARCH="$ARCH" ;;
+    esac
+    direnv_url=$(curl -fsSL \
+        "https://api.github.com/repos/direnv/direnv/releases/latest" \
+        | jq -r --arg a "direnv.linux-${DIRENV_ARCH}" \
+            '.assets[] | select(.name == $a) | .browser_download_url')
+    curl -fsSL "$direnv_url" -o "$BIN_DIR/direnv"
+    chmod +x "$BIN_DIR/direnv"
+    echo "  ✓ $BIN_DIR/direnv"
+fi
+
+# ─── 4. Write ~/.zshrc ───────────────────────────────────────────────────────
+
+step "Writing ~/.zshrc"
+
+if [[ -f "$HOME/.zshrc" ]]; then
+    zshrc_backup="$HOME/.zshrc.bak.$(date +%Y%m%d-%H%M%S)"
+    cp "$HOME/.zshrc" "$zshrc_backup"
+    echo "  Backed up existing ~/.zshrc → $zshrc_backup"
+fi
+
+cat > "$HOME/.zshrc" << 'ZSHRC'
+# ~/.zshrc — generated by linux-tools/zsh-box
+# Regenerate: tools setup zsh-box
+
+# ─── Core options ────────────────────────────────────────────────────────────
+setopt AUTO_CD AUTO_PUSHD PUSHD_SILENT PUSHD_IGNORE_DUPS
+setopt EXTENDED_HISTORY HIST_EXPIRE_DUPS_FIRST HIST_IGNORE_DUPS HIST_IGNORE_SPACE
+setopt HIST_VERIFY SHARE_HISTORY INC_APPEND_HISTORY
+setopt CORRECT AUTO_LIST AUTO_MENU COMPLETE_IN_WORD LIST_PACKED
+
+HISTSIZE=100000
+SAVEHIST=100000
+HISTFILE="${XDG_STATE_HOME:-$HOME/.local/state}/zsh/history"
+mkdir -p "${HISTFILE%/*}"
+
+# ─── Path ────────────────────────────────────────────────────────────────────
+export PATH="$HOME/.local/bin:$PATH"
+
+# ─── Completion ──────────────────────────────────────────────────────────────
+autoload -Uz compinit
+_zcompdump="${XDG_CACHE_HOME:-$HOME/.cache}/zsh/zcompdump-${ZSH_VERSION}"
+mkdir -p "${_zcompdump%/*}"
+compinit -d "$_zcompdump"
+unset _zcompdump
+zstyle ':completion:*' menu select
+zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}' 'r:|=*' 'l:|=* r:|=*'
+zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"
+zstyle ':completion:*:descriptions' format '%F{yellow}-- %d --%f'
+
+# ─── Key bindings ────────────────────────────────────────────────────────────
+bindkey -e
+bindkey '^[[A'    history-search-backward
+bindkey '^[[B'    history-search-forward
+bindkey '^[[1;5C' forward-word
+bindkey '^[[1;5D' backward-word
+bindkey '^[[3~'   delete-char
+
+# ─── Plugins ─────────────────────────────────────────────────────────────────
+_ZSH_PLUGINS="${XDG_DATA_HOME:-$HOME/.local/share}/zsh/plugins"
+
+[[ -f "$_ZSH_PLUGINS/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ]] && \
+    source "$_ZSH_PLUGINS/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
+
+[[ -f "$_ZSH_PLUGINS/zsh-autosuggestions/zsh-autosuggestions.zsh" ]] && {
+    source "$_ZSH_PLUGINS/zsh-autosuggestions/zsh-autosuggestions.zsh"
+    ZSH_AUTOSUGGEST_STRATEGY=(history completion)
+    ZSH_AUTOSUGGEST_BUFFER_MAX_SIZE=50
+    bindkey '^ ' autosuggest-accept
+}
+
+unset _ZSH_PLUGINS
+
+# ─── Tool initializers ───────────────────────────────────────────────────────
+if [[ -d "${XDG_CONFIG_HOME:-$HOME/.config}/zsh/conf.d" ]]; then
+    for _f in "${XDG_CONFIG_HOME:-$HOME/.config}/zsh/conf.d"/*.zsh; do
+        [[ -f "$_f" ]] && source "$_f"
+    done
+    unset _f
+fi
+
+# ─── Prompt ──────────────────────────────────────────────────────────────────
+command -v starship &>/dev/null \
+    && eval "$(starship init zsh)" \
+    || PS1='%F{green}%n@%m%f %F{blue}%~%f %# '
+ZSHRC
+
+echo "  ✓ ~/.zshrc"
+
+# ─── 5. Per-tool conf.d fragments ────────────────────────────────────────────
+
+step "Writing conf.d fragments → $CONF_DIR/"
+
+if has_tool fzf; then
+    cat > "$CONF_DIR/10-fzf.zsh" << 'FZF'
+# fzf
+export FZF_DEFAULT_OPTS='
+  --height=40% --layout=reverse --border=rounded
+  --preview-window=right:50%:wrap
+  --bind=ctrl-d:half-page-down,ctrl-u:half-page-up
+  --color=bg+:#313244,bg:#1e1e2e,spinner:#f5e0dc,hl:#f38ba8
+  --color=fg:#cdd6f4,header:#f38ba8,info:#cba6f7,pointer:#f5e0dc
+  --color=marker:#b4befe,fg+:#cdd6f4,prompt:#cba6f7,hl+:#f38ba8
+'
+_FZF_FDCMD=""
+command -v fd     &>/dev/null && _FZF_FDCMD="fd"
+command -v fdfind &>/dev/null && _FZF_FDCMD="fdfind"
+[[ -n "$_FZF_FDCMD" ]] && {
+    export FZF_DEFAULT_COMMAND="$_FZF_FDCMD --type f --hidden --follow --exclude .git"
+    export FZF_ALT_C_COMMAND="$_FZF_FDCMD --type d --hidden --follow --exclude .git"
+}
+unset _FZF_FDCMD
+[[ -f "${XDG_DATA_HOME:-$HOME/.local/share}/fzf-key-bindings.zsh" ]] \
+    && source "${XDG_DATA_HOME:-$HOME/.local/share}/fzf-key-bindings.zsh"
+[[ -f "${XDG_DATA_HOME:-$HOME/.local/share}/fzf-completion.zsh" ]] \
+    && source "${XDG_DATA_HOME:-$HOME/.local/share}/fzf-completion.zsh"
+FZF
+    echo "  ✓ 10-fzf.zsh"
+fi
+
+if has_tool bat; then
+    cat > "$CONF_DIR/11-bat.zsh" << 'BAT'
+# bat
+export BAT_THEME="Catppuccin Mocha"
+export BAT_STYLE="numbers,changes,header"
+alias cat='bat --paging=never'
+alias bcat='bat'
+export MANPAGER="sh -c 'col -bx | bat -l man -p'"
+export MANROFFOPT="-c"
+BAT
+    echo "  ✓ 11-bat.zsh"
+fi
+
+if has_tool eza; then
+    cat > "$CONF_DIR/12-eza.zsh" << 'EZA'
+# eza
+alias ls='eza --icons=auto --group-directories-first'
+alias ll='eza -la --icons=auto --git --group-directories-first'
+alias la='eza -a  --icons=auto --group-directories-first'
+alias lt='eza --tree --icons=auto --level=2'
+alias lT='eza --tree --icons=auto'
+EZA
+    echo "  ✓ 12-eza.zsh"
+fi
+
+if has_tool zoxide; then
+    cat > "$CONF_DIR/13-zoxide.zsh" << 'ZOXIDE'
+# zoxide
+eval "$(zoxide init zsh)"
+ZOXIDE
+    echo "  ✓ 13-zoxide.zsh"
+fi
+
+if has_tool atuin; then
+    cat > "$CONF_DIR/14-atuin.zsh" << 'ATUIN'
+# atuin
+eval "$(atuin init zsh --disable-up-arrow)"
+ATUIN
+    echo "  ✓ 14-atuin.zsh"
+fi
+
+if has_tool direnv; then
+    cat > "$CONF_DIR/15-direnv.zsh" << 'DIRENV'
+# direnv
+eval "$(direnv hook zsh)"
+DIRENV
+    echo "  ✓ 15-direnv.zsh"
+fi
+
+if has_tool glow; then
+    cat > "$CONF_DIR/16-glow.zsh" << 'GLOW'
+# glow
+alias glow='glow -p'
+GLOW
+    echo "  ✓ 16-glow.zsh"
+fi
+
+if has_tool yazi; then
+    cat > "$CONF_DIR/17-yazi.zsh" << 'YAZI'
+# yazi — y() wrapper changes directory on exit
+function y() {
+    local tmp cwd
+    tmp=$(mktemp -t "yazi-cwd.XXXXXX")
+    yazi "$@" --cwd-file="$tmp"
+    cwd=$(cat -- "$tmp" 2>/dev/null)
+    [[ -n "$cwd" && "$cwd" != "$PWD" ]] && builtin cd -- "$cwd"
+    rm -f -- "$tmp"
+}
+YAZI
+    echo "  ✓ 17-yazi.zsh"
+fi
+
+if has_tool delta; then
+    cat > "$CONF_DIR/18-delta.zsh" << 'DELTA'
+# delta — configure git diff pager on first load
+if command -v delta &>/dev/null; then
+    _delta_pager=$(git config --global core.pager 2>/dev/null || true)
+    if [[ -z "$_delta_pager" || "$_delta_pager" == "less" ]]; then
+        git config --global core.pager              "delta"
+        git config --global interactive.diffFilter  "delta --color-only"
+        git config --global delta.navigate          true
+        git config --global delta.line-numbers      true
+        git config --global delta.side-by-side      true
+        git config --global delta.syntax-theme      "Catppuccin Mocha"
+        git config --global merge.conflictstyle     "zdiff3"
+    fi
+    unset _delta_pager
+fi
+DELTA
+    echo "  ✓ 18-delta.zsh"
+fi
+
+if has_tool tealdeer; then
+    cat > "$CONF_DIR/19-tealdeer.zsh" << 'TLDR'
+# tealdeer
+alias tldr='tldr --color always'
+TLDR
+    echo "  ✓ 19-tealdeer.zsh"
+fi
+
+if has_tool ripgrep; then
+    mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/ripgrep"
+    rg_config="${XDG_CONFIG_HOME:-$HOME/.config}/ripgrep/config"
+    if [[ ! -f "$rg_config" ]]; then
+        cat > "$rg_config" << 'RG'
+--max-columns=150
+--max-columns-preview
+--smart-case
+--hidden
+--glob=!.git/
+--glob=!node_modules/
+RG
+        echo "  ✓ ~/.config/ripgrep/config"
+    fi
+    cat > "$CONF_DIR/20-ripgrep.zsh" << 'RGENV'
+# ripgrep
+export RIPGREP_CONFIG_PATH="${XDG_CONFIG_HOME:-$HOME/.config}/ripgrep/config"
+RGENV
+    echo "  ✓ 20-ripgrep.zsh"
+fi
+
+if has_tool fd; then
+    cat > "$CONF_DIR/21-fd.zsh" << 'FD'
+# fd — some distros install as fdfind
+command -v fdfind &>/dev/null && ! command -v fd &>/dev/null \
+    && alias fd='fdfind'
+FD
+    echo "  ✓ 21-fd.zsh"
+fi
+
+# ─── 6. Starship config ───────────────────────────────────────────────────────
+
+if has_tool starship; then
+    step "Starship config"
+    mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}"
+    starship_cfg="${XDG_CONFIG_HOME:-$HOME/.config}/starship.toml"
+    if [[ ! -f "$starship_cfg" ]]; then
+        if "$BIN_DIR/starship" preset gruvbox-rainbow \
+                -o "$starship_cfg" 2>/dev/null; then
+            echo "  ✓ $starship_cfg (gruvbox-rainbow preset)"
+        else
+            cat > "$starship_cfg" << 'STARSHIP'
+"$schema" = "https://starship.rs/config-schema.json"
+
+[character]
+success_symbol = "[❯](bold green)"
+error_symbol   = "[❯](bold red)"
+
+[directory]
+truncation_length = 3
+truncation_symbol = "…/"
+
+[git_branch]
+symbol = " "
+
+[git_status]
+format = '([$all_status$ahead_behind]($style) )'
+
+[cmd_duration]
+min_time = 2000
+format   = "took [$duration]($style) "
+
+[time]
+disabled    = false
+time_format = "%H:%M"
+STARSHIP
+            echo "  ✓ $starship_cfg (minimal preset)"
+        fi
+    else
+        echo "  ~/.config/starship.toml already exists — skipping"
+    fi
+fi
+
+# ─── Done ─────────────────────────────────────────────────────────────────────
+
+echo ""
+echo "┌─────────────────────────────────────────────────────────────┐"
+echo "│  zsh-box installation complete                              │"
+echo "│                                                             │"
+echo "│  Change your default shell:                                 │"
+echo "│    chsh -s \$(which zsh)                                     │"
+echo "│                                                             │"
+echo "│  Then open a new terminal to start using zsh.              │"
+echo "└─────────────────────────────────────────────────────────────┘"

@@ -31,8 +31,17 @@ _fw() { local s=$1 w=$2 b c; b=$(printf '%s' "$s" | wc -c); c=$(printf '%s' "$s"
 
 app_status_detail() {
     local app="$1"
-    local desc img_id img_ref box_str
+    local desc
     desc="$(app_description "$app")"
+    if [[ -f "$APPS_DIR/$app/host-only" ]]; then
+        printf '%s  |  %s  |  %s  |  %s' \
+            "$(_fw "$desc" 22)" \
+            "$(_fw " -----" 7)" \
+            "$(_fw " ------------------------------" 32)" \
+            "host"
+        return
+    fi
+    local img_id img_ref box_str
     local img_name
     img_name="$(image_name "$app")"
     if image_exists "$app"; then

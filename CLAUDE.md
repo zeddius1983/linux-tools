@@ -40,6 +40,30 @@ Bash completion is in `completion/tools.bash` — source it from `~/.bashrc`.
 
 ## Architecture
 
+### App memory file
+
+Every app directory must contain a `.memory.md` file. Keep it up to date as the app evolves.
+
+**Required sections:**
+
+```markdown
+## <app-name>
+
+Short description of what this app does and why it's packaged this way.
+
+## Implementation
+
+How it was actually implemented: base image choice, export type, wrapper scripts, wizard pages, any non-obvious decisions.
+
+## Pitfalls and notes
+
+Things that went wrong or were surprising during implementation. Anything a future reader would need to know before touching this app.
+```
+
+**When working on an existing app, read its `.memory.md` first** to recover context before making any changes.
+
+---
+
 ### Adding a new app
 
 Create `apps/<name>/` with three files:

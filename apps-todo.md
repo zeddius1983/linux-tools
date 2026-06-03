@@ -14,6 +14,8 @@ Tracks apps packaged (or to be packaged) as Distrobox containers.
 - [ ] `vllm` — high-throughput LLM inference server
 - [ ] `aider` — AI pair programmer CLI
 - [ ] `comfyui` — node-based UI for generative AI image workflows
+- [ ] `openclaw` — personal AI assistant CLI + gateway; routes across AI providers, persistent memory, messaging integrations (https://openclaw.ai/)
+- [ ] `sgpt` — ShellGPT: AI shell assistant (sgpt command); OpenAI + Ollama backends (https://github.com/TheR1D/shell_gpt)
 
 ## System Monitoring / Hardware
 
@@ -39,5 +41,9 @@ Tracks apps packaged (or to be packaged) as Distrobox containers.
 ## Communication
 
 - [x] `telegram` — Telegram desktop client
+
+## Shell / Terminal
+
+- [x] `zsh-box` — Zsh shell exported to the host, with optional utilities: fzf, bat, glow, ripgrep, eza, zoxide, fd, delta
 
 ## Misc / Fun

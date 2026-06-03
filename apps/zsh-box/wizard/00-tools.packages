@@ -1,0 +1,20 @@
+Install Shell Utilities
+Select utilities to install (all pre-configured):
+setup
+zsh-syntax-highlighting|zsh-syntax-highlighting|Syntax highlighting for zsh|on
+zsh-autosuggestions|zsh-autosuggestions|Fish-like autosuggestions|on
+fzf|fzf|Fuzzy finder (Ctrl-R, Ctrl-T, Alt-C)|on
+bat|bat|cat with syntax highlighting|on
+eza|eza|ls replacement with icons + git status|on
+ripgrep|ripgrep|rg — ultra-fast grep|on
+fd|fd|Intuitive find replacement|on
+zoxide|zoxide|z — smarter cd with memory|on
+atuin|atuin|Shell history UI (Ctrl-R)|off
+starship|starship|Cross-shell prompt with git info|on
+delta|delta|Side-by-side git diff pager|on
+glow|glow|Markdown renderer for terminal|on
+lazygit|lazygit|Terminal UI for git|off
+yazi|yazi|Terminal file manager|off
+tealdeer|tealdeer|tldr — simplified man pages|off
+dust|dust|du replacement (visual tree)|off
+direnv|direnv|Per-directory env variables|off

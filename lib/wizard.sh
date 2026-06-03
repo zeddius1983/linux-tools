@@ -3,7 +3,8 @@
 #              remaining lines: name|payload|description[|on|off]  (default: off)
 #
 # Supported types:
-#   .mcp   → checklist; applies 'claude mcp add --scope global' after action
+#   .mcp      → checklist; applies 'claude mcp add --scope global' after action
+#   .packages → checklist; calls '<app>/zsh-install --tools <selections>' after action
 #
 # To add a new type: add a handler function _wizard_apply_<type>() and register
 # it in the case statement inside tui_apply_wizards().
@@ -67,7 +68,7 @@ _wizard_run_page() {
     local selected
     selected=$(whiptail --title "linux-tools — $title" \
         --checklist "$prompt  (SPACE = toggle, ENTER = confirm):" \
-        20 72 10 "${items[@]}" 3>&1 1>&2 2>&3) || return 1
+        20 84 10 "${items[@]}" 3>&1 1>&2 2>&3) || return 1
 
     _WIZARD_SELECTIONS["$pagename"]="$(tr -d '"' <<< "$selected")"
 }
@@ -87,7 +88,8 @@ tui_apply_wizards() {
         [[ -n "$match" ]] || continue
         local ext="${match##*.}"
         case "$ext" in
-            mcp) _wizard_apply_mcp "$app" "$match" "${_WIZARD_SELECTIONS[$pagename]}" ;;
+            mcp)      _wizard_apply_mcp      "$app" "$match" "${_WIZARD_SELECTIONS[$pagename]}" ;;
+            packages) _wizard_apply_packages "$app" "$match" "${_WIZARD_SELECTIONS[$pagename]}" ;;
         esac
     done
 }
@@ -118,4 +120,16 @@ _wizard_apply_mcp() {
                 claude mcp remove --scope user "$name" 2>/dev/null || true
         fi
     done < <(tail -n +4 "$page")
+}
+
+_wizard_apply_packages() {
+    local app="$1" page="$2" selected_str="${3:-}"
+    local -a selected_arr=()
+    [[ -n "$selected_str" ]] && read -ra selected_arr <<< "$selected_str"
+    local box tools_str=""
+    box="$(box_name "$app")"
+    for s in "${selected_arr[@]+"${selected_arr[@]}"}"; do tools_str+=" $s"; done
+    tools_str="${tools_str# }"
+    echo "==> Installing zsh and selected tools on host..."
+    distrobox enter "$box" -- zsh-install --tools "$tools_str"
 }
