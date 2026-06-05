@@ -13,7 +13,7 @@ Tracks apps packaged (or to be packaged) as Distrobox containers.
 - [ ] `llamacpp` — llama.cpp LLM inference engine
 - [ ] `vllm` — high-throughput LLM inference server
 - [ ] `aider` — AI pair programmer CLI
-- [ ] `comfyui` — node-based UI for generative AI image workflows
+- [x] `comfyui` — node-based UI for generative AI image workflows
 - [ ] `openclaw` — personal AI assistant CLI + gateway; routes across AI providers, persistent memory, messaging integrations (https://openclaw.ai/)
 - [ ] `sgpt` — ShellGPT: AI shell assistant (sgpt command); OpenAI + Ollama backends (https://github.com/TheR1D/shell_gpt)
 

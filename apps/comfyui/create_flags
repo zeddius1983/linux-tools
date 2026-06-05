@@ -1,0 +1,1 @@
+--device /dev/kfd --device /dev/dri --group-add video --group-add render --security-opt seccomp=unconfined --ipc=host
