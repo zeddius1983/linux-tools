@@ -4,7 +4,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     SDKMAN_DIR=/opt/sdkman
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates curl wget \
+    ca-certificates curl wget gnupg \
     libxi6 libxrender1 libxtst6 mesa-utils libfontconfig1 \
     libgtk-3-bin dbus-user-session libxcb-keysyms1 \
     zsh git git-lfs \
