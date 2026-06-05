@@ -222,8 +222,17 @@ cmd_install() {
         echo "==> Added completion to ~/.bashrc"
     fi
 
+    if [[ -f "$HOME/.zshrc" ]]; then
+        if grep -qF "$completion_line" "$HOME/.zshrc" 2>/dev/null; then
+            echo "==> Completion already in ~/.zshrc"
+        else
+            printf '\n# linux-tools completion\nautoload bashcompinit && bashcompinit\n%s\n' "$completion_line" >> "$HOME/.zshrc"
+            echo "==> Added completion to ~/.zshrc"
+        fi
+    fi
+
     echo ""
-    echo "Done. Open a new shell or run: source ~/.bashrc"
+    echo "Done. Open a new shell or run: source ~/.bashrc / source ~/.zshrc"
 }
 
 cmd_list() {
