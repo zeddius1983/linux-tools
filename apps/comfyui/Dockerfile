@@ -48,6 +48,7 @@ export HSA_ENABLE_SDMA=0\n\
 export TORCH_ROCM_AOTRITON_ENABLE_EXPERIMENTAL=1\n\
 export TORCH_BLAS_PREFER_HIPBLASLT=1\n\
 export MIOPEN_USER_DB_PATH="${HOME}/.cache/miopen"\n\
+mkdir -p "${HOME}/.comfyui/models"/{checkpoints,vae,loras,controlnet,upscale_models,clip,unet,diffusion_models}\n\
 echo "ComfyUI starting — open http://localhost:8188 in your browser"\n\
 cd /opt/ComfyUI\n\
 exec /opt/venv/bin/python main.py --listen 0.0.0.0 --reserve-vram 3 --bf16-vae --disable-mmap --cache-none "$@"\n\
