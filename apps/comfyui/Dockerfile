@@ -17,12 +17,26 @@ RUN git clone --depth=1 https://github.com/ltdrdata/ComfyUI-Manager.git \
         /opt/ComfyUI/custom_nodes/ComfyUI-Manager && \
     pip install -r /opt/ComfyUI/custom_nodes/ComfyUI-Manager/requirements.txt
 
+# Route models to ~/.comfyui/models so they persist via Distrobox shared $HOME.
+# custom_nodes stays at /opt/ComfyUI/custom_nodes where ComfyUI-Manager is baked.
+# --base-directory is intentionally not used: it relocates custom_nodes and
+# breaks baked-in nodes installed at image-build time.
+RUN printf 'comfyui:\n\
+  base_path: ~/.comfyui/models/\n\
+  checkpoints: checkpoints/\n\
+  vae: vae/\n\
+  loras: loras/\n\
+  controlnet: controlnet/\n\
+  upscale_models: upscale_models/\n\
+  clip: clip/\n\
+  unet: unet/\n\
+  diffusion_models: diffusion_models/\n' \
+    > /opt/ComfyUI/extra_model_paths.yaml
+
 RUN chmod -R a+rwX /opt/ComfyUI
 
 # Wrapper must live in /usr/bin/ — command -pv does not search /usr/local/bin.
-# --base-directory routes all data (models, output, user, input) to ~/.comfyui,
-# persisting across container rebuilds via Distrobox shared $HOME.
-# Remaining flags tuned for Strix Halo (gfx1151):
+# Flags tuned for Strix Halo (gfx1151):
 #   --disable-mmap  critical: mmap above 64 GB is very slow on gfx1151 (ROCm bug)
 #   --bf16-vae      prevents OOM during VAE decode on unified memory
 #   --cache-none    disables model caching for better GTT/RAM management
@@ -36,7 +50,7 @@ export TORCH_BLAS_PREFER_HIPBLASLT=1\n\
 export MIOPEN_USER_DB_PATH="${HOME}/.cache/miopen"\n\
 echo "ComfyUI starting — open http://localhost:8188 in your browser"\n\
 cd /opt/ComfyUI\n\
-exec /opt/venv/bin/python main.py --listen 0.0.0.0 --base-directory "${HOME}/.comfyui" --reserve-vram 3 --bf16-vae --disable-mmap --cache-none "$@"\n\
+exec /opt/venv/bin/python main.py --listen 0.0.0.0 --reserve-vram 3 --bf16-vae --disable-mmap --cache-none "$@"\n\
 ' > /usr/bin/comfyui && chmod +x /usr/bin/comfyui
 
 CMD ["/bin/bash"]
