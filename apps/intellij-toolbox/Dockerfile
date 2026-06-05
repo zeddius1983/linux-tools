@@ -35,9 +35,6 @@ RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
 RUN curl -s "https://get.sdkman.io" | bash \
     && chmod -R a+rwX /opt/sdkman
 
-SHELL ["/bin/bash", "-c"]
-RUN source /opt/sdkman/bin/sdkman-init.sh && sdk install java
-
 # Make SDKMAN available in login shells (bash + zsh)
 RUN printf '\nexport SDKMAN_DIR=/opt/sdkman\n[[ -s "$SDKMAN_DIR/bin/sdkman-init.sh" ]] && source "$SDKMAN_DIR/bin/sdkman-init.sh"\n' \
     >> /etc/bash.bashrc \
