@@ -4,6 +4,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
+# Ubuntu doesn't ship render/video groups; Podman needs them in /etc/group
+# to resolve --group-add render and --group-add video at container start.
+RUN groupadd -f render && groupadd -f video
+
 # PyTorch already present in base image; just install ComfyUI and its deps
 RUN git clone --depth=1 https://github.com/comfyanonymous/ComfyUI.git /opt/ComfyUI
 WORKDIR /opt/ComfyUI
