@@ -53,4 +53,26 @@ cd /opt/ComfyUI\n\
 exec /opt/venv/bin/python main.py --listen 0.0.0.0 --reserve-vram 3 --bf16-vae --disable-mmap --cache-none "$@"\n\
 ' > /usr/bin/comfyui && chmod +x /usr/bin/comfyui
 
+RUN printf '#!/usr/bin/env bash\n\
+export VIRTUAL_ENV=/opt/venv\n\
+export PATH=/opt/venv/bin:${PATH}\n\
+SERVER_URL="http://localhost:8188"\n\
+LOG_FILE="${HOME}/.comfyui/server.log"\n\
+if ! curl -sf "${SERVER_URL}" >/dev/null 2>&1; then\n\
+    mkdir -p "${HOME}/.comfyui"\n\
+    nohup /usr/bin/comfyui >"${LOG_FILE}" 2>&1 &\n\
+    disown\n\
+    timeout=120\n\
+    while ! curl -sf "${SERVER_URL}" >/dev/null 2>&1; do\n\
+        sleep 2\n\
+        timeout=$((timeout - 2))\n\
+        if [[ ${timeout} -le 0 ]]; then\n\
+            distrobox-host-exec notify-send "ComfyUI" "Server failed to start. Check ${LOG_FILE}" 2>/dev/null || true\n\
+            exit 1\n\
+        fi\n\
+    done\n\
+fi\n\
+distrobox-host-exec xdg-open "${SERVER_URL}"\n\
+' > /usr/bin/comfyui-app && chmod +x /usr/bin/comfyui-app
+
 CMD ["/bin/bash"]
