@@ -1,7 +1,7 @@
 FROM docker.io/rocm/pytorch:rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.10.0
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git ffmpeg \
+    git ffmpeg curl \
     && rm -rf /var/lib/apt/lists/*
 
 # PyTorch already present in base image; just install ComfyUI and its deps
