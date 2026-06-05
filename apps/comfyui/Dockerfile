@@ -73,7 +73,11 @@ if ! curl -sf "${SERVER_URL}" >/dev/null 2>&1; then\n\
         fi\n\
     done\n\
 fi\n\
-distrobox-host-exec xdg-open "${SERVER_URL}"\n\
+if distrobox-host-exec distrobox list 2>/dev/null | grep -q "chrome-box"; then\n\
+    distrobox-host-exec distrobox enter chrome-box -- google-chrome --app="${SERVER_URL}" --new-window 2>/dev/null &\n\
+else\n\
+    distrobox-host-exec xdg-open "${SERVER_URL}"\n\
+fi\n\
 ' > /usr/bin/comfyui-app && chmod +x /usr/bin/comfyui-app
 
 CMD ["/bin/bash"]
