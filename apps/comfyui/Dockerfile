@@ -36,6 +36,8 @@ RUN printf 'comfyui:\n\
 #   --bf16-vae      prevents OOM during VAE decode on unified memory
 #   --cache-none    disables model caching for better GTT/RAM management
 RUN printf '#!/usr/bin/env bash\n\
+export VIRTUAL_ENV=/opt/venv\n\
+export PATH=/opt/venv/bin:${PATH}\n\
 export PYTORCH_HIP_ALLOC_CONF=expandable_segments:True\n\
 export HSA_ENABLE_SDMA=0\n\
 export TORCH_ROCM_AOTRITON_ENABLE_EXPERIMENTAL=1\n\
@@ -44,7 +46,7 @@ export MIOPEN_USER_DB_PATH="${HOME}/.cache/miopen"\n\
 mkdir -p "${HOME}/comfy-models"/{checkpoints,vae,loras,controlnet,upscale_models,clip,unet,diffusion_models}\n\
 echo "ComfyUI starting — open http://localhost:8188 in your browser"\n\
 cd /opt/ComfyUI\n\
-exec python main.py --listen 0.0.0.0 --reserve-vram 3 --bf16-vae --disable-mmap --cache-none "$@"\n\
+exec /opt/venv/bin/python main.py --listen 0.0.0.0 --reserve-vram 3 --bf16-vae --disable-mmap --cache-none "$@"\n\
 ' > /usr/bin/comfyui && chmod +x /usr/bin/comfyui
 
 CMD ["/bin/bash"]
