@@ -30,6 +30,8 @@ RUN printf 'comfyui:\n\
   diffusion_models: diffusion_models/\n' \
     > /opt/ComfyUI/extra_model_paths.yaml
 
+RUN chmod -R a+rwX /opt/ComfyUI
+
 # Wrapper must live in /usr/bin/ — command -pv does not search /usr/local/bin.
 # Flags tuned for Strix Halo (gfx1151):
 #   --disable-mmap  critical: mmap above 64 GB is very slow on gfx1151 (ROCm bug)
