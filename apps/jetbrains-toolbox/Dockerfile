@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl wget \
     libxi6 libxrender1 libxtst6 mesa-utils libfontconfig1 \
     libgtk-3-bin dbus-user-session libxcb-keysyms1 \
+    libayatana-appindicator3-1 \
     zsh git git-lfs \
     build-essential cmake \
     python3 python3-pip python3-venv \
