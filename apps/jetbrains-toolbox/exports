@@ -1,0 +1,6 @@
+# Format: type:name[:Display Name]
+# app     - export existing container .desktop entry to host menu
+# bin     - export binary to ~/.local/bin
+# desktop - create terminal-launched app shortcut
+# gui     - create Terminal=false .desktop shortcut
+gui:jetbrains-toolbox:JetBrains Toolbox

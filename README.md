@@ -19,11 +19,11 @@ Select an app with the arrow keys and press **ENTER**. Each app shows its descri
 
 ### Install (one-time)
 
-Symlinks `tools` into `~/.local/bin` and wires up bash completion in `~/.bashrc`:
+Symlinks `tools` into `~/.local/bin` and wires up shell completion in `~/.bashrc` (and `~/.zshrc` if present):
 
 ```bash
 ./tools.sh install
-source ~/.bashrc
+source ~/.bashrc   # or source ~/.zshrc
 ```
 
 After that, use `tools` from anywhere instead of `./tools.sh`.
@@ -55,13 +55,18 @@ distrobox enter <app>-box  # directly via distrobox
 
 | App | Description | Box |
 |---|---|---|
-| `amdgpu_top` | AMD GPU monitor — TUI + GUI | `amdgpu_top-box` |
+| `amdgpu_top` | AMD GPU monitor | `amdgpu_top-box` |
+| `antigravity` | Antigravity CLI (agy) | `antigravity-box` |
 | `chrome` | Google Chrome browser | `chrome-box` |
-| `claude-code` | Claude Code CLI | `claude-code-box` |
+| `claude-code` | Claude Code | `claude-code-box` |
+| `codex-cli` | OpenAI Codex CLI | `codex-cli-box` |
+| `comfyui` | ComfyUI | `comfyui-box` |
 | `copilot-cli` | GitHub Copilot CLI | `copilot-cli-box` |
-| `corefreq` | CPU frequency and performance monitor | `corefreq-box` |
-| `lmstudio` | LM Studio (local AI, AMD GPU) | `lmstudio-box` |
-| `telegram` | Telegram Desktop messenger | `telegram-box` |
+| `corefreq` | CoreFreq CPU monitor | `corefreq-box` |
+| `jetbrains-toolbox` | JetBrains Toolbox | `jetbrains-toolbox-box` |
+| `lmstudio` | LM Studio | `lmstudio-box` |
+| `telegram` | Telegram Desktop | `telegram-box` |
+| `zsh-box` | Zsh Toolbox (host-only installer) | — |
 
 ## Adding a new app
 
