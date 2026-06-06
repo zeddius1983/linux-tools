@@ -46,5 +46,16 @@ RUN TOOLBOX_URL=$(curl -s "https://data.services.jetbrains.com/products/releases
     && mkdir -p /opt/jetbrains-toolbox \
     && tar -xzf /tmp/jetbrains-toolbox.tar.gz -C /opt/jetbrains-toolbox --strip-components=1 \
     && rm /tmp/jetbrains-toolbox.tar.gz \
-    && chmod -R a+rwX /opt/jetbrains-toolbox \
-    && ln -sf /opt/jetbrains-toolbox/bin/jetbrains-toolbox /usr/bin/jetbrains-toolbox
+    && chmod -R a+rwX /opt/jetbrains-toolbox
+
+# Wrapper: install tray icon to shared $HOME on first launch so the host
+# tray can find it (the PNG lives inside the container otherwise)
+RUN printf '#!/bin/bash\n\
+ICON_SRC=/opt/jetbrains-toolbox/bin/toolbox-tray-color.png\n\
+ICON_DIR="$HOME/.local/share/icons/hicolor/256x256/apps"\n\
+if [[ ! -f "$ICON_DIR/jetbrains-toolbox.png" ]]; then\n\
+    mkdir -p "$ICON_DIR"\n\
+    cp "$ICON_SRC" "$ICON_DIR/jetbrains-toolbox.png"\n\
+fi\n\
+exec /opt/jetbrains-toolbox/bin/jetbrains-toolbox "$@"\n' \
+    > /usr/bin/jetbrains-toolbox && chmod +x /usr/bin/jetbrains-toolbox
