@@ -4,7 +4,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     SDKMAN_DIR=/opt/sdkman
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates curl wget gnupg \
+    ca-certificates curl wget \
     libxi6 libxrender1 libxtst6 mesa-utils libfontconfig1 \
     libgtk-3-bin dbus-user-session libxcb-keysyms1 \
     zsh git git-lfs \
@@ -23,13 +23,9 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     && apt-get update && apt-get install -y --no-install-recommends gh \
     && rm -rf /var/lib/apt/lists/*
 
-# Docker CLI (client only — connects to host socket)
-RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
-    | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg \
-    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu noble stable" \
-    > /etc/apt/sources.list.d/docker.list \
-    && apt-get update && apt-get install -y --no-install-recommends docker-ce-cli \
-    && rm -rf /var/lib/apt/lists/*
+# docker → host podman bridge (no socket needed)
+RUN printf '#!/bin/bash\nexec distrobox-host-exec podman "$@"\n' \
+    > /usr/bin/docker && chmod +x /usr/bin/docker
 
 # Install SDKMAN to /opt/sdkman and pre-install default Java LTS
 RUN curl -s "https://get.sdkman.io" | bash \
