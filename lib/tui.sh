@@ -26,8 +26,9 @@ roottext=lightgrey,black
 '
 }
 
-# printf %-Ns counts bytes, not display columns; _fw corrects for multibyte chars.
-_fw() { local s=$1 w=$2 b c; b=$(printf '%s' "$s" | wc -c); c=$(printf '%s' "$s" | wc -m); printf "%-$(( w + b - c ))s" "$s"; }
+# Fixed-width field: pads to w columns, truncates with … if longer.
+# Uses ${#s} (bash char count) not wc -m — wc -m counts bytes on this system.
+_fw() { local s=$1 w=$2 b c; (( ${#s} > w )) && s="${s:0:$((w-1))}…"; b=$(printf '%s' "$s" | wc -c); c=${#s}; printf "%-$(( w + b - c ))s" "$s"; }
 
 app_status_detail() {
     local app="$1"
