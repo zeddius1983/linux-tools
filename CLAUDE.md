@@ -60,7 +60,7 @@ How it was actually implemented: base image choice, export type, wrapper scripts
 Things that went wrong or were surprising during implementation. Anything a future reader would need to know before touching this app.
 ```
 
-**When working on an existing app, read its `.memory.md` first** to recover context before making any changes.
+**When working on an existing app, read its `.memory.md` first** — this is required before making any changes. See [Working practices](#working-practices) for the full set of update rules.
 
 ---
 
@@ -180,6 +180,13 @@ Distrobox mounts the host's `$HOME` inside the container. This means:
 ### Interactive TUI
 
 `./tools.sh` with no arguments opens a `whiptail` checklist. The TUI window is **72 columns wide** — keep `description` files short (under ~25 chars) so the app name + description + `[image:OK  box:OK]` status fits on one line.
+
+## Working practices
+
+- **Read `.memory.md` first**: before touching any existing app, read `apps/<name>/.memory.md`. It contains implementation context, pitfalls, and decisions that are not obvious from the code.
+- **Keep `.memory.md` current**: after any change to an app, update its `.memory.md` to reflect what changed and why. Add new pitfalls as they are discovered.
+- **Keep `ROADMAP.md` current**: if a task completes, unblocks, or adds a planned item, update `ROADMAP.md` to reflect the new state.
+- **Keep `README.md` current**: if a new app is added or an existing one changes significantly (new features, renamed exports, different usage), update `README.md`.
 
 ## Branching policy
 

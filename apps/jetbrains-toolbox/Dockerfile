@@ -1,7 +1,6 @@
 FROM --platform=linux/amd64 docker.io/ubuntu:24.04
 
-ENV DEBIAN_FRONTEND=noninteractive \
-    SDKMAN_DIR=/opt/sdkman
+ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl wget \
@@ -28,15 +27,11 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
 RUN printf '#!/bin/bash\nexec distrobox-host-exec podman "$@"\n' \
     > /usr/bin/docker && chmod +x /usr/bin/docker
 
-# Install SDKMAN to /opt/sdkman and pre-install default Java LTS
-RUN curl -s "https://get.sdkman.io" | bash \
-    && chmod -R a+rwX /opt/sdkman
-
-# Make SDKMAN available in login shells (bash + zsh)
-RUN printf '\nexport SDKMAN_DIR=/opt/sdkman\n[[ -s "$SDKMAN_DIR/bin/sdkman-init.sh" ]] && source "$SDKMAN_DIR/bin/sdkman-init.sh"\n' \
+# Make SDKMAN available in login shells (bash + zsh) — installed at runtime to ~/.sdkman
+RUN printf '\n[[ -s "$HOME/.sdkman/bin/sdkman-init.sh" ]] && source "$HOME/.sdkman/bin/sdkman-init.sh"\n' \
     >> /etc/bash.bashrc \
     && mkdir -p /etc/zsh \
-    && printf '\nexport SDKMAN_DIR=/opt/sdkman\n[[ -s "$SDKMAN_DIR/bin/sdkman-init.sh" ]] && source "$SDKMAN_DIR/bin/sdkman-init.sh"\n' \
+    && printf '\n[[ -s "$HOME/.sdkman/bin/sdkman-init.sh" ]] && source "$HOME/.sdkman/bin/sdkman-init.sh"\n' \
     >> /etc/zsh/zshrc
 
 # Download and install latest JetBrains Toolbox
@@ -48,14 +43,18 @@ RUN TOOLBOX_URL=$(curl -s "https://data.services.jetbrains.com/products/releases
     && rm /tmp/jetbrains-toolbox.tar.gz \
     && chmod -R a+rwX /opt/jetbrains-toolbox
 
-# Wrapper: install tray icon to shared $HOME on first launch so the host
-# tray can find it (the PNG lives inside the container otherwise)
+# Wrapper: install tray icon + SDKMAN to shared $HOME on first launch
 RUN printf '#!/bin/bash\n\
 ICON_SRC=/opt/jetbrains-toolbox/bin/toolbox-tray-color.png\n\
-ICON_DIR="$HOME/.local/share/icons/hicolor/256x256/apps"\n\
-if [[ ! -f "$ICON_DIR/jetbrains-toolbox.png" ]]; then\n\
-    mkdir -p "$ICON_DIR"\n\
-    cp "$ICON_SRC" "$ICON_DIR/jetbrains-toolbox.png"\n\
+SCALABLE_DIR="$HOME/.local/share/icons/hicolor/scalable/apps"\n\
+PNG_DIR="$HOME/.local/share/icons/hicolor/256x256/apps"\n\
+mkdir -p "$SCALABLE_DIR" "$PNG_DIR"\n\
+cp "$ICON_SRC" "$PNG_DIR/jetbrains-toolbox.png"\n\
+cp "$ICON_SRC" "$PNG_DIR/toolbox-tray-color.png"\n\
+[[ -f "$SCALABLE_DIR/jetbrains-toolbox.svg" ]] && cp "$SCALABLE_DIR/jetbrains-toolbox.svg" "$SCALABLE_DIR/toolbox-tray-color.svg"\n\
+gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null || true\n\
+if [[ ! -f "$HOME/.sdkman/bin/sdkman-init.sh" ]]; then\n\
+    curl -s "https://get.sdkman.io" | bash\n\
 fi\n\
 exec /opt/jetbrains-toolbox/bin/jetbrains-toolbox "$@"\n' \
     > /usr/bin/jetbrains-toolbox && chmod +x /usr/bin/jetbrains-toolbox
