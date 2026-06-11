@@ -37,7 +37,7 @@ RUN mkdir -p /stage/bin /stage/lib /stage/gguf-py \
 FROM docker.io/rocm/dev-ubuntu-24.04:7.2.4-complete
 
 RUN apt-get update \
-    && apt-get install -y libgomp1 curl python3 python3-pip \
+    && apt-get install -y libgomp1 curl git python3 python3-pip \
     && apt-get autoremove -y \
     && apt-get clean \
     && rm -rf /tmp/* /var/tmp/* \
