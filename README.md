@@ -64,6 +64,7 @@ distrobox enter <app>-box  # directly via distrobox
 | `copilot-cli` | GitHub Copilot CLI | `copilot-cli-box` |
 | `corefreq` | CoreFreq CPU monitor | `corefreq-box` |
 | `jetbrains-toolbox` | JetBrains Toolbox | `jetbrains-toolbox-box` |
+| [`llama-cpp`](apps/llama-cpp/README.md) | llama.cpp (ROCm) | `llama-cpp-box` |
 | `lmstudio` | LM Studio | `lmstudio-box` |
 | `telegram` | Telegram Desktop | `telegram-box` |
 | `zsh-box` | Zsh Toolbox (host-only installer) | — |
