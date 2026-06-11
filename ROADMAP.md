@@ -13,7 +13,7 @@ Priority order within each section: highest first.
 - [x] `comfyui` — node-based UI for generative AI image workflows
 - [ ] `aider` — AI pair programmer CLI
 - [ ] `sgpt` — ShellGPT: AI shell assistant; OpenAI + Ollama backends (https://github.com/TheR1D/shell_gpt)
-- [ ] `unsloth` — fast LLM fine-tuning (https://unsloth.ai/docs)
+- [x] `unsloth` — fast LLM fine-tuning (https://unsloth.ai/docs)
 - [x] `llama-cpp` — llama.cpp LLM inference engine (ROCm, multi-stage build, `llama` dispatcher + `llama-serve`)
 - [ ] `openclaw` — personal AI assistant CLI + gateway; routes across AI providers, persistent memory, messaging integrations (https://openclaw.ai/)
 

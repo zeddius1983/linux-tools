@@ -1,0 +1,1 @@
+--device /dev/kfd --device /dev/dri --group-add 44 --group-add 992 --cap-add SYS_PTRACE --security-opt seccomp=unconfined --ipc=host
