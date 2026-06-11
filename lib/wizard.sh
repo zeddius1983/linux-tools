@@ -51,10 +51,11 @@ _wizard_run_page() {
 
     # Build whiptail item list.
     # Optional 4th field sets default state (on/off); omitting defaults to off.
-    # Use "on" for recommended items so users get a sensible default.
     # For .packages pages, optional 5th field is a detect path: a bare name is
     # checked as ~/.local/bin/<name>; a ~/ prefix expands to $HOME/; multiple
-    # paths may be comma-separated (any match → ON).
+    # paths may be comma-separated (any match → ON). When a detect field is
+    # present it is the sole authority — default_state is ignored so that
+    # uninstalled tools always appear unchecked.
     local -a items=()
     local name payload desc default_state detect
     while IFS='|' read -r name payload desc default_state detect; do
@@ -63,7 +64,6 @@ _wizard_run_page() {
         detect="${detect%$'\r'}"
         [[ -z "$name" || "$name" == \#* ]] && continue
         local state="OFF"
-        [[ "${default_state,,}" == "on" ]] && state="ON"
         if [[ "$ext" == "packages" && -n "$detect" ]]; then
             local -a _dpaths=()
             IFS=',' read -ra _dpaths <<< "$detect"
@@ -79,6 +79,8 @@ _wizard_run_page() {
                     break
                 fi
             done
+        else
+            [[ "${default_state,,}" == "on" ]] && state="ON"
         fi
         items+=("$name" "$desc" "$state")
     done < <(tail -n +4 "$page")
