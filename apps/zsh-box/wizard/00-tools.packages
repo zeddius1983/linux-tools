@@ -18,3 +18,4 @@ yazi|yazi|Terminal file manager|off
 tealdeer|tealdeer|tldr — simplified man pages|off
 dust|dust|du replacement (visual tree)|off
 direnv|direnv|Per-directory env variables|off
+zellij|zellij|Terminal multiplexer (tmux alternative)|off

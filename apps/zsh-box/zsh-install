@@ -62,6 +62,7 @@ cleanup_absent delta      delta     18-delta.zsh
 cleanup_absent tealdeer   tldr      19-tealdeer.zsh
 cleanup_absent ripgrep    rg        20-ripgrep.zsh
 cleanup_absent fd         fd        21-fd.zsh
+cleanup_absent zellij     zellij    22-zellij.zsh
 cleanup_absent starship   starship
 cleanup_absent lazygit    lazygit
 cleanup_absent dust       dust
@@ -289,6 +290,11 @@ fi
 if has_tool dust; then
     gh_download_latest "bootandy/dust" \
         "^dust-v[^-]+-${MUSL_TRIPLE}\\.tar\\.gz$" "dust"
+fi
+
+if has_tool zellij; then
+    gh_download_latest "zellij-org/zellij" \
+        "^zellij-${MUSL_TRIPLE}\\.tar\\.gz$" "zellij"
 fi
 
 if has_tool direnv; then
@@ -548,6 +554,15 @@ command -v fdfind &>/dev/null && ! command -v fd &>/dev/null \
     && alias fd='fdfind'
 FD
     echo "  ✓ 21-fd.zsh"
+fi
+
+if has_tool zellij; then
+    cat > "$CONF_DIR/22-zellij.zsh" << 'ZELLIJ'
+# zellij
+command -v zellij &>/dev/null \
+    && eval "$(zellij setup --generate-completion zsh 2>/dev/null)"
+ZELLIJ
+    echo "  ✓ 22-zellij.zsh"
 fi
 
 # ─── 6. Starship config ───────────────────────────────────────────────────────
