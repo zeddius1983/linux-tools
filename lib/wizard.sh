@@ -52,14 +52,34 @@ _wizard_run_page() {
     # Build whiptail item list.
     # Optional 4th field sets default state (on/off); omitting defaults to off.
     # Use "on" for recommended items so users get a sensible default.
+    # For .packages pages, optional 5th field is a detect path: a bare name is
+    # checked as ~/.local/bin/<name>; a ~/ prefix expands to $HOME/; multiple
+    # paths may be comma-separated (any match → ON).
     local -a items=()
-    local name payload desc default_state
-    while IFS='|' read -r name payload desc default_state; do
+    local name payload desc default_state detect
+    while IFS='|' read -r name payload desc default_state detect; do
         name="${name%$'\r'}"; payload="${payload%$'\r'}"
         desc="${desc%$'\r'}"; default_state="${default_state%$'\r'}"
+        detect="${detect%$'\r'}"
         [[ -z "$name" || "$name" == \#* ]] && continue
         local state="OFF"
         [[ "${default_state,,}" == "on" ]] && state="ON"
+        if [[ "$ext" == "packages" && -n "$detect" ]]; then
+            local -a _dpaths=()
+            IFS=',' read -ra _dpaths <<< "$detect"
+            local _dp
+            for _dp in "${_dpaths[@]}"; do
+                if [[ "$_dp" == "~/"* ]]; then
+                    _dp="${HOME}/${_dp:2}"
+                else
+                    _dp="${HOME}/.local/bin/${_dp}"
+                fi
+                if [[ -e "$_dp" ]]; then
+                    state="ON"
+                    break
+                fi
+            done
+        fi
         items+=("$name" "$desc" "$state")
     done < <(tail -n +4 "$page")
 

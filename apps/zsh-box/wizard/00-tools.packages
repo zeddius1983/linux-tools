@@ -1,21 +1,21 @@
 Install Shell Utilities
 Select utilities to install (all pre-configured):
 setup
-zsh-syntax-highlighting|zsh-syntax-highlighting|Syntax highlighting for zsh|on
-zsh-autosuggestions|zsh-autosuggestions|Fish-like autosuggestions|on
-fzf|fzf|Fuzzy finder (Ctrl-R, Ctrl-T, Alt-C)|on
-bat|bat|cat with syntax highlighting|on
-eza|eza|ls replacement with icons + git status|on
-ripgrep|ripgrep|rg — ultra-fast grep|on
-fd|fd|Intuitive find replacement|on
-zoxide|zoxide|z — smarter cd with memory|on
-atuin|atuin|Shell history UI (Ctrl-R)|off
-starship|starship|Cross-shell prompt with git info|on
-delta|delta|Side-by-side git diff pager|on
-glow|glow|Markdown renderer for terminal|on
-lazygit|lazygit|Terminal UI for git|off
-yazi|yazi|Terminal file manager|off
-tealdeer|tealdeer|tldr — simplified man pages|off
-dust|dust|du replacement (visual tree)|off
-direnv|direnv|Per-directory env variables|off
-zellij|zellij|Terminal multiplexer (tmux alternative)|off
+zsh-syntax-highlighting|zsh-syntax-highlighting|Syntax highlighting for zsh|on|~/.local/share/zsh/plugins/zsh-syntax-highlighting
+zsh-autosuggestions|zsh-autosuggestions|Fish-like autosuggestions|on|~/.local/share/zsh/plugins/zsh-autosuggestions
+fzf|fzf|Fuzzy finder (Ctrl-R, Ctrl-T, Alt-C)|on|fzf
+bat|bat|cat with syntax highlighting|on|bat
+eza|eza|ls replacement with icons + git status|on|eza
+ripgrep|ripgrep|rg — ultra-fast grep|on|rg
+fd|fd|Intuitive find replacement|on|fd
+zoxide|zoxide|z — smarter cd with memory|on|zoxide
+atuin|atuin|Shell history UI (Ctrl-R)|off|atuin,~/.atuin/bin/atuin
+starship|starship|Cross-shell prompt with git info|on|starship
+delta|delta|Side-by-side git diff pager|on|delta
+glow|glow|Markdown renderer for terminal|on|glow
+lazygit|lazygit|Terminal UI for git|off|lazygit
+yazi|yazi|Terminal file manager|off|yazi
+tealdeer|tealdeer|tldr — simplified man pages|off|tldr
+dust|dust|du replacement (visual tree)|off|dust
+direnv|direnv|Per-directory env variables|off|direnv
+zellij|zellij|Terminal multiplexer (tmux alternative)|off|zellij
