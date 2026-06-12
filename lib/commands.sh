@@ -222,12 +222,16 @@ cmd_install() {
         echo "==> Added completion to ~/.bashrc"
     fi
 
-    if [[ -f "$HOME/.zshrc" ]]; then
-        if grep -qF "$completion_line" "$HOME/.zshrc" 2>/dev/null; then
-            echo "==> Completion already in ~/.zshrc"
+    # For zsh, write a conf.d fragment so it survives zsh-install regenerating ~/.zshrc
+    local zsh_conf_dir="${XDG_CONFIG_HOME:-$HOME/.config}/zsh/conf.d"
+    local zsh_fragment="$zsh_conf_dir/00-tools-completion.zsh"
+    if [[ -d "$zsh_conf_dir" ]] || [[ -f "$HOME/.zshrc" ]]; then
+        mkdir -p "$zsh_conf_dir"
+        if [[ -f "$zsh_fragment" ]] && grep -qF "$SCRIPT_DIR/completion/tools.bash" "$zsh_fragment" 2>/dev/null; then
+            echo "==> Completion already in $zsh_fragment"
         else
-            printf '\n# linux-tools completion\nautoload bashcompinit && bashcompinit\n%s\n' "$completion_line" >> "$HOME/.zshrc"
-            echo "==> Added completion to ~/.zshrc"
+            printf '# linux-tools completion\nautoload -Uz bashcompinit && bashcompinit\n%s\n' "$completion_line" > "$zsh_fragment"
+            echo "==> Wrote completion to $zsh_fragment"
         fi
     fi
 
