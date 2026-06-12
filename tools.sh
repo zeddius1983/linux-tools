@@ -70,6 +70,7 @@ case "$command_" in
                        && [[ -d "$APPS_DIR/$app/wizard" ]]; then
             setup_tui_theme
             tui_run_wizards "$app" "setup" || exit 0
+            tui_confirm_wizards "$app" || exit 0
             tui_apply_wizards "$app" "setup"
         fi
         ;;
