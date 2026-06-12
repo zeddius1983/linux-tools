@@ -95,6 +95,86 @@ _wizard_run_page() {
     _WIZARD_SELECTIONS["$pagename"]="$(tr -d '"' <<< "$selected")"
 }
 
+tui_confirm_wizards() {
+    local app="$1"
+    local wizard_dir="$APPS_DIR/$app/wizard"
+    [[ -d "$wizard_dir" ]] || return 0
+
+    local page
+    local -a to_install=() to_remove=()
+    local any_packages=0
+
+    for page in "$wizard_dir"/[0-9][0-9]-*.packages; do
+        [[ -f "$page" ]] || continue
+        any_packages=1
+        local fname="${page##*/}"
+        local pagename="${fname%.*}"
+        local selected_str="${_WIZARD_SELECTIONS[$pagename]:-}"
+        local -a selected_arr=()
+        [[ -n "$selected_str" ]] && read -ra selected_arr <<< "$selected_str"
+
+        local name _payload desc _default detect
+        while IFS='|' read -r name _payload desc _default detect; do
+            name="${name%$'\r'}"; desc="${desc%$'\r'}"; detect="${detect%$'\r'}"
+            [[ -z "$name" || "$name" == \#* ]] && continue
+
+            local installed=0
+            if [[ -n "$detect" ]]; then
+                local -a dpaths=()
+                IFS=',' read -ra dpaths <<< "$detect"
+                local dp
+                for dp in "${dpaths[@]}"; do
+                    if [[ "$dp" == "~/"* ]]; then
+                        dp="${HOME}/${dp:2}"
+                    else
+                        dp="${HOME}/.local/bin/${dp}"
+                    fi
+                    [[ -e "$dp" ]] && { installed=1; break; }
+                done
+            fi
+
+            local is_selected=0
+            local s
+            for s in "${selected_arr[@]+"${selected_arr[@]}"}"; do
+                [[ "$s" == "$name" ]] && is_selected=1 && break
+            done
+
+            if [[ $is_selected -eq 1 && $installed -eq 0 ]]; then
+                to_install+=("$name — $desc")
+            elif [[ $is_selected -eq 0 && $installed -eq 1 ]]; then
+                to_remove+=("$name — $desc")
+            fi
+        done < <(tail -n +4 "$page")
+    done
+
+    [[ $any_packages -eq 0 ]] && return 0
+    [[ ${#to_install[@]} -eq 0 && ${#to_remove[@]} -eq 0 ]] && return 0
+
+    local msg=""
+    if [[ ${#to_install[@]} -gt 0 ]]; then
+        msg+="Installing:\n"
+        local item
+        for item in "${to_install[@]}"; do msg+="  + $item\n"; done
+    fi
+    if [[ ${#to_remove[@]} -gt 0 ]]; then
+        [[ -n "$msg" ]] && msg+="\n"
+        msg+="Removing:\n"
+        local item
+        for item in "${to_remove[@]}"; do msg+="  - $item\n"; done
+    fi
+
+    local total=$(( ${#to_install[@]} + ${#to_remove[@]} ))
+    local height=$(( total + 10 ))
+    [[ ${#to_install[@]} -gt 0 ]] && height=$(( height + 1 ))
+    [[ ${#to_remove[@]} -gt 0 ]] && height=$(( height + 1 ))
+    [[ $height -lt 12 ]] && height=12
+    [[ $height -gt 24 ]] && height=24
+
+    whiptail --title "linux-tools — $app: confirm changes" \
+        --yesno "$(printf '%b' "$msg")\nProceed?" \
+        "$height" 72 || return 1
+}
+
 tui_apply_wizards() {
     local app="$1" action="$2"
     # Guard against _WIZARD_SELECTIONS being unset (e.g. tui_run_wizards not called).
