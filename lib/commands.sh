@@ -204,6 +204,13 @@ cmd_setup() {
     echo "Done. '$app' is ready. Log out and back in if it doesn't appear in your app menu."
     local hint="$APPS_DIR/$app/post-install"
     [[ -f "$hint" ]] && echo "" && cat "$hint"
+    local readme="$APPS_DIR/$app/README.md"
+    if [[ -f "$readme" ]]; then
+        echo ""
+        echo "==> README for '$app':"
+        echo ""
+        if command -v glow &>/dev/null; then glow "$readme"; else cat "$readme"; fi
+    fi
 }
 
 cmd_install() {
