@@ -49,6 +49,9 @@ COPY --from=build /stage/bin/ /opt/llama-cpp/
 COPY --from=build /stage/lib/ /opt/llama-cpp/
 COPY --from=build /stage/gguf-py/ /opt/llama-cpp/gguf-py/
 
+# Register /opt/llama-cpp so ld.so finds libllama-*-impl.so and other build-time shared libs
+RUN echo /opt/llama-cpp > /etc/ld.so.conf.d/llama-cpp.conf && ldconfig
+
 # Minimal Python dep for convert_hf_to_gguf.py (--convert / -c)
 RUN pip install --break-system-packages -e /opt/llama-cpp/gguf-py
 
