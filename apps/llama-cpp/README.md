@@ -14,12 +14,13 @@ Build time: ~10–20 minutes (ROCm/HIP compilation for all GPU architectures).
 
 ## Commands
 
-Two commands are exported to the host:
+Three commands are exported to the host:
 
 | Command | Purpose |
 |---|---|
 | `llama` | Unified dispatcher — routes to the right binary based on the first flag |
-| `llama-serve` | Convenience server — starts HTTP API on port 8080 with ROCm env vars pre-set |
+| `llama-cli` | Direct access to the llama-cli inference binary |
+| `llama-server` | Direct access to the llama-server HTTP API binary |
 
 ### `llama` dispatcher
 
@@ -49,10 +50,12 @@ Start with the dispatcher:
 llama -s -m ~/models/model.gguf --port 8080 --ctx-size 4096
 ```
 
-Or use the convenience wrapper (port 8080, `HSA_ENABLE_SDMA=0` pre-set):
+Or use the direct binary (full flag control):
 
 ```bash
-llama-serve -m ~/models/model.gguf --ctx-size 4096
+llama-server -m ~/models/model.gguf --host 0.0.0.0 --port 8080 --ctx-size 4096
+# On Strix Halo (gfx1151), set HSA_ENABLE_SDMA=0 if you see hangs:
+HSA_ENABLE_SDMA=0 llama-server -m ~/models/model.gguf --host 0.0.0.0 --port 8080
 ```
 
 Query the API (OpenAI-compatible):
@@ -142,6 +145,6 @@ Inside the box, all binaries are at `/opt/llama-cpp/`: `llama-cli`, `llama-serve
 ## GPU / ROCm notes
 
 - Uses `/dev/kfd` and `/dev/dri` for ROCm compute access.
-- `llama-serve` sets `HSA_ENABLE_SDMA=0` (required on Strix Halo / gfx1151).
+- Set `HSA_ENABLE_SDMA=0` if you see hangs on Strix Halo / gfx1151.
 - No MIOpen kernel caching — llama.cpp uses HIP directly without MIOpen.
 - `-ngl <n>` flag controls how many layers to offload to GPU (`-ngl 99` for all layers).
