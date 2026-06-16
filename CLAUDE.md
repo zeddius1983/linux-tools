@@ -66,19 +66,21 @@ Things that went wrong or were surprising during implementation. Anything a futu
 
 ### Adding a new app
 
-Create `apps/<name>/` with three files:
+Create `apps/<name>/` with the files below — `Dockerfile`, `exports`, `description`, and `README.md` are required; the rest are optional:
 
 | File | Purpose |
 |---|---|
 | `Dockerfile` | Container image definition |
 | `exports` | What to expose to the host (see export types below) |
 | `description` | One-line label shown in the interactive TUI (keep it short — the TUI is 72 cols wide; description + app name + status must fit) |
-| `README.md` | **Required.** App-specific usage docs (see below). |
+| `README.md` | **Required.** App-specific usage docs (see below). Cat-ed by `tools setup` at the end of install, so it doubles as the post-install screen. |
 | `create_flags` | Optional. Extra flags passed to the container engine via `distrobox create --additional-flags`. Use for privileged mode, device passthrough, or volume mounts needed at container creation time (e.g. `--privileged -v /usr/src:/usr/src:ro`). |
+| `post-install` | Optional. Short text snippet `cat`-ed by `tools setup` **before** the README — use it for terse "next step" hints (e.g. `corefreq-setup`). Long-form docs belong in `README.md`. |
+| `host-only` | Optional. Marker file (contents ignored). Tells `tools setup` the app installs straight to the host instead of running in a container (see `apps/zsh-box`). |
 
 Optionally add `icon.png` or `icon.svg` — if present, it overrides whatever icon the container has. All export types share the same bundled icon.
 
-**Every new app must include `apps/<name>/README.md`** covering: what the app does, install command, exported commands with usage examples, any persistent storage paths, and relevant notes (GPU setup, env vars, etc.). The main `README.md` app table row should link to it: `[`name`](apps/name/README.md)`.
+**Every new or touched app must include `apps/<name>/README.md`** covering: what the app does, install command, exported commands with usage examples, any persistent storage paths, and relevant notes (GPU setup, env vars, etc.). The main `README.md` app table row should link to it: `[`name`](apps/name/README.md)`. If you change an existing app that lacks a README, add one as part of the same change — `tools setup` displays it at the end of every install, so a missing README means no post-install reference.
 
 `tools.sh` auto-discovers apps by listing `apps/`; no registration needed.
 
@@ -190,7 +192,7 @@ Distrobox mounts the host's `$HOME` inside the container. This means:
 - **Keep `.memory.md` current**: after any change to an app, update its `.memory.md` to reflect what changed and why. Add new pitfalls as they are discovered.
 - **Keep `ROADMAP.md` current**: if a task completes, unblocks, or adds a planned item, update `ROADMAP.md` to reflect the new state.
 - **Keep `README.md` current**: if a new app is added or an existing one changes significantly (new features, renamed exports, different usage), update `README.md`.
-- **Every new app needs `apps/<name>/README.md`**: cover install, exported commands with examples, storage paths, and any GPU/env notes. Link to it from the main `README.md` table: `[`name`](apps/name/README.md)`.
+- **Every new or touched app needs `apps/<name>/README.md`**: cover install, exported commands with examples, storage paths, and any GPU/env notes. Link to it from the main `README.md` table: `[`name`](apps/name/README.md)`. If you're modifying an existing app that doesn't have one, add it in the same change — `tools setup` `cat`s the README at the end of every install (`lib/commands.sh`), so this is the user's primary post-install reference.
 
 ## Branching policy
 
