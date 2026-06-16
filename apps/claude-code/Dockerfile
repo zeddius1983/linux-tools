@@ -18,6 +18,13 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     && apt-get install -y --no-install-recommends gh \
     && rm -rf /var/lib/apt/lists/*
 
+# Install Node.js (LTS) from NodeSource so `npx` is available for launching
+# npx-based MCP servers (e.g. context7) that Claude Code connects to. Ubuntu's
+# own nodejs package lags several major versions, so we use the NodeSource repo.
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install Claude Code via the official native-binary install script.
 # Run with an overridden HOME so the installer's $HOME/.local/bin/claude symlink
 # lands in a build-time directory, then dereference it into /usr/bin/ (a path
