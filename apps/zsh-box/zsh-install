@@ -25,6 +25,13 @@ step()     { echo ""; echo "==> $*"; }
 
 mkdir -p "$BIN_DIR" "$PLUGINS_DIR" "$CONF_DIR" "$COMP_DIR" "$CACHE_DIR" "$STATE_DIR"
 
+# $COMP_DIR is in $fpath; compinit's security audit (compaudit) rejects fpath
+# dirs that are group/other-writable. A umask of 002 (default on Ubuntu's
+# per-user groups) would create it 775, which makes compinit abort with
+# "insecure directories" the moment its cache is invalidated (e.g. another
+# container adds an fpath entry). Force secure perms so the audit always passes.
+chmod g-w,o-w "$COMP_DIR"
+
 # Remove binary and conf fragment for a tool that is no longer selected.
 # cleanup_absent <tool-name> <binary-name> [conf-fragment]
 cleanup_absent() {
