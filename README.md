@@ -68,7 +68,7 @@ distrobox enter <app>-box  # directly via distrobox
 | `lmstudio` | LM Studio | `lmstudio-box` |
 | `telegram` | Telegram Desktop | `telegram-box` |
 | [`unsloth`](apps/unsloth/README.md) | Unsloth LLM fine-tuning (ROCm) | `unsloth-box` |
-| `zsh-box` | Zsh Toolbox (host-only installer) | — |
+| [`zsh-box`](apps/zsh-box/README.md) | Zsh Toolbox (host-only installer) | — |
 
 ## Adding a new app
 
