@@ -58,7 +58,7 @@ distrobox enter <app>-box  # directly via distrobox
 | `amdgpu_top` | AMD GPU monitor | `amdgpu_top-box` |
 | `antigravity` | Antigravity CLI (agy) | `antigravity-box` |
 | `chrome` | Google Chrome browser | `chrome-box` |
-| `claude-code` | Claude Code | `claude-code-box` |
+| [`claude-code`](apps/claude-code/README.md) | Claude Code | `claude-code-box` |
 | `codex-cli` | OpenAI Codex CLI | `codex-cli-box` |
 | `comfyui` | ComfyUI | `comfyui-box` |
 | `copilot-cli` | GitHub Copilot CLI | `copilot-cli-box` |
