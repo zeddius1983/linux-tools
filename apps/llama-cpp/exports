@@ -1,2 +1,3 @@
 bin:llama
-bin:llama-serve
+bin:llama-cli
+bin:llama-server

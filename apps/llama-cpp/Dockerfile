@@ -49,6 +49,9 @@ COPY --from=build /stage/bin/ /opt/llama-cpp/
 COPY --from=build /stage/lib/ /opt/llama-cpp/
 COPY --from=build /stage/gguf-py/ /opt/llama-cpp/gguf-py/
 
+# Register /opt/llama-cpp so ld.so finds libllama-*-impl.so and other build-time shared libs
+RUN echo /opt/llama-cpp > /etc/ld.so.conf.d/llama-cpp.conf && ldconfig
+
 # Minimal Python dep for convert_hf_to_gguf.py (--convert / -c)
 RUN pip install --break-system-packages -e /opt/llama-cpp/gguf-py
 
@@ -56,11 +59,11 @@ RUN pip install --break-system-packages -e /opt/llama-cpp/gguf-py
 RUN printf '#!/usr/bin/env bash\ncd /opt/llama-cpp && exec ./llama-tools "$@"\n' \
     > /usr/bin/llama && chmod +x /usr/bin/llama
 
-# Convenience server wrapper with Strix Halo env vars; binds 0.0.0.0:8080
-RUN printf '#!/usr/bin/env bash\n\
-export HSA_ENABLE_SDMA=0\n\
-echo "llama.cpp server starting on http://localhost:8080"\n\
-exec /opt/llama-cpp/llama-server --host 0.0.0.0 --port 8080 "$@"\n\
-' > /usr/bin/llama-serve && chmod +x /usr/bin/llama-serve
+# Direct binary exports — command -pv requires these to live in /usr/bin/
+RUN printf '#!/usr/bin/env bash\nexec /opt/llama-cpp/llama-cli "$@"\n' \
+    > /usr/bin/llama-cli && chmod +x /usr/bin/llama-cli
+
+RUN printf '#!/usr/bin/env bash\nexec /opt/llama-cpp/llama-server "$@"\n' \
+    > /usr/bin/llama-server && chmod +x /usr/bin/llama-server
 
 CMD ["/bin/bash"]
