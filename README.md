@@ -63,7 +63,7 @@ distrobox enter <app>-box  # directly via distrobox
 | `comfyui` | ComfyUI | `comfyui-box` |
 | `copilot-cli` | GitHub Copilot CLI | `copilot-cli-box` |
 | `corefreq` | CoreFreq CPU monitor | `corefreq-box` |
-| `jetbrains-toolbox` | JetBrains Toolbox | `jetbrains-toolbox-box` |
+| [`jetbrains-toolbox`](apps/jetbrains-toolbox/README.md) | JetBrains Toolbox | `jetbrains-toolbox-box` |
 | [`llama-cpp`](apps/llama-cpp/README.md) | llama.cpp (ROCm) | `llama-cpp-box` |
 | `lmstudio` | LM Studio | `lmstudio-box` |
 | `telegram` | Telegram Desktop | `telegram-box` |

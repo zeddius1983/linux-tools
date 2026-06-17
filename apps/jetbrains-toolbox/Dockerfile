@@ -34,6 +34,10 @@ RUN printf '\n[[ -s "$HOME/.sdkman/bin/sdkman-init.sh" ]] && source "$HOME/.sdkm
     && printf '\n[[ -s "$HOME/.sdkman/bin/sdkman-init.sh" ]] && source "$HOME/.sdkman/bin/sdkman-init.sh"\n' \
     >> /etc/zsh/zshrc
 
+# Make cargo available in login shells (bash + zsh) — installed at runtime to ~/.cargo
+RUN printf '\n[[ -s "$HOME/.cargo/env" ]] && source "$HOME/.cargo/env"\n' >> /etc/bash.bashrc \
+    && printf '\n[[ -s "$HOME/.cargo/env" ]] && source "$HOME/.cargo/env"\n' >> /etc/zsh/zshrc
+
 # Download and install latest JetBrains Toolbox
 RUN TOOLBOX_URL=$(curl -s "https://data.services.jetbrains.com/products/releases?code=TBA&latest=true&type=release" \
     | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['TBA'][0]['downloads']['linux']['link'])") \
@@ -55,6 +59,15 @@ cp "$ICON_SRC" "$PNG_DIR/toolbox-tray-color.png"\n\
 gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null || true\n\
 if [[ ! -f "$HOME/.sdkman/bin/sdkman-init.sh" ]]; then\n\
     curl -s "https://get.sdkman.io" | bash\n\
+fi\n\
+if [[ ! -f "$HOME/.cargo/bin/rustup" ]]; then\n\
+    curl --proto =https --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path --default-toolchain stable\n\
+fi\n\
+if [[ ! -f "$HOME/.cargo/bin/bacon" ]]; then\n\
+    "$HOME/.cargo/bin/cargo" install bacon\n\
+fi\n\
+if [[ ! -f "$HOME/.cargo/bin/just" ]]; then\n\
+    "$HOME/.cargo/bin/cargo" install just\n\
 fi\n\
 exec /opt/jetbrains-toolbox/bin/jetbrains-toolbox "$@"\n' \
     > /usr/bin/jetbrains-toolbox && chmod +x /usr/bin/jetbrains-toolbox
