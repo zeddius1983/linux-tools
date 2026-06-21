@@ -200,6 +200,10 @@ cmd_setup() {
     cmd_build  "$app"
     cmd_create "$app"
     cmd_export "$app"
+}
+
+cmd_setup_finish() {
+    local app="$1"
     echo ""
     echo "Done. '$app' is ready. Log out and back in if it doesn't appear in your app menu."
     local hint="$APPS_DIR/$app/post-install"

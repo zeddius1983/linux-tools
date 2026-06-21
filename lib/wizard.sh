@@ -4,7 +4,7 @@
 #
 # Supported types:
 #   .mcp      → checklist; applies 'claude mcp add --scope user' after action
-#   .packages → checklist; calls '<app>/zsh-install --tools <selections>' after action
+#   .packages → checklist; calls '<app-name-without-box>-install --tools ...'
 #
 # To add a new type: add a handler function _wizard_apply_<type>() and register
 # it in the case statement inside tui_apply_wizards().
@@ -228,10 +228,11 @@ _wizard_apply_packages() {
     local app="$1" page="$2" selected_str="${3:-}"
     local -a selected_arr=()
     [[ -n "$selected_str" ]] && read -ra selected_arr <<< "$selected_str"
-    local box tools_str=""
+    local box tools_str="" installer
     box="$(box_name "$app")"
+    installer="${app%-box}-install"
     for s in "${selected_arr[@]+"${selected_arr[@]}"}"; do tools_str+=" $s"; done
     tools_str="${tools_str# }"
-    echo "==> Installing zsh and selected tools on host..."
-    distrobox enter "$box" -- zsh-install --tools "$tools_str"
+    echo "==> Applying selected packages for '$app'..."
+    distrobox enter "$box" -- "$installer" --tools "$tools_str"
 }

@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+# Install selected development runtimes into Distrobox's shared home.
+# Usage: dev-toolbox-install [--tools "node uv"] [--node-major 22]
+set -euo pipefail
+
+TOOLS=""
+NODE_MAJOR="${DEV_TOOLBOX_NODE_MAJOR:-22}"
+DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/dev-toolbox"
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --tools) TOOLS="${2:-}"; shift 2 ;;
+        --node-major) NODE_MAJOR="${2:-}"; shift 2 ;;
+        *) echo "Unknown option: $1" >&2; exit 1 ;;
+    esac
+done
+
+[[ "$NODE_MAJOR" =~ ^[0-9]+$ ]] || {
+    echo "Invalid Node.js major version: $NODE_MAJOR" >&2
+    exit 1
+}
+
+for tool in $TOOLS; do
+    case "$tool" in
+        node|uv) ;;
+        *) echo "Unknown tool: $tool" >&2; exit 1 ;;
+    esac
+done
+
+has_tool() { [[ " $TOOLS " == *" $1 "* ]]; }
+step() { printf '\n==> %s\n' "$*"; }
+
+mkdir -p "$DATA_DIR"
+
+if ! has_tool node && [[ -d "$DATA_DIR/node" ]]; then
+    step "Removing Node.js"
+    rm -rf "$DATA_DIR/node"
+fi
+
+if ! has_tool uv && [[ -d "$DATA_DIR/uv" ]]; then
+    step "Removing uv"
+    rm -rf "$DATA_DIR/uv"
+fi
+
+if has_tool node; then
+    step "Installing latest Node.js ${NODE_MAJOR}.x"
+    case "$(uname -m)" in
+        x86_64) node_arch="x64" ;;
+        aarch64|arm64) node_arch="arm64" ;;
+        *) echo "Unsupported Node.js architecture: $(uname -m)" >&2; exit 1 ;;
+    esac
+
+    node_version=$(curl -fsSL https://nodejs.org/dist/index.json \
+        | jq -r --arg prefix "v${NODE_MAJOR}." \
+            '[.[] | select(.version | startswith($prefix))][0].version')
+    [[ "$node_version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+        echo "Could not resolve a Node.js ${NODE_MAJOR}.x release" >&2
+        exit 1
+    }
+
+    tmp_dir=$(mktemp -d)
+    trap 'rm -rf "${tmp_dir:-}"' EXIT
+    archive="node-${node_version}-linux-${node_arch}.tar.xz"
+    curl -fsSL "https://nodejs.org/dist/${node_version}/${archive}" \
+        -o "$tmp_dir/$archive"
+    mkdir -p "$tmp_dir/node"
+    tar -xJf "$tmp_dir/$archive" -C "$tmp_dir/node" --strip-components=1
+    rm -rf "$DATA_DIR/node"
+    mv "$tmp_dir/node" "$DATA_DIR/node"
+    rm -rf "$tmp_dir"
+    trap - EXIT
+    echo "   installed $($DATA_DIR/node/bin/node --version)"
+fi
+
+if has_tool uv; then
+    step "Installing latest uv"
+    rm -rf "$DATA_DIR/uv"
+    mkdir -p "$DATA_DIR/uv/bin"
+    curl -LsSf https://astral.sh/uv/install.sh \
+        | env PATH="$DATA_DIR/uv/bin:$PATH" \
+            UV_INSTALL_DIR="$DATA_DIR/uv/bin" UV_NO_MODIFY_PATH=1 sh
+    echo "   installed $($DATA_DIR/uv/bin/uv --version)"
+fi
+
+step "Selected tools are ready: ${TOOLS:-none}"

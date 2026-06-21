@@ -113,4 +113,5 @@ interactive() {
     "cmd_$action" "$selected"
 
     tui_apply_wizards "$selected" "$action"
+    [[ "$action" == "setup" ]] && cmd_setup_finish "$selected"
 }

@@ -19,6 +19,7 @@ Priority order within each section: highest first.
 
 ## Development Tools
 
+- [x] `dev-toolbox` — containerized Node.js, npm/npx, and uv/uvx runtimes
 - [x] `claude-code` — Anthropic Claude Code CLI
 - [x] `codex-cli` — OpenAI Codex CLI
 - [x] `copilot-cli` — GitHub Copilot CLI
