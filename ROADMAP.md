@@ -50,6 +50,6 @@ Priority order within each section: highest first.
 
 ## Shell / Terminal
 
-- [x] `zsh-box` — Zsh shell exported to the host, with optional utilities: fzf, bat, glow, ripgrep, eza, zoxide, fd, delta
+- [x] `shell-toolbox` — Zsh shell exported to the host, with optional utilities: fzf, bat, glow, ripgrep, eza, zoxide, fd, delta
 
 ## Misc / Fun
