@@ -73,6 +73,7 @@ case "$command_" in
             tui_confirm_wizards "$app" || exit 0
             tui_apply_wizards "$app" "setup"
         fi
+        cmd_setup_finish "$app"
         ;;
     build)  cmd_build  "$app" ;;
     create) cmd_create "$app" ;;

@@ -1,0 +1,5 @@
+Install Development Tools
+Select runtimes to install (reselecting updates them):
+setup
+node|node|Node.js runtime with npm and npx|off|~/.local/share/dev-toolbox/node/bin/node
+uv|uv|Python project manager with uvx|off|~/.local/share/dev-toolbox/uv/bin/uv

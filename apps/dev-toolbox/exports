@@ -1,0 +1,7 @@
+# Format: type:name[:Display Name]
+bin:dev-toolbox-install
+bin:node
+bin:npm
+bin:npx
+bin:uv
+bin:uvx
