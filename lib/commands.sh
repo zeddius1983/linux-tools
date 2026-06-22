@@ -195,6 +195,21 @@ cmd_setup() {
         echo "    Binaries → ~/.local/bin   Config → ~/.config/zsh/   Shell → ~/.zshrc"
         echo ""
     fi
+    local renamed_from_file="$APPS_DIR/$app/renamed-from"
+    if [[ -f "$renamed_from_file" ]]; then
+        local previous_app
+        read -r previous_app < "$renamed_from_file"
+        if [[ -n "$previous_app" && "$previous_app" != "$app" ]]; then
+            if box_exists "$previous_app"; then
+                echo "==> Removing renamed Distrobox '$(box_name "$previous_app")'..."
+                distrobox rm --force "$(box_name "$previous_app")"
+            fi
+            if image_exists "$previous_app"; then
+                echo "==> Removing renamed image '$(image_name "$previous_app")'..."
+                $RUNTIME rmi "$(image_name "$previous_app")"
+            fi
+        fi
+    fi
     box_exists   "$app" && distrobox rm --force "$(box_name "$app")"
     image_exists "$app" && $RUNTIME rmi "$(image_name "$app")"
     cmd_build  "$app"
@@ -233,7 +248,7 @@ cmd_install() {
         echo "==> Added completion to ~/.bashrc"
     fi
 
-    # For zsh, write a conf.d fragment so it survives zsh-install regenerating ~/.zshrc
+    # For zsh, write a conf.d fragment so it survives shell-toolbox regenerating ~/.zshrc
     local zsh_conf_dir="${XDG_CONFIG_HOME:-$HOME/.config}/zsh/conf.d"
     local zsh_fragment="$zsh_conf_dir/00-tools-completion.zsh"
     if [[ -d "$zsh_conf_dir" ]] || [[ -f "$HOME/.zshrc" ]]; then

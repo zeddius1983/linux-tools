@@ -76,7 +76,8 @@ Create `apps/<name>/` with the files below — `Dockerfile`, `exports`, `descrip
 | `README.md` | **Required.** App-specific usage docs (see below). Cat-ed by `tools setup` at the end of install, so it doubles as the post-install screen. |
 | `create_flags` | Optional. Extra flags passed to the container engine via `distrobox create --additional-flags`. Use for privileged mode, device passthrough, or volume mounts needed at container creation time (e.g. `--privileged -v /usr/src:/usr/src:ro`). |
 | `post-install` | Optional. Short text snippet `cat`-ed by `tools setup` **before** the README — use it for terse "next step" hints (e.g. `corefreq-setup`). Long-form docs belong in `README.md`. |
-| `host-only` | Optional. Marker file (contents ignored). Tells `tools setup` the app installs straight to the host instead of running in a container (see `apps/zsh-box`). |
+| `host-only` | Optional. Marker file (contents ignored). Tells `tools setup` the app installs straight to the host instead of running in a container (see `apps/shell-toolbox`). |
+| `renamed-from` | Optional. Previous app name. During setup, removes that app's obsolete Distrobox and image before building the renamed app; shared-home data is preserved. |
 
 Optionally add `icon.png` or `icon.svg` — if present, it overrides whatever icon the container has. All export types share the same bundled icon.
 

@@ -1,4 +1,4 @@
 Next steps:
   1. Change your default shell:  chsh -s $(which zsh)
   2. Log out and back in (or open a new terminal).
-  3. To reinstall or update tools, run:  zsh-install --tools "fzf bat eza ..."
+  3. To reinstall or update tools, run:  shell-toolbox-install --tools "fzf bat eza ..."
