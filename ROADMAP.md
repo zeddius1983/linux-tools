@@ -19,11 +19,12 @@ Priority order within each section: highest first.
 
 ## Development Tools
 
-- [x] `dev-toolbox` — containerized Node.js, npm/npx, and uv/uvx runtimes
+- [x] `dev-toolbox` — containerized development runtimes, CLI tools, and language servers
 - [x] `claude-code` — Anthropic Claude Code CLI
 - [x] `codex-cli` — OpenAI Codex CLI
 - [x] `copilot-cli` — GitHub Copilot CLI
 - [x] `antigravity` — Google Antigravity AI CLI (agy)
+- [x] `dev-toolbox` SDKMAN/Java support — project JDK management moved out of `jetbrains-toolbox`
 - [ ] `opencode` — AI coding agent CLI (https://opencode.ai/docs/ru)
 - [ ] `cursor` — AI-powered code editor (Electron)
 - [ ] `windsurf` — Codeium Windsurf editor

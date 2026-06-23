@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Install selected development runtimes into Distrobox's shared home.
-# Usage: dev-toolbox-install [--tools "node uv"] [--node-major 22]
+# Usage: dev-toolbox-install [--tools "node uv firecrawl rust sdkman rust-lsp java-lsp kotlin-lsp"] [--node-major 22]
 set -euo pipefail
 
 TOOLS=""
@@ -22,13 +22,22 @@ done
 
 for tool in $TOOLS; do
     case "$tool" in
-        node|uv) ;;
+        node|uv|firecrawl|rust|sdkman|rust-lsp|java-lsp|kotlin-lsp) ;;
         *) echo "Unknown tool: $tool" >&2; exit 1 ;;
     esac
 done
 
 has_tool() { [[ " $TOOLS " == *" $1 "* ]]; }
 step() { printf '\n==> %s\n' "$*"; }
+
+# Firecrawl is distributed through npm and needs the managed Node.js runtime.
+if has_tool firecrawl && ! has_tool node; then
+    TOOLS="${TOOLS:+$TOOLS }node"
+fi
+
+if has_tool rust-lsp && ! has_tool rust; then
+    TOOLS="${TOOLS:+$TOOLS }rust"
+fi
 
 mkdir -p "$DATA_DIR"
 
@@ -40,6 +49,21 @@ fi
 if ! has_tool uv && [[ -d "$DATA_DIR/uv" ]]; then
     step "Removing uv"
     rm -rf "$DATA_DIR/uv"
+fi
+
+if ! has_tool firecrawl && [[ -d "$DATA_DIR/firecrawl" ]]; then
+    step "Removing Firecrawl CLI"
+    rm -rf "$DATA_DIR/firecrawl"
+fi
+
+if ! has_tool java-lsp && [[ -d "$DATA_DIR/jdtls" ]]; then
+    step "Removing Eclipse JDTLS"
+    rm -rf "$DATA_DIR/jdtls"
+fi
+
+if ! has_tool kotlin-lsp && [[ -d "$DATA_DIR/kotlin-lsp" ]]; then
+    step "Removing Kotlin LSP"
+    rm -rf "$DATA_DIR/kotlin-lsp"
 fi
 
 if has_tool node; then
@@ -80,6 +104,128 @@ if has_tool uv; then
         | env PATH="$DATA_DIR/uv/bin:$PATH" \
             UV_INSTALL_DIR="$DATA_DIR/uv/bin" UV_NO_MODIFY_PATH=1 sh
     echo "   installed $($DATA_DIR/uv/bin/uv --version)"
+fi
+
+if has_tool firecrawl; then
+    step "Installing latest Firecrawl CLI"
+    tmp_dir=$(mktemp -d)
+    trap 'rm -rf "${tmp_dir:-}"' EXIT
+    env PATH="$DATA_DIR/node/bin:$PATH" \
+        npm install --global --prefix "$tmp_dir/firecrawl" firecrawl-cli@latest
+    rm -rf "$DATA_DIR/firecrawl"
+    mv "$tmp_dir/firecrawl" "$DATA_DIR/firecrawl"
+    rm -rf "$tmp_dir"
+    trap - EXIT
+    echo "   installed $(env PATH="$DATA_DIR/node/bin:$PATH" \
+        "$DATA_DIR/firecrawl/bin/firecrawl" --version)"
+fi
+
+if has_tool rust; then
+    step "Installing Rust stable toolchain"
+    export CARGO_HOME="$HOME/.cargo"
+    export RUSTUP_HOME="$HOME/.rustup"
+    export PATH="$CARGO_HOME/bin:$PATH"
+    mkdir -p "$CARGO_HOME" "$RUSTUP_HOME"
+
+    if [[ ! -x "$CARGO_HOME/bin/rustup" ]]; then
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+            | sh -s -- -y --no-modify-path --default-toolchain stable
+    fi
+    rustup default stable
+    if has_tool rust-lsp; then
+        rustup component add rust-analyzer
+    fi
+    if [[ ! -x "$CARGO_HOME/bin/bacon" ]]; then
+        cargo install bacon --locked
+    fi
+
+    echo "   installed $(rustc --version)"
+    echo "   installed $(cargo --version)"
+    echo "   installed $(bacon --version)"
+    if has_tool rust-lsp; then
+        echo "   installed $(rust-analyzer --version)"
+    fi
+fi
+
+if has_tool sdkman; then
+    step "Installing SDKMAN"
+    export SDKMAN_DIR="$HOME/.sdkman"
+    if [[ ! -f "$SDKMAN_DIR/bin/sdkman-init.sh" ]]; then
+        tmp_home=$(mktemp -d)
+        trap 'rm -rf "${tmp_home:-}"' EXIT
+        curl -fsSL "https://get.sdkman.io" \
+            | env HOME="$tmp_home" SDKMAN_DIR="$SDKMAN_DIR" bash
+        rm -rf "$tmp_home"
+        trap - EXIT
+    else
+        set +u
+        # shellcheck disable=SC1091
+        source "$SDKMAN_DIR/bin/sdkman-init.sh"
+        sdk selfupdate force || true
+        set -u
+    fi
+    echo "   installed SDKMAN at $SDKMAN_DIR"
+fi
+
+if has_tool java-lsp; then
+    step "Installing latest Eclipse JDTLS snapshot"
+    tmp_dir=$(mktemp -d)
+    trap 'rm -rf "${tmp_dir:-}"' EXIT
+    jdtls_archive="$(curl -fsSL https://download.eclipse.org/jdtls/snapshots/latest.txt)"
+    [[ "$jdtls_archive" == jdt-language-server-*.tar.gz ]] || {
+        echo "Could not resolve latest JDTLS snapshot" >&2
+        exit 1
+    }
+    curl -fsSL "https://download.eclipse.org/jdtls/snapshots/${jdtls_archive}" \
+        -o "$tmp_dir/jdtls.tar.gz"
+    mkdir -p "$tmp_dir/jdtls"
+    tar -xzf "$tmp_dir/jdtls.tar.gz" -C "$tmp_dir/jdtls"
+    chmod +x "$tmp_dir/jdtls/bin/jdtls"
+    rm -rf "$DATA_DIR/jdtls"
+    mv "$tmp_dir/jdtls" "$DATA_DIR/jdtls"
+    rm -rf "$tmp_dir"
+    trap - EXIT
+    echo "   installed Eclipse JDTLS"
+fi
+
+if has_tool kotlin-lsp; then
+    step "Installing latest Kotlin LSP"
+    case "$(uname -m)" in
+        x86_64) kotlin_lsp_suffix="" ;;
+        aarch64|arm64) kotlin_lsp_suffix="-aarch64" ;;
+        *) echo "Unsupported Kotlin LSP architecture: $(uname -m)" >&2; exit 1 ;;
+    esac
+
+    tmp_dir=$(mktemp -d)
+    trap 'rm -rf "${tmp_dir:-}"' EXIT
+    kotlin_release_tag=$(curl -fsSL https://api.github.com/repos/Kotlin/kotlin-lsp/releases/latest \
+        | jq -r '.tag_name // ""')
+    kotlin_version=$(printf '%s\n' "$kotlin_release_tag" \
+        | sed -E 's|.*/||; s/^v//')
+    [[ "$kotlin_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+        echo "Could not resolve latest Kotlin LSP version" >&2
+        exit 1
+    }
+    kotlin_url="https://download-cdn.jetbrains.com/language-server/kotlin-server/${kotlin_version}/kotlin-server-${kotlin_version}${kotlin_lsp_suffix}.tar.gz"
+    [[ "$kotlin_url" == https://download-cdn.jetbrains.com/*.tar.gz ]] || {
+        echo "Could not resolve latest Kotlin LSP archive" >&2
+        exit 1
+    }
+    curl -fsSL "$kotlin_url" -o "$tmp_dir/kotlin-lsp.tar.gz"
+    mkdir -p "$tmp_dir/extract"
+    tar -xzf "$tmp_dir/kotlin-lsp.tar.gz" -C "$tmp_dir/extract"
+    kotlin_bin=$(find "$tmp_dir/extract" -path '*/bin/intellij-server' -type f | head -n1 || true)
+    [[ -n "$kotlin_bin" ]] || {
+        echo "Could not find Kotlin LSP launcher in archive" >&2
+        exit 1
+    }
+    kotlin_root="$(dirname "$(dirname "$kotlin_bin")")"
+    chmod +x "$kotlin_bin"
+    rm -rf "$DATA_DIR/kotlin-lsp"
+    mv "$kotlin_root" "$DATA_DIR/kotlin-lsp"
+    rm -rf "$tmp_dir"
+    trap - EXIT
+    echo "   installed Kotlin LSP"
 fi
 
 step "Selected tools are ready: ${TOOLS:-none}"

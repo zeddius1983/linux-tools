@@ -5,3 +5,12 @@ bin:npm
 bin:npx
 bin:uv
 bin:uvx
+bin:firecrawl
+bin:rustup
+bin:rustc
+bin:cargo
+bin:bacon
+bin:rust-analyzer
+bin:sdk
+bin:jdtls
+bin:kotlin-lsp
