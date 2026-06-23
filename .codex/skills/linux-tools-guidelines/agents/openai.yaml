@@ -1,0 +1,4 @@
+interface:
+  display_name: "Linux Tools Guidelines"
+  short_description: "Use this repo's CLAUDE.md project rules"
+  default_prompt: "Use $linux-tools-guidelines before changing linux-tools."

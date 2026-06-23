@@ -3,6 +3,7 @@ set -euo pipefail
 
 command_name="$(basename "$0")"
 data_dir="${XDG_DATA_HOME:-$HOME/.local/share}/dev-toolbox"
+needs_java=0
 
 case "$command_name" in
     node|npm|npx)
@@ -13,16 +14,79 @@ case "$command_name" in
         tool="uv"
         executable="$data_dir/uv/bin/$command_name"
         ;;
+    firecrawl)
+        tool="firecrawl"
+        executable="$data_dir/firecrawl/bin/firecrawl"
+        export PATH="$data_dir/node/bin:$PATH"
+        ;;
+    rustup|rustc|cargo|bacon)
+        tool="rust"
+        export CARGO_HOME="$HOME/.cargo"
+        export RUSTUP_HOME="$HOME/.rustup"
+        export PATH="$CARGO_HOME/bin:$PATH"
+        executable="$CARGO_HOME/bin/$command_name"
+        ;;
+    rust-analyzer)
+        tool="rust-lsp"
+        export CARGO_HOME="$HOME/.cargo"
+        export RUSTUP_HOME="$HOME/.rustup"
+        export PATH="$CARGO_HOME/bin:$PATH"
+        executable="$CARGO_HOME/bin/rust-analyzer"
+        ;;
+    jdtls)
+        tool="java-lsp"
+        executable="$data_dir/jdtls/bin/jdtls"
+        needs_java=1
+        ;;
+    kotlin-lsp)
+        tool="kotlin-lsp"
+        executable="$data_dir/kotlin-lsp/bin/intellij-server"
+        needs_java=1
+        ;;
+    sdk)
+        tool="sdkman"
+        export SDKMAN_DIR="$HOME/.sdkman"
+        executable="$SDKMAN_DIR/bin/sdkman-init.sh"
+        ;;
     *)
         echo "Unknown dev-toolbox command: $command_name" >&2
         exit 2
         ;;
 esac
 
+if [[ "$command_name" == "sdk" ]]; then
+    if [[ ! -r "$executable" ]]; then
+        echo "$tool is not installed in dev-toolbox." >&2
+        echo "Run 'tools setup dev-toolbox' and select $tool." >&2
+        exit 127
+    fi
+    set +u
+    # shellcheck disable=SC1091
+    source "$SDKMAN_DIR/bin/sdkman-init.sh"
+    sdk "$@"
+    status=$?
+    set -u
+    exit "$status"
+fi
+
 if [[ ! -x "$executable" ]]; then
     echo "$tool is not installed in dev-toolbox." >&2
     echo "Run 'tools setup dev-toolbox' and select $tool." >&2
     exit 127
+fi
+
+if [[ "$needs_java" -eq 1 ]]; then
+    if [[ -z "${JAVA_HOME:-}" && -x "$HOME/.sdkman/candidates/java/current/bin/java" ]]; then
+        export JAVA_HOME="$HOME/.sdkman/candidates/java/current"
+    fi
+    if [[ -n "${JAVA_HOME:-}" ]]; then
+        export PATH="$JAVA_HOME/bin:$PATH"
+    fi
+    if ! command -v java >/dev/null 2>&1; then
+        echo "$tool needs Java on PATH." >&2
+        echo "Install one with 'sdk install java 25-tem' or set JAVA_HOME." >&2
+        exit 127
+    fi
 fi
 
 exec "$executable" "$@"

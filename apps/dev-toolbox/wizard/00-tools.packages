@@ -1,5 +1,11 @@
 Install Development Tools
-Select runtimes to install (reselecting updates them):
+Select tools to install (reselecting updates them):
 setup
 node|node|Node.js runtime with npm and npx|off|~/.local/share/dev-toolbox/node/bin/node
 uv|uv|Python project manager with uvx|off|~/.local/share/dev-toolbox/uv/bin/uv
+firecrawl|firecrawl|Web scraping CLI|off|~/.local/share/dev-toolbox/firecrawl/bin/firecrawl
+rust|rust|Rust toolchain with cargo and bacon|off|~/.cargo/bin/rustup
+sdkman|sdkman|JVM toolchains through SDKMAN|off|~/.sdkman/bin/sdkman-init.sh
+rust-lsp|rust-lsp|Rust Analyzer language server|off|~/.cargo/bin/rust-analyzer
+java-lsp|java-lsp|Eclipse JDTLS Java language server|off|~/.local/share/dev-toolbox/jdtls/bin/jdtls
+kotlin-lsp|kotlin-lsp|Official Kotlin language server|off|~/.local/share/dev-toolbox/kotlin-lsp/bin/intellij-server
