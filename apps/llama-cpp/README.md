@@ -1,8 +1,8 @@
 # llama-cpp
 
-llama.cpp LLM inference engine with AMD ROCm GPU acceleration, packaged as a Distrobox container.
+llama.cpp LLM inference engine with AMD GPU acceleration via both ROCm and Vulkan backends, packaged as a Distrobox container.
 
-Compiled from source against ROCm 7.2.4. Supports GGUF models for chat, HTTP API serving, quantization, and HuggingFace model conversion — all via a single `llama` dispatcher command.
+Compiled from source against ROCm 7.2.4 with the Vulkan backend built alongside (`GGML_BACKEND_DL` dynamic backend loading). Supports GGUF models for chat, HTTP API serving, quantization, and HuggingFace model conversion — all via a single `llama` dispatcher command. Pick the GPU backend per run with `--device`.
 
 ## Install
 
@@ -34,6 +34,25 @@ llama --perplexity / -p Measure model perplexity
 ```
 
 ## Usage
+
+### Choosing a GPU backend (ROCm vs Vulkan)
+
+Both backends are compiled in as dynamically loaded plugins, so the same physical GPU shows up twice — once per backend:
+
+```bash
+llama-server --list-devices
+# ROCm0:   AMD Radeon Graphics ...
+# Vulkan0: AMD Radeon Graphics (RADV ...) ...
+```
+
+Select one explicitly with `--device` (works on `llama-cli` and `llama-server`):
+
+```bash
+llama-server -m ~/models/model.gguf --device ROCm0 -ngl 99
+llama-server -m ~/models/model.gguf --device Vulkan0 -ngl 99
+```
+
+Without `--device`, llama.cpp picks by backend priority (ROCm first). On Strix Halo (gfx1151) Vulkan often matches or beats ROCm depending on model and quantization — benchmark both with `llama -b -m model.gguf --device <dev>`.
 
 ### Chat
 
@@ -142,9 +161,10 @@ distrobox enter llama-cpp-box  # directly
 
 Inside the box, all binaries are at `/opt/llama-cpp/`: `llama-cli`, `llama-server`, `llama-quantize`, `llama-bench`, `llama-gguf-split`, and others.
 
-## GPU / ROCm notes
+## GPU notes
 
-- Uses `/dev/kfd` and `/dev/dri` for ROCm compute access.
-- Set `HSA_ENABLE_SDMA=0` if you see hangs on Strix Halo / gfx1151.
+- Uses `/dev/kfd` and `/dev/dri` for ROCm compute access; Vulkan needs only `/dev/dri` (Mesa RADV inside the container).
+- Set `HSA_ENABLE_SDMA=0` if you see hangs on Strix Halo / gfx1151 (ROCm backend only).
 - No MIOpen kernel caching — llama.cpp uses HIP directly without MIOpen.
 - `-ngl <n>` flag controls how many layers to offload to GPU (`-ngl 99` for all layers).
+- `vulkaninfo --summary` (inside the box) shows the Vulkan device if the Vulkan backend isn't listed by `--list-devices`.

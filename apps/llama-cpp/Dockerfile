@@ -1,4 +1,4 @@
-### Build stage — compile llama.cpp with ROCm/HIP
+### Build stage — compile llama.cpp with ROCm/HIP and Vulkan backends
 FROM docker.io/rocm/dev-ubuntu-24.04:7.2.4-complete AS build
 
 # Fat build targeting all supported AMD GPU architectures
@@ -8,6 +8,7 @@ ENV AMDGPU_TARGETS=${ROCM_DOCKER_ARCH}
 RUN apt-get update \
     && apt-get install -y \
        build-essential cmake git libssl-dev curl libgomp1 \
+       libvulkan-dev glslc spirv-headers \
     && rm -rf /var/lib/apt/lists/*
 
 RUN git clone --depth 1 https://github.com/ggml-org/llama.cpp /src
@@ -18,6 +19,7 @@ RUN HIPCXX="$(hipconfig -l)/clang" HIP_PATH="$(hipconfig -R)" \
     cmake -S . -B build \
         -DGGML_HIP=ON \
         -DGGML_HIP_ROCWMMA_FATTN=ON \
+        -DGGML_VULKAN=ON \
         -DAMDGPU_TARGETS="${ROCM_DOCKER_ARCH}" \
         -DGGML_BACKEND_DL=ON \
         -DGGML_CPU_ALL_VARIANTS=ON \
@@ -38,6 +40,7 @@ FROM docker.io/rocm/dev-ubuntu-24.04:7.2.4-complete
 
 RUN apt-get update \
     && apt-get install -y libgomp1 curl git python3 python3-pip \
+       libvulkan1 mesa-vulkan-drivers vulkan-tools \
     && apt-get autoremove -y \
     && apt-get clean \
     && rm -rf /tmp/* /var/tmp/* \
