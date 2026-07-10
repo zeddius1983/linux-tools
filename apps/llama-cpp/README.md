@@ -2,13 +2,15 @@
 
 llama.cpp LLM inference engine with AMD GPU acceleration via both ROCm and Vulkan backends, packaged as a Distrobox container.
 
-Compiled from source against ROCm 7.2.4 with the Vulkan backend built alongside (`GGML_BACKEND_DL` dynamic backend loading). Supports GGUF models for chat, HTTP API serving, quantization, and HuggingFace model conversion — all via a single `llama` dispatcher command. Pick the GPU backend per run with `--device`.
+Compiled from source against ROCm 7.2.4 with the Vulkan backend built alongside (`GGML_BACKEND_DL` dynamic backend loading). Each install builds the latest upstream [release tag](https://github.com/ggml-org/llama.cpp/releases) (resolved at build time; `llama-server --version` reports it). Supports GGUF models for chat, HTTP API serving, quantization, and HuggingFace model conversion — all via a single `llama` dispatcher command. Pick the GPU backend per run with `--device`.
 
 ## Install
 
 ```bash
 tools setup llama-cpp
 ```
+
+When run interactively, a wizard screen lets you pick which upstream release to build from the 10 latest tags (default: latest). Non-interactive installs build the latest release automatically.
 
 Build time: ~10–20 minutes (ROCm/HIP compilation for all GPU architectures).
 

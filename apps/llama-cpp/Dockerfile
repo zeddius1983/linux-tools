@@ -11,12 +11,28 @@ RUN apt-get update \
        libvulkan-dev glslc spirv-headers \
     && rm -rf /var/lib/apt/lists/*
 
-RUN git clone --depth 1 https://github.com/ggml-org/llama.cpp /src
+# Release tag (b####) to build. "latest" resolves the newest tag at build
+# time; the interactive setup wizard offers the last 10 releases (LLAMA_REF).
+# CACHE_BUST is passed fresh by tools.sh on every build, forcing this layer to
+# re-run instead of reusing a stale cached clone; the apt layers above stay
+# cached.
+ARG CACHE_BUST=0
+ARG LLAMA_REF=latest
+RUN set -e; \
+    ref="$LLAMA_REF"; \
+    if [ "$ref" = "latest" ]; then \
+        ref="b$(git ls-remote --tags --refs https://github.com/ggml-org/llama.cpp 'b*' \
+            | sed 's|.*refs/tags/b||' | grep -E '^[0-9]+$' | sort -n | tail -1)"; \
+    fi; \
+    echo "==> Building llama.cpp release ${ref} (cache-bust: ${CACHE_BUST})"; \
+    git clone --depth 1 --branch "${ref}" https://github.com/ggml-org/llama.cpp /src; \
+    echo "${ref#b}" > /src/.build-number
 
 WORKDIR /src
 
 RUN HIPCXX="$(hipconfig -l)/clang" HIP_PATH="$(hipconfig -R)" \
     cmake -S . -B build \
+        -DLLAMA_BUILD_NUMBER="$(cat .build-number)" \
         -DGGML_HIP=ON \
         -DGGML_HIP_ROCWMMA_FATTN=ON \
         -DGGML_VULKAN=ON \

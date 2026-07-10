@@ -64,13 +64,19 @@ app="$2"
 
 case "$command_" in
     setup)
-        cmd_setup "$app"
-        # Run wizard post-setup when interactive and the app has wizard pages.
+        # Collect wizard selections up front (interactive only) so .buildarg
+        # pages can influence the image build; other page types are applied
+        # after setup as before.
+        wizard_active=0
         if [[ -t 0 ]] && command -v whiptail &>/dev/null \
                        && [[ -d "$APPS_DIR/$app/wizard" ]]; then
+            wizard_active=1
             setup_tui_theme
             tui_run_wizards "$app" "setup" || exit 0
             tui_confirm_wizards "$app" || exit 0
+        fi
+        cmd_setup "$app"
+        if [[ $wizard_active -eq 1 ]]; then
             tui_apply_wizards "$app" "setup"
         fi
         cmd_setup_finish "$app"
