@@ -273,12 +273,13 @@ cmd_install() {
 }
 
 cmd_list() {
-    printf "%-20s %-30s %-12s %s\n" "APP" "DESCRIPTION" "IMAGE" "BOX"
-    printf "%-20s %-30s %-12s %s\n" "───────────────────" "─────────────────────────────" "───────────" "──────────"
+    printf "%-20s %-30s %-12s %-12s %s\n" "APP" "DESCRIPTION" "QUALIFIER" "IMAGE" "BOX"
+    printf "%-20s %-30s %-12s %-12s %s\n" "───────────────────" "─────────────────────────────" "───────────" "───────────" "──────────"
     local app
     while IFS= read -r app; do
-        local desc img_status box_status
+        local desc qual img_status box_status
         desc="$(app_description "$app")"
+        qual="$(app_qualifier "$app")"
         if [[ -f "$APPS_DIR/$app/host-only" ]]; then
             img_status="host-only"
             box_status="host-only"
@@ -286,6 +287,6 @@ cmd_list() {
             image_exists "$app" && img_status="built" || img_status="--"
             box_exists   "$app" && box_status="running" || box_status="--"
         fi
-        printf "%-20s %-30s %-12s %s\n" "$app" "$desc" "$img_status" "$box_status"
+        printf "%-20s %-30s %-12s %-12s %s\n" "$app" "$desc" "$qual" "$img_status" "$box_status"
     done < <(list_apps)
 }

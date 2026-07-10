@@ -32,31 +32,26 @@ _fw() { local s=$1 w=$2 b c; (( ${#s} > w )) && s="${s:0:$((w-1))}…"; b=$(prin
 
 app_status_detail() {
     local app="$1"
-    local desc
+    local desc qual
     desc="$(app_description "$app")"
+    qual="$(app_qualifier "$app")"
     if [[ -f "$APPS_DIR/$app/host-only" ]]; then
         printf '%s  |  %s  |  %s  |  %s' \
             "$(_fw "$desc" 22)" \
-            "$(_fw " -----" 7)" \
+            "$(_fw "$qual" 11)" \
             "$(_fw " ------------------------------" 32)" \
             "host"
         return
     fi
-    local img_id img_ref box_str
-    local img_name
-    img_name="$(image_name "$app")"
+    local img_ref box_str
     if image_exists "$app"; then
-        img_id="$($RUNTIME image inspect --format '{{.Id}}' "$img_name" 2>/dev/null \
-            | sed 's/^sha256://' | cut -c1-7)"
-        [[ -z "$img_id" ]] && img_id="?"
-        img_ref="$img_name"
+        img_ref="$(image_name "$app")"
     else
-        img_id="—"
         img_ref="—"
     fi
     box_exists "$app" && box_str="$(box_name "$app")" || box_str="—"
     printf '%s  |  %s  |  %s  |  %s' \
-        "$(_fw "$desc" 22)" "$(_fw "$img_id" 7)" "$(_fw "$img_ref" 32)" "$box_str"
+        "$(_fw "$desc" 22)" "$(_fw "$qual" 11)" "$(_fw "$img_ref" 32)" "$box_str"
 }
 
 interactive() {
