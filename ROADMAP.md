@@ -14,7 +14,7 @@ Priority order within each section: highest first.
 - [ ] `aider` — AI pair programmer CLI
 - [ ] `sgpt` — ShellGPT: AI shell assistant; OpenAI + Ollama backends (https://github.com/TheR1D/shell_gpt)
 - [x] `unsloth` — fast LLM fine-tuning (https://unsloth.ai/docs)
-- [x] `llama-cpp` — llama.cpp LLM inference engine (ROCm + Vulkan backends, `--device` selection, multi-stage build, `llama` dispatcher + `llama-serve`)
+- [x] `llama-cpp-rocm` — llama.cpp LLM inference engine (ROCm + Vulkan backends, `--device` selection, multi-stage build, `llama` dispatcher + `llama-serve`)
 - [ ] `openclaw` — personal AI assistant CLI + gateway; routes across AI providers, persistent memory, messaging integrations (https://openclaw.ai/)
 
 ## Development Tools

@@ -32,14 +32,12 @@ _fw() { local s=$1 w=$2 b c; (( ${#s} > w )) && s="${s:0:$((w-1))}…"; b=$(prin
 
 app_status_detail() {
     local app="$1"
-    local desc qual
+    local desc
     desc="$(app_description "$app")"
-    qual="$(app_qualifier "$app")"
     if [[ -f "$APPS_DIR/$app/host-only" ]]; then
-        printf '%s  |  %s  |  %s  |  %s' \
-            "$(_fw "$desc" 22)" \
-            "$(_fw "$qual" 11)" \
-            "$(_fw " ------------------------------" 32)" \
+        printf '%s  |  %s  |  %s' \
+            "$(_fw "$desc" 26)" \
+            "$(_fw " ------------------------------" 34)" \
             "host"
         return
     fi
@@ -50,8 +48,8 @@ app_status_detail() {
         img_ref="—"
     fi
     box_exists "$app" && box_str="$(box_name "$app")" || box_str="—"
-    printf '%s  |  %s  |  %s  |  %s' \
-        "$(_fw "$desc" 22)" "$(_fw "$qual" 11)" "$(_fw "$img_ref" 32)" "$box_str"
+    printf '%s  |  %s  |  %s' \
+        "$(_fw "$desc" 26)" "$(_fw "$img_ref" 34)" "$box_str"
 }
 
 interactive() {

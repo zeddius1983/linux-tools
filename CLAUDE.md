@@ -72,8 +72,7 @@ Create `apps/<name>/` with the files below — `Dockerfile`, `exports`, `descrip
 |---|---|
 | `Dockerfile` | Container image definition |
 | `exports` | What to expose to the host (see export types below) |
-| `description` | One-line label shown in the interactive TUI (keep it under ~22 chars — that's the TUI description column width) |
-| `qualifier` | Optional. Short tag (e.g. `rocm`, `host`) shown as its own column in the TUI and `tools list` (keep it under ~11 chars) |
+| `description` | One-line label shown in the interactive TUI (keep it under ~26 chars — that's the TUI description column width) |
 | `README.md` | **Required.** App-specific usage docs (see below). Cat-ed by `tools setup` at the end of install, so it doubles as the post-install screen. |
 | `create_flags` | Optional. Extra flags passed to the container engine via `distrobox create --additional-flags`. Use for privileged mode, device passthrough, or volume mounts needed at container creation time (e.g. `--privileged -v /usr/src:/usr/src:ro`). |
 | `post-install` | Optional. Short text snippet `cat`-ed by `tools setup` **before** the README — use it for terse "next step" hints (e.g. `corefreq-setup`). Long-form docs belong in `README.md`. |
@@ -186,7 +185,7 @@ Distrobox mounts the host's `$HOME` inside the container. This means:
 
 ### Interactive TUI
 
-`./tools.sh` with no arguments opens a `whiptail` menu. Each row shows `description | qualifier | image ref | box name` with fixed column widths (22 / 11 / 32) — keep `description` under ~22 chars and `qualifier` under ~11 chars or they get truncated with `…`.
+`./tools.sh` with no arguments opens a `whiptail` menu. Each row shows `description | image ref | box name` with fixed column widths (26 / 34) — keep `description` under ~26 chars or it gets truncated with `…`.
 
 ## Working practices
 

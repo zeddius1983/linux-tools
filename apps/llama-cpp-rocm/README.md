@@ -1,4 +1,4 @@
-# llama-cpp
+# llama-cpp-rocm
 
 llama.cpp LLM inference engine with AMD GPU acceleration via both ROCm and Vulkan backends, packaged as a Distrobox container.
 
@@ -7,7 +7,7 @@ Compiled from source against ROCm 7.2.4 with the Vulkan backend built alongside 
 ## Install
 
 ```bash
-tools setup llama-cpp
+tools setup llama-cpp-rocm
 ```
 
 When run interactively, a wizard screen lets you pick which upstream release to build from the 10 latest tags (default: latest). Non-interactive installs build the latest release automatically.
@@ -16,13 +16,14 @@ Build time: ~10–20 minutes (ROCm/HIP compilation for all GPU architectures).
 
 ## Commands
 
-Three commands are exported to the host:
+Four commands are exported to the host:
 
 | Command | Purpose |
 |---|---|
 | `llama` | Unified dispatcher — routes to the right binary based on the first flag |
 | `llama-cli` | Direct access to the llama-cli inference binary |
 | `llama-server` | Direct access to the llama-server HTTP API binary |
+| `llama-bench` | Direct access to the llama-bench benchmarking binary |
 
 ### `llama` dispatcher
 
@@ -121,7 +122,7 @@ llama -c --outtype f16 ~/models/my-hf-model/
 For full HuggingFace conversion support (safetensors, tokenizer variants), install extra Python deps inside the container first:
 
 ```bash
-distrobox enter llama-cpp-box
+distrobox enter llama-cpp-rocm-box
 pip install --break-system-packages torch transformers sentencepiece protobuf
 exit
 ```
@@ -137,7 +138,11 @@ llama -q ~/models/model-f16.gguf ~/models/model-q4_k_m.gguf q4_k_m
 
 ```bash
 llama -b -m ~/models/model.gguf
-llama -b -m ~/models/model.gguf -p 512 -n 128 -r 5
+llama-bench -m ~/models/model.gguf -p 512 -n 128 -r 5
+
+# Compare GPU backends
+llama-bench -m ~/models/model.gguf --device ROCm0 -ngl 99
+llama-bench -m ~/models/model.gguf --device Vulkan0 -ngl 99
 ```
 
 ## Model storage
@@ -157,8 +162,8 @@ Download GGUF models from [HuggingFace](https://huggingface.co/models?library=gg
 ## Shell access
 
 ```bash
-tools enter llama-cpp       # via tools
-distrobox enter llama-cpp-box  # directly
+tools enter llama-cpp-rocm       # via tools
+distrobox enter llama-cpp-rocm-box  # directly
 ```
 
 Inside the box, all binaries are at `/opt/llama-cpp/`: `llama-cli`, `llama-server`, `llama-quantize`, `llama-bench`, `llama-gguf-split`, and others.

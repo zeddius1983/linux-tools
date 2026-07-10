@@ -85,4 +85,7 @@ RUN printf '#!/usr/bin/env bash\nexec /opt/llama-cpp/llama-cli "$@"\n' \
 RUN printf '#!/usr/bin/env bash\nexec /opt/llama-cpp/llama-server "$@"\n' \
     > /usr/bin/llama-server && chmod +x /usr/bin/llama-server
 
+RUN printf '#!/usr/bin/env bash\nexec /opt/llama-cpp/llama-bench "$@"\n' \
+    > /usr/bin/llama-bench && chmod +x /usr/bin/llama-bench
+
 CMD ["/bin/bash"]

@@ -20,12 +20,6 @@ app_description() {
     [[ -f "$f" ]] && cat "$f" || echo "$1"
 }
 
-# Optional short tag shown as its own TUI/list column (e.g. "rocm", "host").
-app_qualifier() {
-    local f="$APPS_DIR/$1/qualifier"
-    [[ -f "$f" ]] && cat "$f" || echo "-"
-}
-
 list_apps() {
     local app_dir app
     for app_dir in "$APPS_DIR"/*/; do
