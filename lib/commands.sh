@@ -2,7 +2,14 @@ cmd_build() {
     local app="$1"
     [[ -d "$APPS_DIR/$app" ]] || { echo "Error: no app directory at $APPS_DIR/$app" >&2; exit 1; }
     echo "==> Building image for '$app' using $RUNTIME..."
-    $RUNTIME build -t "$(image_name "$app")" "$APPS_DIR/$app"
+    # CACHE_BUST lets Dockerfiles opt out of layer caching from a given step
+    # (e.g. re-resolving an upstream release tag); unused build args are ignored.
+    # .buildarg wizard selections arrive as extra --build-arg pairs.
+    local -a extra_args=()
+    mapfile -t extra_args < <(wizard_build_args "$app")
+    $RUNTIME build --build-arg CACHE_BUST="$(date +%s)" \
+        "${extra_args[@]+"${extra_args[@]}"}" \
+        -t "$(image_name "$app")" "$APPS_DIR/$app"
 }
 
 cmd_create() {

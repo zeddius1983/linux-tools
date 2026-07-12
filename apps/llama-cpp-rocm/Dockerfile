@@ -1,4 +1,4 @@
-### Build stage — compile llama.cpp with ROCm/HIP
+### Build stage — compile llama.cpp with ROCm/HIP and Vulkan backends
 FROM docker.io/rocm/dev-ubuntu-24.04:7.2.4-complete AS build
 
 # Fat build targeting all supported AMD GPU architectures
@@ -8,16 +8,34 @@ ENV AMDGPU_TARGETS=${ROCM_DOCKER_ARCH}
 RUN apt-get update \
     && apt-get install -y \
        build-essential cmake git libssl-dev curl libgomp1 \
+       libvulkan-dev glslc spirv-headers \
     && rm -rf /var/lib/apt/lists/*
 
-RUN git clone --depth 1 https://github.com/ggml-org/llama.cpp /src
+# Release tag (b####) to build. "latest" resolves the newest tag at build
+# time; the interactive setup wizard offers the last 10 releases (LLAMA_REF).
+# CACHE_BUST is passed fresh by tools.sh on every build, forcing this layer to
+# re-run instead of reusing a stale cached clone; the apt layers above stay
+# cached.
+ARG CACHE_BUST=0
+ARG LLAMA_REF=latest
+RUN set -e; \
+    ref="$LLAMA_REF"; \
+    if [ "$ref" = "latest" ]; then \
+        ref="b$(git ls-remote --tags --refs https://github.com/ggml-org/llama.cpp 'b*' \
+            | sed 's|.*refs/tags/b||' | grep -E '^[0-9]+$' | sort -n | tail -1)"; \
+    fi; \
+    echo "==> Building llama.cpp release ${ref} (cache-bust: ${CACHE_BUST})"; \
+    git clone --depth 1 --branch "${ref}" https://github.com/ggml-org/llama.cpp /src; \
+    echo "${ref#b}" > /src/.build-number
 
 WORKDIR /src
 
 RUN HIPCXX="$(hipconfig -l)/clang" HIP_PATH="$(hipconfig -R)" \
     cmake -S . -B build \
+        -DLLAMA_BUILD_NUMBER="$(cat .build-number)" \
         -DGGML_HIP=ON \
         -DGGML_HIP_ROCWMMA_FATTN=ON \
+        -DGGML_VULKAN=ON \
         -DAMDGPU_TARGETS="${ROCM_DOCKER_ARCH}" \
         -DGGML_BACKEND_DL=ON \
         -DGGML_CPU_ALL_VARIANTS=ON \
@@ -38,6 +56,7 @@ FROM docker.io/rocm/dev-ubuntu-24.04:7.2.4-complete
 
 RUN apt-get update \
     && apt-get install -y libgomp1 curl git python3 python3-pip \
+       libvulkan1 mesa-vulkan-drivers vulkan-tools \
     && apt-get autoremove -y \
     && apt-get clean \
     && rm -rf /tmp/* /var/tmp/* \
@@ -65,5 +84,8 @@ RUN printf '#!/usr/bin/env bash\nexec /opt/llama-cpp/llama-cli "$@"\n' \
 
 RUN printf '#!/usr/bin/env bash\nexec /opt/llama-cpp/llama-server "$@"\n' \
     > /usr/bin/llama-server && chmod +x /usr/bin/llama-server
+
+RUN printf '#!/usr/bin/env bash\nexec /opt/llama-cpp/llama-bench "$@"\n' \
+    > /usr/bin/llama-bench && chmod +x /usr/bin/llama-bench
 
 CMD ["/bin/bash"]

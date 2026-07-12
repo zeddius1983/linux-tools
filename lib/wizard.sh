@@ -5,6 +5,12 @@
 # Supported types:
 #   .mcp      → checklist; applies 'claude mcp add --scope user' after action
 #   .packages → checklist; calls '<app-name-without-box>-install --tools ...'
+#   .buildarg → radiolist; passes the chosen value to the image build as
+#               --build-arg <NAME>=<value> (consumed by cmd_build, no
+#               post-action apply step). Body lines are config, not items:
+#                 arg|<BUILD_ARG_NAME>
+#                 items-cmd|<shell command printing one value per line,
+#                            preferred value first — it becomes the default>
 #
 # To add a new type: add a handler function _wizard_apply_<type>() and register
 # it in the case statement inside tui_apply_wizards().
@@ -47,6 +53,11 @@ _wizard_run_page() {
             [[ "${a// /}" == "$action" ]] && matched=1 && break
         done
         [[ $matched -eq 0 ]] && return 0
+    fi
+
+    if [[ "$ext" == "buildarg" ]]; then
+        _wizard_run_buildarg_page "$page" "$pagename" "$title" "$prompt"
+        return $?
     fi
 
     # Build whiptail item list.
@@ -93,6 +104,66 @@ _wizard_run_page() {
         20 84 10 "${items[@]}" 3>&1 1>&2 2>&3) || return 1
 
     _WIZARD_SELECTIONS["$pagename"]="$(tr -d '"' <<< "$selected")"
+}
+
+# Single-choice radiolist for .buildarg pages. Items are produced by the
+# page's items-cmd at wizard time (first line = default); the selection is
+# stored for wizard_build_args to turn into a --build-arg during cmd_build.
+_wizard_run_buildarg_page() {
+    local page="$1" pagename="$2" title="$3" prompt="$4"
+    local arg_name="" items_cmd="" key val
+    while IFS='|' read -r key val; do
+        key="${key%$'\r'}"; val="${val%$'\r'}"
+        case "$key" in
+            arg)       arg_name="$val" ;;
+            items-cmd) items_cmd="$val" ;;
+        esac
+    done < <(tail -n +4 "$page")
+    [[ -z "$arg_name" || -z "$items_cmd" ]] && return 0
+
+    local -a values=()
+    mapfile -t values < <(bash -c "$items_cmd" 2>/dev/null)
+    if [[ ${#values[@]} -eq 0 ]]; then
+        echo "Warning: wizard page '$pagename': items-cmd produced no items, using build default" >&2
+        return 0
+    fi
+
+    local -a items=()
+    local v state="ON" desc="(default)"
+    for v in "${values[@]}"; do
+        [[ -z "$v" ]] && continue
+        items+=("$v" "$desc" "$state")
+        state="OFF"; desc=""
+    done
+
+    local selected
+    selected=$(whiptail --title "linux-tools — $title" \
+        --radiolist "$prompt  (SPACE = select, ENTER = confirm):" \
+        20 72 10 "${items[@]}" 3>&1 1>&2 2>&3) || return 1
+    [[ -z "$selected" ]] && return 0
+    _WIZARD_SELECTIONS["$pagename"]="$selected"
+}
+
+# Emit --build-arg tokens (one per line) for this app's .buildarg selections.
+# Called by cmd_build; prints nothing when no wizard ran (non-interactive).
+wizard_build_args() {
+    local app="$1"
+    declare -p _WIZARD_SELECTIONS &>/dev/null || return 0
+    local wizard_dir="$APPS_DIR/$app/wizard"
+    local page
+    for page in "$wizard_dir"/[0-9][0-9]-*.buildarg; do
+        [[ -f "$page" ]] || continue
+        local fname="${page##*/}"
+        local pagename="${fname%.*}"
+        local selection="${_WIZARD_SELECTIONS[$pagename]:-}"
+        [[ -n "$selection" ]] || continue
+        local arg_name="" key val
+        while IFS='|' read -r key val; do
+            [[ "${key%$'\r'}" == "arg" ]] && arg_name="${val%$'\r'}"
+        done < <(tail -n +4 "$page")
+        [[ -n "$arg_name" ]] || continue
+        printf -- '--build-arg\n%s=%s\n' "$arg_name" "$selection"
+    done
 }
 
 tui_confirm_wizards() {
@@ -192,6 +263,7 @@ tui_apply_wizards() {
         case "$ext" in
             mcp)      _wizard_apply_mcp      "$app" "$match" "${_WIZARD_SELECTIONS[$pagename]}" ;;
             packages) _wizard_apply_packages "$app" "$match" "${_WIZARD_SELECTIONS[$pagename]}" ;;
+            buildarg) : ;;  # consumed by cmd_build via wizard_build_args
         esac
     done
 }

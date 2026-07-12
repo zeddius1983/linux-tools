@@ -1,3 +1,4 @@
 bin:llama
 bin:llama-cli
 bin:llama-server
+bin:llama-bench

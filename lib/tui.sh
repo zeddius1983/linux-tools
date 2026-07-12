@@ -35,28 +35,21 @@ app_status_detail() {
     local desc
     desc="$(app_description "$app")"
     if [[ -f "$APPS_DIR/$app/host-only" ]]; then
-        printf '%s  |  %s  |  %s  |  %s' \
-            "$(_fw "$desc" 22)" \
-            "$(_fw " -----" 7)" \
-            "$(_fw " ------------------------------" 32)" \
+        printf '%s  |  %s  |  %s' \
+            "$(_fw "$desc" 26)" \
+            "$(_fw " ------------------------------" 34)" \
             "host"
         return
     fi
-    local img_id img_ref box_str
-    local img_name
-    img_name="$(image_name "$app")"
+    local img_ref box_str
     if image_exists "$app"; then
-        img_id="$($RUNTIME image inspect --format '{{.Id}}' "$img_name" 2>/dev/null \
-            | sed 's/^sha256://' | cut -c1-7)"
-        [[ -z "$img_id" ]] && img_id="?"
-        img_ref="$img_name"
+        img_ref="$(image_name "$app")"
     else
-        img_id="—"
         img_ref="—"
     fi
     box_exists "$app" && box_str="$(box_name "$app")" || box_str="—"
-    printf '%s  |  %s  |  %s  |  %s' \
-        "$(_fw "$desc" 22)" "$(_fw "$img_id" 7)" "$(_fw "$img_ref" 32)" "$box_str"
+    printf '%s  |  %s  |  %s' \
+        "$(_fw "$desc" 26)" "$(_fw "$img_ref" 34)" "$box_str"
 }
 
 interactive() {
