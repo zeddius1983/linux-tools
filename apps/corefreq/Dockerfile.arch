@@ -1,0 +1,120 @@
+FROM docker.io/library/archlinux:base-devel
+
+# base-devel already provides gcc/make/binutils. clang+lld+llvm are needed
+# because Arch-family kernels (CachyOS in particular) are built with Clang and
+# embed Clang-only codegen flags in their build config -- pacman only ever
+# installs one unversioned clang, so (unlike the Ubuntu variant) no version
+# hunting is needed here. `llvm` (not just `lld`) is required: Kbuild's
+# LLVM=1 path shells out to llvm-objcopy/llvm-ar/etc. for BTF post-processing,
+# which `lld` alone doesn't provide (it's only the linker, ld.lld). pahole
+# (Arch's package name -- "dwarves" upstream/Debian only) is needed for
+# CONFIG_DEBUG_INFO_BTF. curl lets distrobox-host-exec bootstrap host-spawn.
+RUN pacman -Syu --noconfirm --needed \
+    clang lld llvm pahole git ca-certificates kmod sudo curl && \
+    (yes | pacman -Scc --noconfirm >/dev/null 2>&1 || true)
+
+RUN git clone --depth=1 https://github.com/cyring/CoreFreq /opt/corefreq-src
+
+# Privileged host-side helper scripts. Baked here, copied to the shared
+# ~/.local/corefreq/ dir by corefreq-setup, and whitelisted in sudoers so they
+# run passwordless on the host. Both take the install dir as $1 so the same
+# static script works regardless of the caller's $HOME.
+RUN mkdir -p /usr/share/corefreq
+RUN printf '#!/bin/bash\n\
+set -u\n\
+DEST="${1:?usage: module-reload DEST}"\n\
+# Kill any running corefreqd, identified by its executable path. This catches\n\
+# the workers CoreFreq renames itself to (corefreqd-pmgr / corefreqd-cmgr) and,\n\
+# because we run inside this host-side script, never matches the sudo/bash\n\
+# wrapper that launched us (its /proc/PID/exe is bash, not corefreqd).\n\
+for pid in $(pgrep -f corefreqd 2>/dev/null); do\n\
+    exe=$(readlink /proc/$pid/exe 2>/dev/null) || continue\n\
+    case "$exe" in\n\
+        "$DEST/corefreqd"|"$DEST/corefreqd "*) kill "$pid" 2>/dev/null ;;\n\
+    esac\n\
+done\n\
+sleep 1\n\
+rmmod corefreqk 2>/dev/null || true\n\
+insmod "$DEST/corefreqk.ko"\n' > /usr/share/corefreq/module-reload && chmod +x /usr/share/corefreq/module-reload
+RUN printf '#!/bin/bash\n\
+set -u\n\
+DEST="${1:?usage: daemon-ensure DEST}"\n\
+[ -d /sys/module/corefreqk ] || insmod "$DEST/corefreqk.ko"\n\
+for pid in $(pgrep -f corefreqd 2>/dev/null); do\n\
+    exe=$(readlink /proc/$pid/exe 2>/dev/null) || continue\n\
+    case "$exe" in\n\
+        "$DEST/corefreqd"|"$DEST/corefreqd "*) exit 0 ;;\n\
+    esac\n\
+done\n\
+nohup "$DEST/corefreqd" >/dev/null 2>&1 &\n\
+exit 0\n' > /usr/share/corefreq/daemon-ensure && chmod +x /usr/share/corefreq/daemon-ensure
+
+# Build wrapper: compiles CoreFreq against the running host kernel, installs the
+# helper scripts + a passwordless sudoers rule, then loads the fresh module.
+RUN printf '#!/usr/bin/env bash\n\
+set -euo pipefail\n\
+KVER=$(uname -r)\n\
+if [[ -d "/lib/modules/${KVER}/build" ]]; then\n\
+    KBUILD="/lib/modules/${KVER}/build"\n\
+elif [[ -d "/usr/src/linux-headers-${KVER}" ]]; then\n\
+    KBUILD="/usr/src/linux-headers-${KVER}"\n\
+else\n\
+    echo "ERROR: kernel headers not found" >&2\n\
+    echo "  On host: install headers matching $(uname -r) (e.g. linux-cachyos-headers)" >&2\n\
+    exit 1\n\
+fi\n\
+echo "==> Building CoreFreq for kernel ${KVER} (headers: ${KBUILD})..."\n\
+BUILD="$HOME/.local/corefreq-build"\n\
+rm -rf "$BUILD" && cp -r /opt/corefreq-src "$BUILD"\n\
+MAKE_ARGS=(KERNELDIR="${KBUILD}")\n\
+if [[ -f "${KBUILD}/.config" ]] && grep -q "^CONFIG_CC_IS_CLANG=y" "${KBUILD}/.config"; then\n\
+    echo "==> Host kernel was built with Clang; building module with LLVM=1"\n\
+    MAKE_ARGS+=(LLVM=1)\n\
+fi\n\
+OBJTOOL_BIN="${KBUILD}/tools/objtool/objtool"\n\
+if [[ -x "$OBJTOOL_BIN" ]]; then\n\
+    LIBDIR="$HOME/.local/corefreq-libs"\n\
+    mkdir -p "$LIBDIR"\n\
+    MISSING=$(ldd "$OBJTOOL_BIN" 2>/dev/null | awk "/not found/ {print \\$1}")\n\
+    for lib in $MISSING; do\n\
+        for hostdir in /run/host/usr/lib /run/host/usr/lib64 /run/host/lib; do\n\
+            if [[ -e "${hostdir}/${lib}" ]]; then\n\
+                cp -L "${hostdir}/${lib}" "${LIBDIR}/${lib}"\n\
+                break\n\
+            fi\n\
+        done\n\
+    done\n\
+    if [[ -n "$MISSING" ]]; then\n\
+        echo "==> Host objtool needs libraries not in this image (${MISSING}); staged from /run/host"\n\
+        export LD_LIBRARY_PATH="${LIBDIR}:${LD_LIBRARY_PATH:-}"\n\
+    fi\n\
+fi\n\
+cd "$BUILD" && make "${MAKE_ARGS[@]}"\n\
+DEST="$HOME/.local/corefreq"\n\
+mkdir -p "$DEST"\n\
+# Install binaries via temp-file + rename, not cp-in-place: renaming over a\n\
+# still-running executable succeeds (the old process keeps the old inode),\n\
+# whereas an in-place cp truncates and fails with "Text file busy".\n\
+for f in corefreqk.ko corefreqd corefreq-cli; do\n\
+    cp "$BUILD/build/$f" "$DEST/.$f.new"\n\
+    mv -f "$DEST/.$f.new" "$DEST/$f"\n\
+done\n\
+cp /usr/share/corefreq/module-reload /usr/share/corefreq/daemon-ensure "$DEST/"\n\
+chmod +x "$DEST/module-reload" "$DEST/daemon-ensure"\n\
+{ echo "$(whoami) ALL=(ALL) NOPASSWD: $DEST/module-reload $DEST"; echo "$(whoami) ALL=(ALL) NOPASSWD: $DEST/daemon-ensure $DEST"; } > "$DEST/sudoers"\n\
+echo "==> Installing sudoers rule (you may be prompted for your password once)..."\n\
+distrobox-host-exec sudo install -m 440 -o root -g root "$DEST/sudoers" /etc/sudoers.d/corefreq\n\
+distrobox-host-exec sudo "$DEST/module-reload" "$DEST"\n\
+echo "==> Done. Run: corefreq-cli"\n' > /usr/bin/corefreq-setup && chmod +x /usr/bin/corefreq-setup
+
+# CLI wrapper: ensures the module is loaded and corefreqd is running on the host
+# (one passwordless host call), then launches the real CLI.
+RUN printf '#!/usr/bin/env bash\n\
+set -euo pipefail\n\
+DEST="$HOME/.local/corefreq"\n\
+BIN="$DEST/corefreq-cli"\n\
+[[ -x "$BIN" ]] || { echo "Not built. Run: corefreq-setup" >&2; exit 1; }\n\
+distrobox-host-exec sudo "$DEST/daemon-ensure" "$DEST"\n\
+exec "$BIN" "$@"\n' > /usr/bin/corefreq-cli && chmod +x /usr/bin/corefreq-cli
+
+CMD ["/bin/bash"]

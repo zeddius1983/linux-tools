@@ -7,8 +7,19 @@ cmd_build() {
     # .buildarg wizard selections arrive as extra --build-arg pairs.
     local -a extra_args=()
     mapfile -t extra_args < <(wizard_build_args "$app")
+    # Apps that need a container toolchain close to the host's (e.g. kernel
+    # module builds) can ship Dockerfile.ubuntu + Dockerfile.arch instead of a
+    # single Dockerfile; pick the one matching this host's distro family.
+    local -a dockerfile_args=()
+    if [[ -f "$APPS_DIR/$app/Dockerfile.ubuntu" && -f "$APPS_DIR/$app/Dockerfile.arch" ]]; then
+        local variant
+        variant="$(host_distro_family)"
+        echo "==> Detected ${variant}-family host; using Dockerfile.${variant}"
+        dockerfile_args=(-f "$APPS_DIR/$app/Dockerfile.${variant}")
+    fi
     $RUNTIME build --build-arg CACHE_BUST="$(date +%s)" \
         "${extra_args[@]+"${extra_args[@]}"}" \
+        "${dockerfile_args[@]+"${dockerfile_args[@]}"}" \
         -t "$(image_name "$app")" "$APPS_DIR/$app"
 }
 
