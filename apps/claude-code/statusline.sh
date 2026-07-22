@@ -48,9 +48,56 @@ cache_total=$((cache_read + cache_write))
 bg() { printf '\e[48;5;%sm' "$1"; }
 fg() { printf '\e[38;5;%sm' "$1"; }
 reset=$'\e[0m'
+
+# detect_os_icon: pick the powerlevel10k OS glyph for the *host* distro. This
+# script runs inside the ubuntu container, but Distrobox bind-mounts the host
+# root at /run/host, so /run/host/etc/os-release names the real host (e.g.
+# arch/cachyos) even though /etc/os-release here says ubuntu. Falls back to the
+# local /etc/os-release when run directly on a host, and to a generic Tux when
+# nothing matches. Codepoints match powerlevel10k's icons.zsh OS-icon table.
+detect_os_icon() {
+  local osr="" os_id="" os_like="" tok
+  if [[ -r /run/host/etc/os-release ]]; then
+    osr=/run/host/etc/os-release
+  elif [[ -r /etc/os-release ]]; then
+    osr=/etc/os-release
+  fi
+  if [[ -n "$osr" ]]; then
+    IFS=$'\x1f' read -r os_id os_like <<< "$(awk -F= '
+      $1=="ID"      {gsub(/"/,"",$2); id=$2}
+      $1=="ID_LIKE" {gsub(/"/,"",$2); like=$2}
+      END {print id"\x1f"like}' "$osr")"
+  fi
+  case "$os_id" in # direct match on the distro ID
+    arch)                printf '\uF303'; return ;; # arch
+    manjaro|manjaro-arm) printf '\uF312'; return ;; # manjaro
+    ubuntu)              printf '\uF31B'; return ;; # ubuntu
+    linuxmint)           printf '\uF30E'; return ;; # mint
+    debian|raspbian)     printf '\uF306'; return ;; # debian
+    fedora)              printf '\uF30A'; return ;; # fedora
+    rhel|centos)         printf '\uF304'; return ;; # centos
+    rocky|almalinux|ol)  printf '\uF316'; return ;; # redhat
+    opensuse*|sled|sles) printf '\uF314'; return ;; # opensuse
+    gentoo)              printf '\uF30D'; return ;; # gentoo
+    nixos)               printf '\uF313'; return ;; # nixos
+    alpine)              printf '\uF300'; return ;; # alpine
+  esac
+  for tok in $os_like; do # fall back to distro family (ID_LIKE, specific first)
+    case "$tok" in
+      arch)          printf '\uF303'; return ;;
+      ubuntu)        printf '\uF31B'; return ;;
+      debian)        printf '\uF306'; return ;;
+      fedora)        printf '\uF30A'; return ;;
+      rhel|centos)   printf '\uF304'; return ;;
+      suse|opensuse) printf '\uF314'; return ;;
+    esac
+  done
+  printf '\uF17C' # generic Tux
+}
+
 sep=$'\uE0B0' # powerline arrow, matches p10k separator style
 branch_icon=$'\uF126' # POWERLEVEL9K_VCS_BRANCH_ICON, verified against ~/.p10k.zsh
-os_icon=$'\uF303' # LINUX_ARCH_ICON, verified against powerlevel10k source (icons.zsh)
+os_icon=$(detect_os_icon) # host distro glyph (see detect_os_icon above)
 dir_icon=$'\uF115' # FOLDER_ICON, verified against powerlevel10k source (icons.zsh)
 cache_icon=$'\uF0A0' # DISK_ICON, verified against powerlevel10k source (icons.zsh)
 ctx_icon=$'\uF0E4' # RAM_ICON, reused for context window (same "memory usage" concept)
