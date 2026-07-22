@@ -42,6 +42,16 @@ for pid in $(pgrep -f corefreqd 2>/dev/null); do\n\
     esac\n\
 done\n\
 nohup "$DEST/corefreqd" >/dev/null 2>&1 &\n\
+# corefreqd publishes its shared-memory segment (/dev/shm/corefreq-ro-shm) only\n\
+# after it finishes initializing. Wait for it before returning so the CLI that\n\
+# runs next does not race a not-yet-ready daemon. The first CLI launch after a\n\
+# reboot starts corefreqd fresh; without this the CLI attaches before the shm\n\
+# exists and fails, while later launches (daemon already up) succeed -- the\n\
+# "only fails the first time" symptom.\n\
+for _ in $(seq 1 50); do\n\
+    [ -e /dev/shm/corefreq-ro-shm ] && break\n\
+    sleep 0.1\n\
+done\n\
 exit 0\n' > /usr/share/corefreq/daemon-ensure && chmod +x /usr/share/corefreq/daemon-ensure
 
 # Build wrapper: compiles CoreFreq against the running host kernel, installs the
