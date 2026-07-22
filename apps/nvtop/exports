@@ -1,0 +1,7 @@
+# Format: type:name[:Display Name]
+# app     - export container .desktop entry to host menu
+# bin     - export binary to ~/.local/bin
+# desktop - create terminal-launched shortcut (place icon.png here for icon)
+# gui     - create non-terminal shortcut for GUI apps
+bin:nvtop
+desktop:nvtop:nvtop

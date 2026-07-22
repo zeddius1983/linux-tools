@@ -68,6 +68,7 @@ distrobox enter <app>-box  # directly via distrobox
 | [`llama-cpp-rocm`](apps/llama-cpp-rocm/README.md) | llama.cpp (ROCm+Vulkan) | `llama-cpp-rocm-box` |
 | `lmstudio` | LM Studio | `lmstudio-box` |
 | [`nvbandwidth`](apps/nvbandwidth/README.md) | NVIDIA GPU/NVLink bandwidth | `nvbandwidth-box` |
+| [`nvtop`](apps/nvtop/README.md) | GPU process monitor | `nvtop-box` |
 | `telegram` | Telegram Desktop | `telegram-box` |
 | [`unsloth`](apps/unsloth/README.md) | Unsloth LLM fine-tuning (ROCm) | `unsloth-box` |
 | [`shell-toolbox`](apps/shell-toolbox/README.md) | Shell Toolbox (host-only installer) | — |
