@@ -29,6 +29,22 @@ list_apps() {
     done
 }
 
+# ── Host detection ───────────────────────────────────────────────────────────
+
+# Used to pick between Dockerfile.ubuntu / Dockerfile.arch for apps that ship
+# both (e.g. corefreq, where the container's toolchain has to be close enough
+# to whatever built the host kernel). Apps with a single Dockerfile are
+# unaffected.
+host_distro_family() {
+    local ids
+    ids=$(bash -c 'source /etc/os-release 2>/dev/null && echo "${ID:-} ${ID_LIKE:-}"')
+    if [[ "$ids" == *arch* ]]; then
+        echo "arch"
+    else
+        echo "ubuntu"
+    fi
+}
+
 # ── Terminal detection ───────────────────────────────────────────────────────
 
 pick_terminal() {
