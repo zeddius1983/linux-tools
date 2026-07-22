@@ -26,4 +26,22 @@ RUN git clone --depth 1 https://github.com/NVIDIA/nvbandwidth.git /opt/nvbandwid
     cmake --build /opt/nvbandwidth/build -j"$(nproc)" && \
     install -m 0755 /opt/nvbandwidth/build/nvbandwidth /usr/bin/nvbandwidth
 
+# p2pBandwidthLatencyTest from NVIDIA/cuda-samples — the community-standard P2P
+# matrix (P2P enabled-vs-disabled bandwidth + latency). Complements nvbandwidth:
+# this tool reports the enabled/disabled contrast that proves the P2P capability
+# flipped, but it only TIMES cuMemcpyPeer — it does NOT verify data integrity, so
+# nvbandwidth stays the correctness oracle. It's a single-file sample: build it
+# directly with nvcc against the repo's Common/ headers (same arch span as above),
+# emit to /usr/bin for the bin: export, then drop the (large) source tree.
+RUN git clone --depth 1 https://github.com/NVIDIA/cuda-samples.git /opt/cuda-samples && \
+    src="$(find /opt/cuda-samples -name p2pBandwidthLatencyTest.cu)" && \
+    nvcc -O3 -I /opt/cuda-samples/Common \
+      -gencode arch=compute_75,code=sm_75 \
+      -gencode arch=compute_80,code=sm_80 \
+      -gencode arch=compute_86,code=sm_86 \
+      -gencode arch=compute_89,code=sm_89 \
+      -gencode arch=compute_90,code=sm_90 \
+      "$src" -o /usr/bin/p2pBandwidthLatencyTest && \
+    rm -rf /opt/cuda-samples
+
 CMD ["/bin/bash"]

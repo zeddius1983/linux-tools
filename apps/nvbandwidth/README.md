@@ -58,6 +58,43 @@ nvbandwidth -t device_to_device_memcpy_read_ce   # one NVLink read test
 nvbandwidth -F json > bw.json                    # machine-readable output
 ```
 
+## Second tool: `p2pBandwidthLatencyTest`
+
+The box also exports **`p2pBandwidthLatencyTest`** — the classic
+[NVIDIA cuda-samples](https://github.com/NVIDIA/cuda-samples) P2P benchmark. It's
+the tool most community P2P numbers are reported with, so it's handy for
+apples-to-apples comparisons. Run it with no arguments:
+
+```bash
+p2pBandwidthLatencyTest
+```
+
+It prints four things nvbandwidth does **not** show as a single contrast:
+
+- a **P2P Connectivity Matrix** (`1` = the driver reports the pair can peer),
+- **Unidirectional / Bidirectional bandwidth matrices, P2P=Disabled vs P2P=Enabled**
+  side by side, and
+- **latency matrices, P2P=Disabled vs P2P=Enabled**.
+
+That enabled-vs-disabled contrast is the clean way to confirm a P2P patch (see
+[Enabling PCIe P2P on consumer GPUs](#enabling-pcie-p2p-on-consumer-gpus)) actually
+flipped the capability — e.g. peer latency dropping from ~14 µs to sub-microsecond
+when P2P is enabled proves TLPs really are routing peer-to-peer.
+
+> **⚠️ Use it alongside nvbandwidth, not instead of it.** `p2pBandwidthLatencyTest`
+> only *times* `cudaMemcpyPeer` — it does **not verify the copied data**. On a
+> broken peer path (e.g. consumer GPUs forced through the CPU root complex) it will
+> happily print a bandwidth number for a transfer that silently **corrupts data**,
+> where nvbandwidth's `device_to_device_memcpy_write_*` catches it with a pattern
+> check and aborts. Treat `p2pBandwidthLatencyTest` as the *throughput/latency*
+> report and **nvbandwidth as the correctness oracle** — trust a
+> `p2pBandwidthLatencyTest` bandwidth figure only once nvbandwidth's write test
+> passes clean.
+
+A healthy P2P result shows the **P2P=Enabled** off-diagonal bandwidth jumping well
+above the **P2P=Disabled** values; if the two columns are nearly identical, P2P is
+enabled in name only and the data path is falling back (or broken).
+
 ## P2P / PCIe-switch testcase cheat-sheet
 
 The `device_to_device_*` testcases are the peer-to-peer path — they call
@@ -162,7 +199,42 @@ rebuild**.
    cd open-gpu-kernel-modules      # version-named branch, NOT `main`
    sudo ./install.sh
    ```
-4. **Reboot.**
+
+   **CachyOS / any Clang-LTO kernel — `install.sh` will NOT work as-is.** CachyOS's
+   default kernels are built with **Clang + LLD (ThinLTO)**, but the fork's
+   `Makefile` hard-forwards `LD=$(LD)` (GNU `ld`) to Kbuild, so the module link
+   fails with `/usr/bin/ld: unrecognised emulation mode: llvm`. You also can't
+   `rmmod nvidia` on a running desktop (the compositor holds it), so skip
+   `install.sh` and do it in two steps — build with the LLVM toolchain, then
+   install to `updates/` (which outranks the packaged module in `extramodules/`):
+   ```bash
+   # Verify LLVM tools exist: clang ld.lld llvm-ar llvm-nm llvm-objcopy llvm-strip
+   make modules -j"$(nproc)" \
+     LLVM=1 IGNORE_CC_MISMATCH=1 \
+     CC=clang LD=ld.lld OBJDUMP=llvm-objdump \
+     AR=llvm-ar NM=llvm-nm STRIP=llvm-strip OBJCOPY=llvm-objcopy
+
+   sudo make modules_install -j"$(nproc)" \
+     LLVM=1 IGNORE_CC_MISMATCH=1 \
+     CC=clang LD=ld.lld OBJDUMP=llvm-objdump \
+     AR=llvm-ar NM=llvm-nm STRIP=llvm-strip OBJCOPY=llvm-objcopy \
+     INSTALL_MOD_DIR=updates
+   sudo depmod "$(uname -r)"
+   # Confirm the patched module wins (must print an updates/ path, not extramodules/):
+   grep -m1 -E "(updates|extramodules)/nvidia\.ko" \
+     "/usr/lib/modules/$(uname -r)/modules.dep"
+   ```
+   - `IGNORE_CC_MISMATCH=1` demotes the "kernel was built by a different clang" check
+     from fatal to a warning (a patch-level clang delta is harmless).
+   - `sign-file` SSL errors during install are cosmetic — CachyOS doesn't ship the
+     kernel's private signing key. They only matter under **Secure Boot with
+     `CONFIG_MODULE_SIG_FORCE`**, in which case sign the modules with your own MOK.
+   - A `linux-cachyos-nvidia-open` upgrade rebuilds `extramodules/`, but your
+     `updates/` module keeps winning — **until** the driver version bumps past the
+     branch you built, at which point the ABI mismatches and `nvidia` won't load
+     (rebuild against the matching branch, or `IgnorePkg` the driver).
+4. **Reboot** (don't try to swap the module live — the running desktop and any GPU
+   process hold `nvidia` open, so it can't be unloaded).
 
 ### Verify
 
@@ -221,7 +293,8 @@ plug-and-play). Key confirmations relevant to a 2×3090 box:
 - **NVLink results require ≥2 NVLink-connected GPUs.** On a single-GPU box the
   device↔device NVLink testcases report as unsupported/skipped; the host↔device
   (PCIe) tests still run and are useful on their own.
-- The binary is compiled for CUDA architectures `75;80;86;89;90` (Turing →
-  Hopper). To target a newer/older GPU, edit `CMAKE_CUDA_ARCHITECTURES` in the
+- Both binaries are compiled for CUDA architectures `75;80;86;89;90` (Turing →
+  Hopper) — `nvbandwidth` via `CMAKE_CUDA_ARCHITECTURES`, `p2pBandwidthLatencyTest`
+  via matching `-gencode` flags. To target a newer/older GPU, edit both in the
   Dockerfile and re-run `tools setup nvbandwidth`.
 - No persistent storage — the tool is stateless; output goes to stdout.
