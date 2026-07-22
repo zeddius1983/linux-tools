@@ -37,6 +37,7 @@ Priority order within each section: highest first.
 - [x] `amdgpu_top` — AMD GPU usage monitor
 - [x] `corefreq` — CPU frequency / perf monitor (kernel module build)
 - [ ] `nvtop` — GPU process monitor (NVIDIA / AMD)
+- [x] `nvbandwidth` — NVIDIA GPU memory-bandwidth / NVLink benchmark (CUDA build container + CDI passthrough)
 - [ ] `btop` — modern resource monitor
 
 ## Browsers / Web
