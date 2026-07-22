@@ -34,3 +34,10 @@ RUN mkdir -p /opt/claude-install \
     && cp -L /opt/claude-install/.local/bin/claude /usr/bin/claude \
     && chmod +x /usr/bin/claude \
     && rm -rf /opt/claude-install
+
+# Optional host integrations, wired up by the setup wizard (wizard/00-statusline.packages).
+# statusline.sh is bundled at a system path (the home overlay hides anything baked
+# under $HOME); claude-code-install copies it into the shared ~/.claude/ on demand.
+COPY statusline.sh /usr/share/claude-code/statusline.sh
+COPY claude-code-install /usr/bin/claude-code-install
+RUN chmod +x /usr/bin/claude-code-install /usr/share/claude-code/statusline.sh

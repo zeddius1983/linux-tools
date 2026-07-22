@@ -12,6 +12,8 @@ tools setup claude-code
 
 Build time: ~1–2 minutes (downloads the ~240 MB native binary).
 
+During an interactive `tools setup`, a wizard offers **optional integrations** (see [Status line](#status-line-optional)). Skip it and you get the plain CLI; the wizard is skipped entirely on non-interactive/CLI-piped setups.
+
 ## Commands
 
 | Export | Type | Description |
@@ -30,6 +32,37 @@ claude mcp add context7 -- npx -y @upstash/context7-mcp
 ```
 
 The MCP config is written to `~/.claude.json` on the host (shared `$HOME`), and `npx` resolves the server from the container's Node.js install at runtime.
+
+## Status line (optional)
+
+The setup wizard can install a Powerline-style status line into your Claude Code
+config. It renders the model, context-window usage, cache hit rate, and 5h/7d
+rate-limit remaining in a `powerlevel10k`-inspired bar.
+
+Enable it by ticking **statusline** in the wizard during `tools setup claude-code`,
+or apply it directly:
+
+```bash
+distrobox enter claude-code-box -- claude-code-install --tools statusline
+```
+
+What it does (all in the shared `~/.claude/`, so it applies on the host too):
+
+- copies the bundled script to `~/.claude/statusline.sh`
+- sets `.statusLine` in `~/.claude/settings.json` to `bash $HOME/.claude/statusline.sh`
+  (merged in with `jq` — your other settings are preserved)
+
+If you already have a status line configured, nothing is lost: an existing
+`~/.claude/statusline.sh` is copied to `statusline.sh.bak-<timestamp>` if it differs,
+and if `settings.json` already points at a *different* status line, the whole file is
+backed up to `settings.json.bak-<timestamp>` before we change `.statusLine`.
+
+Untick it (or run `claude-code-install --tools ""`) to remove it again — the script
+is deleted and the `.statusLine` entry is dropped, but only if it still points at
+our command, so a hand-rolled status line of your own is left alone.
+
+**Font requirement:** the bar uses Nerd Font / Powerline glyphs, so your terminal
+must be using a [Nerd Font](https://www.nerdfonts.com/) for the icons to render.
 
 ## Usage
 

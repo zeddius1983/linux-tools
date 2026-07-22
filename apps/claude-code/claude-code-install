@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# Install optional Claude Code host integrations into Distrobox's shared home.
+# Runs inside claude-code-box but writes to ~/.claude/, which is the host's home.
+# Usage: claude-code-install --tools "statusline"
+set -euo pipefail
+
+TOOLS=""
+CLAUDE_DIR="$HOME/.claude"
+SETTINGS="$CLAUDE_DIR/settings.json"
+STATUSLINE_SRC="/usr/share/claude-code/statusline.sh"
+STATUSLINE_DEST="$CLAUDE_DIR/statusline.sh"
+# Kept in sync with the value written into settings.json below. Claude Code
+# expands the literal $HOME at render time, so store it literally (not expanded).
+STATUSLINE_CMD='bash $HOME/.claude/statusline.sh'
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --tools) TOOLS="${2:-}"; shift 2 ;;
+        *) echo "Unknown option: $1" >&2; exit 1 ;;
+    esac
+done
+
+for tool in $TOOLS; do
+    case "$tool" in
+        statusline) ;;
+        *) echo "Unknown tool: $tool" >&2; exit 1 ;;
+    esac
+done
+
+has_tool() { [[ " $TOOLS " == *" $1 "* ]]; }
+step() { printf '\n==> %s\n' "$*"; }
+
+mkdir -p "$CLAUDE_DIR"
+
+# Load settings.json (or {} if missing/empty), apply a jq filter, write it back.
+# Refuses to touch the file if it is present but not valid JSON, so a hand-edited
+# config is never clobbered.
+edit_settings() {
+    local filter="$1"
+    local current="{}"
+    if [[ -s "$SETTINGS" ]]; then
+        if ! current="$(jq -e . "$SETTINGS" 2>/dev/null)"; then
+            echo "Warning: $SETTINGS is not valid JSON; leaving it untouched." >&2
+            return 1
+        fi
+    fi
+    local tmp
+    tmp="$(mktemp)"
+    jq "$filter" <<<"$current" > "$tmp"
+    mv "$tmp" "$SETTINGS"
+}
+
+if has_tool statusline; then
+    step "Installing Claude Code status line"
+    [[ -f "$STATUSLINE_SRC" ]] || {
+        echo "Bundled statusline.sh missing at $STATUSLINE_SRC" >&2
+        exit 1
+    }
+    ts="$(date +%Y%m%d-%H%M%S)"
+    # Back up an existing, differing script before overwriting it.
+    if [[ -f "$STATUSLINE_DEST" ]] && ! cmp -s "$STATUSLINE_SRC" "$STATUSLINE_DEST"; then
+        backup="$STATUSLINE_DEST.bak-$ts"
+        cp -p "$STATUSLINE_DEST" "$backup"
+        echo "   backed up existing script to $backup"
+    fi
+    # Back up the whole settings.json when it already has a status line that
+    # isn't ours (e.g. a different script path or an inline command), so a
+    # user's own configuration is never lost when we overwrite .statusLine.
+    if [[ -s "$SETTINGS" ]] \
+        && jq -e --arg c "$STATUSLINE_CMD" \
+             '(.statusLine != null) and (.statusLine.command != $c)' \
+             "$SETTINGS" >/dev/null 2>&1; then
+        backup="$SETTINGS.bak-$ts"
+        cp -p "$SETTINGS" "$backup"
+        echo "   backed up existing settings to $backup"
+    fi
+    install -m 0755 "$STATUSLINE_SRC" "$STATUSLINE_DEST"
+    edit_settings ".statusLine = {\"type\": \"command\", \"command\": \"$STATUSLINE_CMD\"}"
+    echo "   status line enabled in $SETTINGS"
+else
+    # Toggle-off: only remove artifacts we own — the script at our known path and
+    # the statusLine entry only if it still points at our command.
+    if [[ -f "$STATUSLINE_DEST" ]]; then
+        step "Removing Claude Code status line"
+        rm -f "$STATUSLINE_DEST"
+    fi
+    if [[ -s "$SETTINGS" ]] \
+        && jq -e --arg c "$STATUSLINE_CMD" '.statusLine.command == $c' "$SETTINGS" >/dev/null 2>&1; then
+        edit_settings 'del(.statusLine)' || true
+    fi
+fi
+
+step "Selected integrations are ready: ${TOOLS:-none}"
