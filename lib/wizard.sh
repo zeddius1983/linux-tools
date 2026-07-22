@@ -11,6 +11,12 @@
 #                 arg|<BUILD_ARG_NAME>
 #                 items-cmd|<shell command printing one value per line,
 #                            preferred value first — it becomes the default>
+#   .runtime  → radiolist; picks a create-time variant (consumed by cmd_create
+#               via wizard_create_variant, no post-action apply step). Body lines
+#               are items: Label|value|description (first line = default). The
+#               Label shows verbatim; the value selects create_flags.<value>
+#               (podman --additional-flags) and create_args.<value> (extra
+#               distrobox-level flags, e.g. --nvidia).
 #
 # To add a new type: add a handler function _wizard_apply_<type>() and register
 # it in the case statement inside tui_apply_wizards().
@@ -57,6 +63,11 @@ _wizard_run_page() {
 
     if [[ "$ext" == "buildarg" ]]; then
         _wizard_run_buildarg_page "$page" "$pagename" "$title" "$prompt"
+        return $?
+    fi
+
+    if [[ "$ext" == "runtime" ]]; then
+        _wizard_run_runtime_page "$page" "$pagename" "$title" "$prompt"
         return $?
     fi
 
@@ -142,6 +153,56 @@ _wizard_run_buildarg_page() {
         20 72 10 "${items[@]}" 3>&1 1>&2 2>&3) || return 1
     [[ -z "$selected" ]] && return 0
     _WIZARD_SELECTIONS["$pagename"]="$selected"
+}
+
+# Single-choice radiolist for .runtime pages. Body lines are
+# "Label|value|description"; the first line is the default. The visible choice
+# is the Label exactly as written (e.g. "AMD (ROCm/Vulkan)"); the hidden value
+# is a filename-safe key (e.g. amd/nvidia). whiptail returns the Label, so the
+# selection is stored as the Label and translated to its value on demand by
+# wizard_create_variant. cmd_create uses that value to pick a
+# create_flags.<value> / create_args.<value> variant.
+_wizard_run_runtime_page() {
+    local page="$1" pagename="$2" title="$3" prompt="$4"
+    local -a items=()
+    local name value desc state="ON"
+    while IFS='|' read -r name value desc; do
+        name="${name%$'\r'}"; value="${value%$'\r'}"; desc="${desc%$'\r'}"
+        [[ -z "$name" || "$name" == \#* ]] && continue
+        items+=("$name" "$desc" "$state")
+        state="OFF"
+    done < <(tail -n +4 "$page")
+    [[ ${#items[@]} -eq 0 ]] && return 0
+
+    local selected
+    selected=$(whiptail --title "linux-tools — $title" \
+        --radiolist "$prompt  (SPACE = select, ENTER = confirm):" \
+        20 84 10 "${items[@]}" 3>&1 1>&2 2>&3) || return 1
+    [[ -z "$selected" ]] && return 0
+    _WIZARD_SELECTIONS["$pagename"]="$selected"
+}
+
+# Print the variant value for this app's .runtime selection (empty if none).
+# Translates the stored Label back to its "Label|value|desc" value field.
+wizard_create_variant() {
+    local app="$1"
+    declare -p _WIZARD_SELECTIONS &>/dev/null || return 0
+    local page fname pagename selected name value _desc
+    for page in "$APPS_DIR/$app/wizard"/[0-9][0-9]-*.runtime; do
+        [[ -f "$page" ]] || continue
+        fname="${page##*/}"; pagename="${fname%.*}"
+        selected="${_WIZARD_SELECTIONS[$pagename]:-}"
+        [[ -n "$selected" ]] || return 0
+        while IFS='|' read -r name value _desc; do
+            name="${name%$'\r'}"; value="${value%$'\r'}"
+            [[ -z "$name" || "$name" == \#* ]] && continue
+            if [[ "$name" == "$selected" ]]; then
+                printf '%s' "$value"
+                return 0
+            fi
+        done < <(tail -n +4 "$page")
+        return 0
+    done
 }
 
 # Emit --build-arg tokens (one per line) for this app's .buildarg selections.

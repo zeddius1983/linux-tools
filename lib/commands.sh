@@ -20,15 +20,28 @@ cmd_create() {
         return
     fi
     echo "==> Creating distrobox '$box'..."
+    # A .runtime wizard page may select a variant (e.g. amd/nvidia). When set:
+    #   create_flags.<variant>  overrides create_flags (podman --additional-flags)
+    #   create_args.<variant>   supplies distrobox-level args (e.g. --nvidia) that
+    #                           cannot be passed through --additional-flags
+    # With no wizard selection (non-interactive create), the plain create_flags
+    # file is used, preserving previous behavior.
+    local variant
+    variant="$(wizard_create_variant "$app")"
     local flags_file="$APPS_DIR/$app/create_flags"
-    if [[ -f "$flags_file" ]]; then
-        local extra_flags
-        extra_flags="$(cat "$flags_file")"
-        distrobox create --name "$box" --image "$image" --yes --no-entry \
-            --additional-flags "$extra_flags"
-    else
-        distrobox create --name "$box" --image "$image" --yes --no-entry
+    [[ -n "$variant" && -f "$APPS_DIR/$app/create_flags.$variant" ]] \
+        && flags_file="$APPS_DIR/$app/create_flags.$variant"
+
+    local -a create_cmd=(distrobox create --name "$box" --image "$image" --yes --no-entry)
+    if [[ -n "$variant" && -f "$APPS_DIR/$app/create_args.$variant" ]]; then
+        local extra_create_args
+        extra_create_args="$(cat "$APPS_DIR/$app/create_args.$variant")"
+        # Word-split intentionally: file holds distrobox flags like "--nvidia".
+        # shellcheck disable=SC2206
+        create_cmd+=($extra_create_args)
     fi
+    [[ -f "$flags_file" ]] && create_cmd+=(--additional-flags "$(cat "$flags_file")")
+    "${create_cmd[@]}"
 }
 
 cmd_export() {
