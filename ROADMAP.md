@@ -54,4 +54,8 @@ Priority order within each section: highest first.
 
 - [x] `shell-toolbox` — Zsh shell exported to the host, with optional utilities: fzf, bat, glow, ripgrep, eza, zoxide, fd, delta
 
+## Tooling / Infrastructure
+
+- [ ] Migrate the host TUI from `whiptail` to a **Go + [`huh`](https://github.com/charmbracelet/huh)** (Bubble Tea) front-end. Keep the bash `cmd_*` backend (`lib/commands.sh`) untouched — Go replaces only the menu + wizard rendering (`lib/tui.sh`, `lib/wizard.sh`) and shells out. Wins: `huh.Group` = wizard page, `huh.NewMultiSelect` = `.packages`, `huh.NewSelect` = `.buildarg`, with native multi-field forms and validation whiptail can't do; attractive default theme (fixes the checkbox/button contrast fights); instant single-`Esc`-to-quit (whiptail/newt swallows it). Ships as one static binary → host dependency is "drop a file in `~/.local/bin`," not a container concern. Suggested spike first: port just the app-selection menu + the `claude-code` statusline `.packages` page before committing to the full migration.
+
 ## Misc / Fun
