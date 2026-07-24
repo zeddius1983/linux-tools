@@ -66,7 +66,7 @@ distrobox enter <app>-box  # directly via distrobox
 | [`dev-toolbox`](apps/dev-toolbox/README.md) | Dev Toolbox | `dev-toolbox-box` |
 | [`jetbrains-toolbox`](apps/jetbrains-toolbox/README.md) | JetBrains Toolbox | `jetbrains-toolbox-box` |
 | [`llama-cpp-rocm`](apps/llama-cpp-rocm/README.md) | llama.cpp (ROCm+Vulkan) | `llama-cpp-rocm-box` |
-| `lmstudio` | LM Studio | `lmstudio-box` |
+| [`lmstudio`](apps/lmstudio/README.md) | LM Studio (AMD/NVIDIA) | `lmstudio-box` |
 | [`nvbandwidth`](apps/nvbandwidth/README.md) | NVIDIA GPU/NVLink bandwidth | `nvbandwidth-box` |
 | [`nvidia-cdi-service`](apps/nvidia-cdi-service/README.md) | NVIDIA CDI auto-regen (host) | — |
 | [`nvidia-acs-service`](apps/nvidia-acs-service/README.md) | NVIDIA P2P ACS fix (host) | — |

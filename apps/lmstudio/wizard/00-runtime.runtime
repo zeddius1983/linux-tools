@@ -1,0 +1,5 @@
+Select GPU runtime
+Which GPU should LM Studio use? This sets the container's GPU passthrough.
+setup,create
+AMD (ROCm/Vulkan)|amd|/dev/kfd + /dev/dri, Mesa Vulkan (default)
+NVIDIA (CUDA)|nvidia|Host NVIDIA driver via --nvidia; bundled CUDA runtime
