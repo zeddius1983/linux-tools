@@ -20,6 +20,17 @@ app_description() {
     [[ -f "$f" ]] && cat "$f" || echo "$1"
 }
 
+# A container-less host-only app: 'host-only' marker + an install.sh and NO
+# Dockerfile of any kind. `tools setup` runs install.sh on the host and skips the
+# whole build/create/export/box lifecycle; `tools rm` runs install.sh uninstall.
+is_hostonly_installer() {
+    local app="$1"
+    [[ -f "$APPS_DIR/$app/host-only" && -f "$APPS_DIR/$app/install.sh" \
+       && ! -f "$APPS_DIR/$app/Dockerfile" \
+       && ! -f "$APPS_DIR/$app/Dockerfile.arch" \
+       && ! -f "$APPS_DIR/$app/Dockerfile.ubuntu" ]]
+}
+
 list_apps() {
     local app_dir app
     for app_dir in "$APPS_DIR"/*/; do

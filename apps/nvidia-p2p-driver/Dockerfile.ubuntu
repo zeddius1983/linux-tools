@@ -1,0 +1,27 @@
+# Build environment for Debian/Ubuntu-family hosts whose kernel was built with GCC.
+# (On a Clang-LTO kernel you must use the Arch variant instead — GCC can't build a
+# loadable module for it. `tools build` auto-picks Dockerfile.arch on Arch-family
+# hosts and this file otherwise.)
+FROM docker.io/library/ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+# build-essential = gcc/make; dwarves = pahole (CONFIG_DEBUG_INFO_BTF); kmod for
+# depmod/modinfo; curl for distrobox-host-exec's host-spawn bootstrap. LLVM tools
+# are included so a Clang-built Debian kernel (rare, but possible) can still build.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential git make kmod sudo curl ca-certificates \
+        dwarves libelf-dev bc flex bison \
+        clang lld llvm && \
+    rm -rf /var/lib/apt/lists/*
+
+ARG P2P_REMOTE=https://github.com/aikitoria/open-gpu-kernel-modules
+ARG P2P_BRANCH=610.43.03-p2p
+ARG CACHE_BUST=0
+RUN git clone --depth=1 --branch "${P2P_BRANCH}" "${P2P_REMOTE}" /opt/open-gpu-kernel-modules
+
+COPY nvidia-p2p-build /usr/bin/nvidia-p2p-build
+RUN mkdir -p /usr/share/nvidia-p2p
+COPY nvidia-p2p-install-ko /usr/share/nvidia-p2p/nvidia-p2p-install-ko
+RUN chmod +x /usr/bin/nvidia-p2p-build /usr/share/nvidia-p2p/nvidia-p2p-install-ko
+
+CMD ["/bin/bash"]

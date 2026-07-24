@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+#
+# Host-side helper: install the freshly-built patched NVIDIA modules into the
+# running kernel's updates/ dir, reindex, and regenerate the initramfs so the
+# PATCHED module (not the stock one baked in when the kernel package installed)
+# is what loads at early boot.
+#
+# Runs on the HOST as root, invoked by nvidia-p2p-build via:
+#   distrobox-host-exec sudo <this> <kver> <srcdir-with-.ko>
+#
+set -euo pipefail
+
+KVER="${1:?usage: nvidia-p2p-install-ko KVER SRCDIR}"
+SRCDIR="${2:?usage: nvidia-p2p-install-ko KVER SRCDIR}"
+DEST="/lib/modules/${KVER}/updates"
+
+shopt -s nullglob
+kos=("$SRCDIR"/*.ko)
+[[ ${#kos[@]} -gt 0 ]] || { echo "ERROR: no .ko files in $SRCDIR" >&2; exit 1; }
+
+echo "==> Installing ${#kos[@]} module(s) to $DEST"
+mkdir -p "$DEST"
+# updates/ outranks extramodules/ and kernel/ in depmod search order, so the
+# patched build wins over the stock nvidia package.
+cp -f "${kos[@]}" "$DEST/"
+
+echo "==> depmod ${KVER}"
+depmod "$KVER"
+
+echo "==> Regenerating initramfs (so early boot loads the patched module)"
+if   command -v mkinitcpio       >/dev/null 2>&1; then mkinitcpio -P
+elif command -v dracut           >/dev/null 2>&1; then dracut -f --regenerate-all
+elif command -v update-initramfs >/dev/null 2>&1; then update-initramfs -u -k all
+else
+    echo "WARN: no known initramfs tool (mkinitcpio/dracut/update-initramfs)." >&2
+    echo "      If nvidia is in your initramfs, regenerate it manually or the stale" >&2
+    echo "      stock module will keep loading at early boot." >&2
+fi
+
+echo "==> Host install complete for ${KVER}. Reboot required."

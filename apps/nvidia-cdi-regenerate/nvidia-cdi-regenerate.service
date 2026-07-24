@@ -1,0 +1,18 @@
+[Unit]
+Description=Regenerate NVIDIA CDI spec to match currently-installed GPUs
+Documentation=man:nvidia-ctk(1)
+After=systemd-modules-load.service nvidia-persistenced.service
+Wants=nvidia-persistenced.service
+ConditionPathExists=/usr/bin/nvidia-ctk
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Make sure the /dev/nvidia* nodes exist before we enumerate them.
+ExecStartPre=-/usr/bin/nvidia-smi -L
+ExecStart=/usr/bin/nvidia-ctk cdi generate \
+    --disable-hook disable-device-node-modification \
+    --output /etc/cdi/nvidia.yaml
+
+[Install]
+WantedBy=multi-user.target

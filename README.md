@@ -68,6 +68,9 @@ distrobox enter <app>-box  # directly via distrobox
 | [`llama-cpp-rocm`](apps/llama-cpp-rocm/README.md) | llama.cpp (ROCm+Vulkan) | `llama-cpp-rocm-box` |
 | `lmstudio` | LM Studio | `lmstudio-box` |
 | [`nvbandwidth`](apps/nvbandwidth/README.md) | NVIDIA GPU/NVLink bandwidth | `nvbandwidth-box` |
+| [`nvidia-cdi-regenerate`](apps/nvidia-cdi-regenerate/README.md) | NVIDIA CDI auto-regen (host) | — |
+| [`nvidia-p2p-acs`](apps/nvidia-p2p-acs/README.md) | NVIDIA P2P ACS fix (host) | — |
+| [`nvidia-p2p-driver`](apps/nvidia-p2p-driver/README.md) | NVIDIA GeForce P2P module | `nvidia-p2p-driver-box` |
 | [`nvtop`](apps/nvtop/README.md) | GPU process monitor | `nvtop-box` |
 | `telegram` | Telegram Desktop | `telegram-box` |
 | [`unsloth`](apps/unsloth/README.md) | Unsloth LLM fine-tuning (ROCm) | `unsloth-box` |
