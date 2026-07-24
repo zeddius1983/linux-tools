@@ -1,4 +1,4 @@
-# nvidia-p2p-acs
+# nvidia-acs-service
 
 Boot-time systemd service that disables **PCIe ACS redirect** on the bridges above
 your P2P GPUs, so a PCIe switch routes GPU↔GPU peer traffic directly instead of
@@ -39,8 +39,8 @@ The target GPUs default to `10de:2204` (RTX 3090). To target a different clique,
 edit the unit after install and reload:
 
 ```bash
-sudoedit /etc/systemd/system/nvidia-p2p-acs.service   # Environment=P2P_GPU_PCI_IDS=...
-sudo systemctl daemon-reload && sudo systemctl restart nvidia-p2p-acs
+sudoedit /etc/systemd/system/nvidia-acs-service.service   # Environment=P2P_GPU_PCI_IDS=...
+sudo systemctl daemon-reload && sudo systemctl restart nvidia-acs-service
 ```
 
 Find your GPU IDs with `lspci -nn | grep -i nvidia` (the `[10de:xxxx]` part).
@@ -52,7 +52,7 @@ Find your GPU IDs with `lspci -nn | grep -i nvidia` (the `[10de:xxxx]` part).
 ## Install
 
 ```bash
-tools setup nvidia-p2p-acs
+tools setup nvidia-acs-service
 ```
 
 Runs `install.sh` on the host: ensures pciutils, installs the script to
@@ -61,20 +61,20 @@ Runs `install.sh` on the host: ensures pciutils, installs the script to
 ## Remove
 
 ```bash
-tools rm nvidia-p2p-acs
+tools rm nvidia-acs-service
 ```
 
 ## Files
 
 | Path | What |
 |---|---|
-| `/usr/local/sbin/nvidia-p2p-acs.sh` | the ACS-clearing script |
-| `/etc/systemd/system/nvidia-p2p-acs.service` | the boot unit |
+| `/usr/local/sbin/nvidia-acs-service.sh` | the ACS-clearing script |
+| `/etc/systemd/system/nvidia-acs-service.service` | the boot unit |
 
 ## Verify
 
 ```bash
-journalctl -u nvidia-p2p-acs -b          # lists bridges it cleared
+journalctl -u nvidia-acs-service -b          # lists bridges it cleared
 # after a reboot, the switch bridges above the GPUs should read 0000:
 for b in $(lspci -D | grep -i bridge | awk '{print $1}'); do
   v=$(sudo setpci -s "$b" ECAP_ACS+0x6.w 2>/dev/null) && echo "$b $v"
@@ -87,5 +87,5 @@ CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=0,1 nvbandwidth -t device_to_d
 
 - `nvidia-p2p-driver` — build/install the GeForce P2P-patched kernel module (the
   other half of consumer-GPU P2P).
-- `nvidia-cdi-regenerate` — keep the CDI spec fresh for GPU passthrough.
+- `nvidia-cdi-service` — keep the CDI spec fresh for GPU passthrough.
 - `nvbandwidth` — measure P2P bandwidth authoritatively.

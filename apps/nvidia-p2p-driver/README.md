@@ -30,7 +30,7 @@ CachyOS kernel from an Ubuntu/GCC container** — that's the whole reason for th
 - The host's installed **nvidia-open driver version must match the fork's pin**
   (`610.43.03` by default). `nvidia-p2p-build` refuses to build on a mismatch.
 - For actual P2P bandwidth you also want:
-  - `nvidia-p2p-acs` — clears PCIe ACS redirect (for switch-local P2P), and
+  - `nvidia-acs-service` — clears PCIe ACS redirect (for switch-local P2P), and
   - `iommu=pt` on the kernel cmdline.
 
 ## Install
@@ -84,7 +84,7 @@ distrobox-host-exec podman build --build-arg P2P_BRANCH=<branch> \
 ## Verify the full P2P stack (after reboot)
 
 This checks all three pieces at once — the patched driver (this app), the ACS boot
-service (`nvidia-p2p-acs`), and the CDI service (`nvidia-cdi-regenerate`).
+service (`nvidia-acs-service`), and the CDI service (`nvidia-cdi-service`).
 
 **1. Read-only status (no sudo).** The patched module should be *loaded* and *from
 `updates/`*, both boot services enabled+active, and IOMMU in passthrough:
@@ -94,7 +94,7 @@ KVER=$(uname -r)
 echo "loaded srcversion : $(cat /sys/module/nvidia/srcversion)"   # patched build, NOT the stock extramodules one
 echo "loaded from       : $(modinfo -F filename nvidia)"          # …/updates/nvidia.ko*
 modinfo -F srcversion /usr/lib/modules/$KVER/updates/nvidia.ko*   # patched .ko installed for THIS kernel
-for u in nvidia-cdi-regenerate.service nvidia-p2p-acs.service; do
+for u in nvidia-cdi-service.service nvidia-acs-service.service; do
   printf '%-32s enabled:%s active:%s\n' "$u" "$(systemctl is-enabled $u)" "$(systemctl is-active $u)"
 done
 [ -f /etc/cdi/nvidia.yaml ] && echo "cdi spec: present ($(grep -c name: /etc/cdi/nvidia.yaml) devices)"
@@ -108,7 +108,7 @@ orphaned (see [Durability](#durability-important)).
 **2. ACS actually cleared** (the boot service logs what it did):
 
 ```bash
-journalctl -u nvidia-p2p-acs.service -b --no-pager   # lists the bridges it cleared this boot
+journalctl -u nvidia-acs-service.service -b --no-pager   # lists the bridges it cleared this boot
 ```
 
 **3. P2P bandwidth — the end-to-end proof** (needs the `nvbandwidth` app; list only
@@ -126,6 +126,6 @@ cleared).
 
 ## Related
 
-- `nvidia-p2p-acs` — the PCIe ACS half of consumer-GPU P2P (required for switch P2P).
+- `nvidia-acs-service` — the PCIe ACS half of consumer-GPU P2P (required for switch P2P).
 - `nvbandwidth` — measure P2P bandwidth; `nvtop` — monitor GPUs.
 - Upstream fork: <https://github.com/aikitoria/open-gpu-kernel-modules>

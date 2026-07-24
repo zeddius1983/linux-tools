@@ -96,5 +96,5 @@ cat <<EOF
     cannot be hot-swapped. After reboot, verify:
 
       cat /sys/module/nvidia/srcversion      # should be the patched build
-      # (also make sure nvidia-p2p-acs is set up, then measure with nvbandwidth)
+      # (also make sure nvidia-acs-service is set up, then measure with nvbandwidth)
 EOF

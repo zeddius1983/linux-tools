@@ -8,7 +8,7 @@
 # renumbering (cards added/removed/moved under the switch, BIOS changes) with no
 # hardcoded bus addresses. Runs as a systemd oneshot at boot; needs root.
 #
-# Background: apps/nvidia-p2p-acs/.memory.md (and apps/nvbandwidth/.memory.md).
+# Background: apps/nvidia-acs-service/.memory.md (and apps/nvbandwidth/.memory.md).
 #
 set -u
 

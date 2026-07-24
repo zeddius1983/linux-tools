@@ -1,4 +1,4 @@
-# nvidia-cdi-regenerate
+# nvidia-cdi-service
 
 Boot-time systemd service that regenerates the **NVIDIA CDI spec**
 (`/etc/cdi/nvidia.yaml`) on every boot so it always matches the currently-installed
@@ -45,7 +45,7 @@ that doesn't have the toolkit yet.
 ## Install
 
 ```bash
-tools setup nvidia-cdi-regenerate
+tools setup nvidia-cdi-service
 ```
 
 Runs `install.sh` on the host: copies the unit to `/etc/systemd/system`,
@@ -54,7 +54,7 @@ Runs `install.sh` on the host: copies the unit to `/etc/systemd/system`,
 ## Remove
 
 ```bash
-tools rm nvidia-cdi-regenerate
+tools rm nvidia-cdi-service
 ```
 
 Disables and deletes the unit (leaves the current `/etc/cdi/nvidia.yaml` in place).
@@ -63,18 +63,18 @@ Disables and deletes the unit (leaves the current `/etc/cdi/nvidia.yaml` in plac
 
 | Path | What |
 |---|---|
-| `/etc/systemd/system/nvidia-cdi-regenerate.service` | the boot unit |
+| `/etc/systemd/system/nvidia-cdi-service.service` | the boot unit |
 | `/etc/cdi/nvidia.yaml` | the spec it regenerates (read by Podman/distrobox) |
 
 ## Verify
 
 ```bash
-systemctl status nvidia-cdi-regenerate
-journalctl -u nvidia-cdi-regenerate -b
+systemctl status nvidia-cdi-service
+journalctl -u nvidia-cdi-service -b
 grep name: /etc/cdi/nvidia.yaml
 ```
 
 ## Related
 
-- `nvidia-p2p-acs` — boot-time PCIe ACS fix for multi-GPU P2P over a switch.
+- `nvidia-acs-service` — boot-time PCIe ACS fix for multi-GPU P2P over a switch.
 - `nvidia-p2p-driver` — build/install the GeForce P2P-patched kernel module.

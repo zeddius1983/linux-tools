@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Install (or uninstall) the nvidia-p2p-acs boot service on the HOST.
+# Install (or uninstall) the nvidia-acs-service boot service on the HOST.
 #
 # The service clears PCIe ACS "P2P Request/Completion Redirect" on every bridge
 # above the target GPUs at each boot, so a PCIe switch routes GPU<->GPU peer
@@ -8,21 +8,32 @@
 # to the root complex (~1 GB/s + data corruption). Needed on hosts with the IOMMU
 # enabled, which re-enables ACS redirect on every boot.
 #
-# Invoked by `tools setup nvidia-p2p-acs` (runs on the host, so sudo has a real
-# TTY). `tools rm nvidia-p2p-acs` calls `install.sh uninstall`.
+# Invoked by `tools setup nvidia-acs-service` (runs on the host, so sudo has a real
+# TTY). `tools rm nvidia-acs-service` calls `install.sh uninstall`.
 #
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SCRIPT="nvidia-p2p-acs.sh"
-UNIT="nvidia-p2p-acs.service"
+SCRIPT="nvidia-acs-service.sh"
+UNIT="nvidia-acs-service.service"
 SCRIPT_DEST="/usr/local/sbin/${SCRIPT}"
 UNIT_DEST="/etc/systemd/system/${UNIT}"
+OLD_UNIT="nvidia-p2p-acs.service"                 # pre-rename names; migrate away
+OLD_SCRIPT_DEST="/usr/local/sbin/nvidia-p2p-acs.sh"
+
+remove_old() {
+    if [[ -e "/etc/systemd/system/${OLD_UNIT}" || -e "${OLD_SCRIPT_DEST}" ]]; then
+        echo "==> Migrating: removing old ${OLD_UNIT} / $(basename "$OLD_SCRIPT_DEST")..."
+        sudo systemctl disable --now "${OLD_UNIT}" 2>/dev/null || true
+        sudo rm -f "/etc/systemd/system/${OLD_UNIT}" "${OLD_SCRIPT_DEST}"
+    fi
+}
 
 uninstall() {
     echo "==> Disabling and removing ${UNIT}..."
     sudo systemctl disable --now "${UNIT}" 2>/dev/null || true
     sudo rm -f "${UNIT_DEST}" "${SCRIPT_DEST}"
+    remove_old
     sudo systemctl daemon-reload
     echo "==> Removed. (ACS bits are restored to firmware defaults on next reboot.)"
 }
@@ -47,6 +58,7 @@ if [[ "${1:-}" == "uninstall" ]]; then
 fi
 
 ensure_pciutils
+remove_old
 
 echo "==> Installing ${SCRIPT} -> ${SCRIPT_DEST}"
 sudo install -m 755 "${HERE}/${SCRIPT}" "${SCRIPT_DEST}"
@@ -63,6 +75,6 @@ echo ""
 cat <<'NOTE'
 ==> NOTE: this assumes the target GPUs are 10de:2204 (RTX 3090). For a different
     clique, edit Environment=P2P_GPU_PCI_IDS in
-    /etc/systemd/system/nvidia-p2p-acs.service and `sudo systemctl daemon-reload`.
+    /etc/systemd/system/nvidia-acs-service.service and `sudo systemctl daemon-reload`.
     Requires IOMMU passthrough (iommu=pt) for full P2P bandwidth.
 NOTE

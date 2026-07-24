@@ -8,7 +8,7 @@ Type=oneshot
 RemainAfterExit=yes
 # GPU PCI IDs the script targets; override here for a different clique.
 Environment=P2P_GPU_PCI_IDS=10de:2204
-ExecStart=/usr/local/sbin/nvidia-p2p-acs.sh
+ExecStart=/usr/local/sbin/nvidia-acs-service.sh
 
 [Install]
 WantedBy=multi-user.target
