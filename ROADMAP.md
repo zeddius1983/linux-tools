@@ -36,7 +36,11 @@ Priority order within each section: highest first.
 
 - [x] `amdgpu_top` — AMD GPU usage monitor
 - [x] `corefreq` — CPU frequency / perf monitor (kernel module build)
-- [ ] `nvtop` — GPU process monitor (NVIDIA / AMD)
+- [x] `nvtop` — GPU process monitor (NVIDIA / AMD), Fedora package + CDI passthrough
+- [x] `nvbandwidth` — NVIDIA GPU memory-bandwidth / NVLink benchmark (CUDA build container + CDI passthrough)
+- [x] `nvidia-cdi-service` — host-only boot service; regenerates the CDI spec each boot to match installed GPUs
+- [x] `nvidia-acs-service` — host-only boot service; clears PCIe ACS redirect for switch-local GPU P2P (renumber-proof)
+- [x] `nvidia-p2p-driver` — build/install the aikitoria GeForce-P2P-patched nvidia module (corefreq-style build container, Arch/Ubuntu)
 - [ ] `btop` — modern resource monitor
 
 ## Browsers / Web

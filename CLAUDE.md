@@ -70,7 +70,7 @@ Create `apps/<name>/` with the files below — `Dockerfile`, `exports`, `descrip
 
 | File | Purpose |
 |---|---|
-| `Dockerfile` | Container image definition |
+| `Dockerfile` | Container image definition. Can instead be a `Dockerfile.ubuntu` + `Dockerfile.arch` pair — see [Multi-base-image pattern](#multi-base-image-pattern). |
 | `exports` | What to expose to the host (see export types below) |
 | `description` | One-line label shown in the interactive TUI (keep it under ~26 chars — that's the TUI description column width) |
 | `README.md` | **Required.** App-specific usage docs (see below). Cat-ed by `tools setup` at the end of install, so it doubles as the post-install screen. |
@@ -122,6 +122,12 @@ Key points:
 
 Example: `apps/corefreq/` — container provides `build-essential` + CoreFreq source; `corefreq-setup` builds the kernel module inside the container and copies it to `~/.local/corefreq/` on the host.
 
+### Multi-base-image pattern
+
+Some build-environment apps need a container toolchain close to whatever built the *host* kernel (or other host binaries the container has to interoperate with) — no single base image tracks both Debian/Ubuntu-family and Arch-family hosts closely enough. Ship `Dockerfile.ubuntu` and `Dockerfile.arch` instead of a single `Dockerfile`; `tools setup`/`tools build` (`cmd_build` in `lib/commands.sh`) detects the pair and automatically builds with `-f Dockerfile.$(host_distro_family)`, where `host_distro_family` (`lib/helpers.sh`) greps the host's `/etc/os-release` `ID`/`ID_LIKE` for `arch`, defaulting to `ubuntu` otherwise. Apps with a single `Dockerfile` are completely unaffected — this only activates when both variant files are present.
+
+Example: `apps/corefreq/` needs this because CachyOS (Arch-family) kernels are built with Clang and carry Clang-only codegen flags, while Ubuntu-family kernels are GCC-built — no amount of extra packages in a single `ubuntu:24.04` image closes that gap cleanly (see `apps/corefreq/.memory.md` for the three escalating workarounds that were tried before splitting the Dockerfile).
+
 ### `distrobox-host-exec` pattern
 
 `distrobox-host-exec <cmd>` runs a command on the host from inside a container. Use it whenever a wrapper script needs host-level operations that container capabilities can't provide:
@@ -130,8 +136,8 @@ Example: `apps/corefreq/` — container provides `build-essential` + CoreFreq so
 # load a kernel module on the host
 distrobox-host-exec sudo insmod "$HOME/.local/corefreq/corefreqk.ko"
 
-# check host process list
-distrobox-host-exec pgrep -x corefreqd
+# check host process list (use -f, not -x -- see note below on exact-name matching)
+distrobox-host-exec pgrep -f corefreqd
 
 # start a background daemon on the host
 distrobox-host-exec sudo bash -c "nohup ${DAEMON} &>/dev/null &"
@@ -144,13 +150,21 @@ distrobox-host-exec lsmod | grep -q "^corefreqk "
 
 **When to use it:** rootless Podman containers with `--privileged` do not get `CAP_SYS_MODULE`, so `insmod`/`rmmod` fail even inside a privileged container. `distrobox-host-exec` bypasses this by delegating to the host's sudo.
 
+**Host prerequisite — the `flatpak` package must be installed on the host.** `distrobox-host-exec` shells out to `host-spawn`, which (for these non-`--init` containers) talks to the host over the `org.freedesktop.Flatpak` D-Bus interface — the same mechanism `flatpak-spawn --host` uses. That interface is provided by the `flatpak` package itself, *not* by `xdg-desktop-portal` or its KDE/GTK backends — a host can have all of those running and still have no `flatpak`-related name on the session bus at all. If `flatpak` isn't installed, **every** `distrobox-host-exec` call on that host fails completely silently: no error, no hang, it just returns with no output, as if the command were a no-op. This affects every app in this repo that relies on `distrobox-host-exec` (corefreq's module load/daemon start, shell-toolbox's host package installs, comfyui's browser launch, etc.) — it's a one-time host dependency, not something any single app's Dockerfile can work around.
+- Diagnose with `busctl --user list | grep -i flatpak` (should show something once `flatpak` is installed) and `distrobox-host-exec -v echo hello` (verbose trace stops right after `+ host-spawn echo hello` with nothing further when this is the cause).
+
+**Never redirect stderr away from a `distrobox-host-exec sudo ...` call**, even one you're intentionally letting fail with `|| true`. `sudo`'s credential cache does not appear to carry over between separate `distrobox-host-exec` invocations (each one goes through `host-spawn`'s D-Bus `HostCommand` call, seemingly as an unrelated host-side session each time) — a single script calling `distrobox-host-exec sudo` three times in a row can prompt `[sudo] password for ...` three separate times, not once. A `2>/dev/null` on one of those calls doesn't just hide noise, it hides that prompt, so the command silently never runs. Letting a command fail (`|| true`) and hiding *why* it failed are independent choices — keep the first, never do the second, on any `sudo` call reached through `distrobox-host-exec`.
+
+**Match process names with `pgrep -f`/`pkill -f`, not `-x`, unless you're certain the daemon doesn't rename itself.** `-x` requires an exact match against `/proc/[pid]/comm`; several real daemons (CoreFreq's `corefreqd` included, which forks into `corefreqd-pmgr`/`corefreqd-cmgr` worker processes via `prctl`/`PR_SET_NAME`) rename their own processes away from the binary's name, so `-x <binary-name>` silently matches nothing even while the daemon is running. This is easy to misdiagnose as a `distrobox-host-exec`/host-spawn visibility problem — confirm with `ps aux | grep -i <name>` run directly on the host before assuming that.
+- Fix: install `flatpak` on the host (e.g. `sudo pacman -S flatpak` on Arch-family hosts) — no container rebuild needed, this is purely a host-side gap.
+
 ### Base image selection
 
 | Situation | Base image |
 |---|---|
 | AMD GPU access, Vulkan, GUI rendering (egui/WGPU) | `registry.fedoraproject.org/fedora:43` |
 | App with official Ubuntu/Debian APT repo | `ubuntu:24.04` |
-| Kernel module compilation (must match host ABI) | `ubuntu:24.04` |
+| Kernel module compilation (must match host ABI) | `ubuntu:24.04`, or a `Dockerfile.ubuntu`/`Dockerfile.arch` pair if the app must also support Arch-family hosts — see [Multi-base-image pattern](#multi-base-image-pattern) |
 | x86-only app on a mixed-arch host | `FROM --platform=linux/amd64 ubuntu:24.04` |
 
 For AMD GPU GUI apps, the minimum required packages are:
@@ -217,3 +231,7 @@ Distrobox mounts the host's `$HOME` inside the container. This means:
 - **`/opt` permissions in Ubuntu-based images**: directories created under `/opt` during the image build are owned by root. Apps that write runtime state there (logs, user dirs, temp files) will fail with `PermissionError` when run as the Distrobox user. Fix: `RUN chmod -R a+rwX /opt/<app>` at the end of the Dockerfile.
 - **`rocm/pytorch` venv path**: the `rocm/pytorch` base image installs all Python packages into `/opt/venv`, not the system Python. Wrapper scripts must call `/opt/venv/bin/python` explicitly — bare `python` resolves to `/usr/bin/python` which has no site-packages.
 - **`--group-add <name>` on Ubuntu-based images**: Podman resolves group names against the container's `/etc/group`. Ubuntu images don't ship `render` or `video` groups, so `--group-add render` causes "Unable to find group render" and the container fails to start. Use numeric GIDs instead (e.g. `--group-add 992 --group-add 44`); Podman accepts GIDs directly without an `/etc/group` lookup. Check host GIDs with `getent group render video`.
+- **Prebuilt kernel-headers tools (e.g. `tools/objtool/objtool`) are tied to the *host's* binutils, not the container's**: kernel-headers packages ship prebuilt binaries linked against whatever binutils built that kernel. On a rolling-release host (CachyOS, Arch) these can need a newer shared library (e.g. `libsframe.so.3`) than an older container distro packages, failing with `error while loading shared libraries: ... not found` — and since `/lib/modules`/`/usr/src` are mounted read-only, the container can't just rebuild the tool from source. Fix: `ldd` the prebuilt binary, and for each `not found` library, copy it from `/run/host/usr/lib` (Distrobox mounts the full host root read-only there in every container, no extra `create_flags` needed) into a small scratch dir, then point `LD_LIBRARY_PATH` at just that dir — never add the host's entire lib tree to `LD_LIBRARY_PATH` directly, or host copies of glibc/libstdc++/etc. can shadow the container's own and break the build in more confusing ways. See `apps/corefreq/Dockerfile.ubuntu`/`Dockerfile.arch` for the implementation.
+- **`pahole` is needed by any kernel with `CONFIG_DEBUG_INFO_BTF=y`**, not just Arch/CachyOS — this includes stock Ubuntu kernels. Missing it fails the module build late, at the BTF-encoding step (`gen-btf.sh: pahole: not found`), well after compilation succeeds — easy to mistake for a different problem. The **package name differs by distro**: Debian/Ubuntu calls it `dwarves`, Arch calls it `pahole` directly (there is no `dwarves` package on Arch — `pacman -S dwarves` fails with `target not found`, and critically, an unresolvable target aborts the *entire* `pacman -S` transaction, silently skipping every other package in the same command too). Install the right name for each base image regardless of distro.
+- **`distrobox-host-exec` needs `curl` or `wget` in the container** to bootstrap its own `host-spawn` helper binary on a fresh box (it's installed per-container, not shared via `$HOME`, so every new box needs this at least once). Without either, the very first `distrobox-host-exec` call in a box silently fails: the wrapper script exits early under its own `set -o errexit`, and if the caller also uses `set -e` (common in this repo's wrapper scripts), the failure can look like nothing happened at all — no error text, just an early return. Symptom to watch for: a script that calls `distrobox-host-exec sudo insmod ...` (or similar) prints its "doing X..." message and then returns with no further output, and `dmesg` shows no corresponding kernel-side attempt (confirming the failure happened before reaching the host command at all). Any minimal/from-scratch base image (Arch, slim Ubuntu, etc.) is exposed to this — install `curl` alongside whatever else the app needs.
+- **Don't let a trailing `|| true` swallow failures from an earlier `&&` in the same `RUN`**: `cmd1 && cmd2 || true` masks a `cmd1` failure just as much as a `cmd2` failure, because `&&`/`||` chain left-to-right at the same precedence (`(cmd1 && cmd2) || true`, not `cmd1 && (cmd2 || true)`). If only `cmd2` (e.g. a best-effort cache-clean step) should be allowed to fail, wrap it explicitly: `cmd1 && (cmd2 || true)`. Otherwise a broken `cmd1` — like a pacman install with a typo'd package name — reports success and commits an image layer that's silently missing everything it was supposed to install.

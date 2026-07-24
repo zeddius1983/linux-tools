@@ -7,8 +7,19 @@ cmd_build() {
     # .buildarg wizard selections arrive as extra --build-arg pairs.
     local -a extra_args=()
     mapfile -t extra_args < <(wizard_build_args "$app")
+    # Apps that need a container toolchain close to the host's (e.g. kernel
+    # module builds) can ship Dockerfile.ubuntu + Dockerfile.arch instead of a
+    # single Dockerfile; pick the one matching this host's distro family.
+    local -a dockerfile_args=()
+    if [[ -f "$APPS_DIR/$app/Dockerfile.ubuntu" && -f "$APPS_DIR/$app/Dockerfile.arch" ]]; then
+        local variant
+        variant="$(host_distro_family)"
+        echo "==> Detected ${variant}-family host; using Dockerfile.${variant}"
+        dockerfile_args=(-f "$APPS_DIR/$app/Dockerfile.${variant}")
+    fi
     $RUNTIME build --build-arg CACHE_BUST="$(date +%s)" \
         "${extra_args[@]+"${extra_args[@]}"}" \
+        "${dockerfile_args[@]+"${dockerfile_args[@]}"}" \
         -t "$(image_name "$app")" "$APPS_DIR/$app"
 }
 
@@ -193,6 +204,14 @@ DESKTOPEOF
 cmd_rm() {
     local app="$1"
     local box
+
+    # Container-less host-only apps have no box — delegate to install.sh uninstall.
+    if is_hostonly_installer "$app"; then
+        echo "==> '$app' is a host-only install — running install.sh uninstall on the host..."
+        bash "$APPS_DIR/$app/install.sh" uninstall
+        return
+    fi
+
     box="$(box_name "$app")"
 
     # distrobox rm handles exported binaries; we handle the desktop files it leaves behind
@@ -210,6 +229,18 @@ cmd_enter() {
 
 cmd_setup() {
     local app="$1"
+    [[ -d "$APPS_DIR/$app" ]] || { echo "Error: no app directory at $APPS_DIR/$app" >&2; exit 1; }
+
+    # Container-less host-only apps install straight to the host (systemd units,
+    # host scripts, package deps) with no image or box, so skip build/create/export
+    # entirely and just run install.sh on the host — where sudo has a real TTY.
+    if is_hostonly_installer "$app"; then
+        echo "==> '$app' is a host-only install (no container) — running install.sh on the host..."
+        echo ""
+        bash "$APPS_DIR/$app/install.sh" || { echo "Error: install.sh failed for '$app'" >&2; exit 1; }
+        return  # dispatcher (tools.sh) calls cmd_setup_finish next
+    fi
+
     if [[ -f "$APPS_DIR/$app/host-only" ]]; then
         echo "==> Note: '$app' is a HOST-ONLY install."
         echo "    Binaries → ~/.local/bin   Config → ~/.config/zsh/   Shell → ~/.zshrc"

@@ -62,11 +62,16 @@ distrobox enter <app>-box  # directly via distrobox
 | `codex-cli` | OpenAI Codex CLI | `codex-cli-box` |
 | `comfyui` | ComfyUI | `comfyui-box` |
 | `copilot-cli` | GitHub Copilot CLI | `copilot-cli-box` |
-| `corefreq` | CoreFreq CPU monitor | `corefreq-box` |
+| [`corefreq`](apps/corefreq/README.md) | CoreFreq CPU monitor | `corefreq-box` |
 | [`dev-toolbox`](apps/dev-toolbox/README.md) | Dev Toolbox | `dev-toolbox-box` |
 | [`jetbrains-toolbox`](apps/jetbrains-toolbox/README.md) | JetBrains Toolbox | `jetbrains-toolbox-box` |
 | [`llama-cpp-rocm`](apps/llama-cpp-rocm/README.md) | llama.cpp (ROCm+Vulkan) | `llama-cpp-rocm-box` |
 | [`lmstudio`](apps/lmstudio/README.md) | LM Studio (AMD/NVIDIA) | `lmstudio-box` |
+| [`nvbandwidth`](apps/nvbandwidth/README.md) | NVIDIA GPU/NVLink bandwidth | `nvbandwidth-box` |
+| [`nvidia-cdi-service`](apps/nvidia-cdi-service/README.md) | NVIDIA CDI auto-regen (host) | — |
+| [`nvidia-acs-service`](apps/nvidia-acs-service/README.md) | NVIDIA P2P ACS fix (host) | — |
+| [`nvidia-p2p-driver`](apps/nvidia-p2p-driver/README.md) | NVIDIA GeForce P2P module | `nvidia-p2p-driver-box` |
+| [`nvtop`](apps/nvtop/README.md) | GPU process monitor | `nvtop-box` |
 | `telegram` | Telegram Desktop | `telegram-box` |
 | [`unsloth`](apps/unsloth/README.md) | Unsloth LLM fine-tuning (ROCm) | `unsloth-box` |
 | [`shell-toolbox`](apps/shell-toolbox/README.md) | Shell Toolbox (host-only installer) | — |
