@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+#
+# Build the aikitoria GeForce-P2P-patched NVIDIA open kernel modules against the
+# RUNNING host kernel (inside this build container), then install them onto the
+# host so PCIe P2P works on consumer GPUs (RTX 3090/4090 etc.).
+#
+# Exported as `bin:nvidia-p2p-build`; run it in a terminal after `tools setup
+# nvidia-p2p-driver`, and again after every kernel or nvidia-open upgrade.
+#
+set -euo pipefail
+
+SRC=/opt/open-gpu-kernel-modules            # cloned at image-build time
+SHARE=/usr/share/nvidia-p2p                 # baked host-helper lives here
+DEST="$HOME/.local/nvidia-p2p"              # shared home → visible on the host
+KVER="$(uname -r)"
+KBUILD="/lib/modules/${KVER}/build"
+
+[[ -d "$SRC" ]] || { echo "ERROR: source tree $SRC missing (rebuild the image)." >&2; exit 1; }
+if [[ ! -d "$KBUILD" ]]; then
+    echo "ERROR: kernel build tree not found at $KBUILD" >&2
+    echo "  Install headers matching $(uname -r) on the HOST, e.g.:" >&2
+    echo "    Arch/CachyOS: pacman -S linux-cachyos-headers   (match your kernel)" >&2
+    echo "    Debian/Ubuntu: apt install linux-headers-\$(uname -r)" >&2
+    echo "    Fedora: dnf install kernel-devel-\$(uname -r)" >&2
+    exit 1
+fi
+
+# ── Driver-version guard ─────────────────────────────────────────────────────
+# The fork is pinned to ONE driver version. If the host's loaded driver has moved
+# past it, a freshly built module would refuse to load and break the GPU. Refuse
+# to build in that case (best-effort: skipped if we can't read the host version).
+fork_ver="$(grep -m1 -oE '[0-9]+\.[0-9]+\.[0-9]+' "$SRC/version.mk" 2>/dev/null || true)"
+host_ver="$(distrobox-host-exec cat /sys/module/nvidia/version 2>/dev/null | tr -d '[:space:]' || true)"
+echo "==> Patched module targets driver ${fork_ver:-unknown}; host loaded driver ${host_ver:-unknown}"
+if [[ -n "$fork_ver" && -n "$host_ver" && "$fork_ver" != "$host_ver" ]]; then
+    echo "!! DRIVER MISMATCH: patched module ($fork_ver) != host driver ($host_ver)." >&2
+    echo "!! A module built now would not load. Rebuild the box against the matching" >&2
+    echo "!! branch, e.g.:  tools build nvidia-p2p-driver  after setting P2P_BRANCH" >&2
+    echo "!! (edit Dockerfile.arch ARG P2P_BRANCH, or pass --build-arg)." >&2
+    exit 1
+fi
+
+# ── Toolchain selection ──────────────────────────────────────────────────────
+declare -a MK=(SYSSRC="$KBUILD")
+if grep -q '^CONFIG_CC_IS_CLANG=y' "$KBUILD/.config" 2>/dev/null; then
+    echo "==> Host kernel was built with Clang → building modules with the LLVM toolchain"
+    MK+=(LLVM=1 IGNORE_CC_MISMATCH=1 CC=clang LD=ld.lld OBJDUMP=llvm-objdump \
+         AR=llvm-ar NM=llvm-nm STRIP=llvm-strip OBJCOPY=llvm-objcopy)
+fi
+
+# ── Stage host-only libs for the prebuilt objtool ────────────────────────────
+# Kernel-headers ship a prebuilt tools/objtool/objtool linked against the HOST's
+# binutils; on a rolling host it can need a newer shared lib than this image has.
+# /usr/src + /lib/modules are mounted read-only so we can't rebuild it — instead
+# stage just the missing libs from the host root (/run/host) into a scratch dir.
+OBJTOOL="${KBUILD}/tools/objtool/objtool"
+if [[ -x "$OBJTOOL" ]]; then
+    LIBDIR="$HOME/.local/nvidia-p2p-libs"
+    mkdir -p "$LIBDIR"
+    MISSING="$(ldd "$OBJTOOL" 2>/dev/null | awk '/not found/ {print $1}')"
+    for lib in $MISSING; do
+        for hostdir in /run/host/usr/lib /run/host/usr/lib64 /run/host/lib; do
+            [[ -e "${hostdir}/${lib}" ]] && { cp -L "${hostdir}/${lib}" "${LIBDIR}/${lib}"; break; }
+        done
+    done
+    if [[ -n "$MISSING" ]]; then
+        echo "==> Host objtool needs libs not in this image (${MISSING}); staged from /run/host"
+        export LD_LIBRARY_PATH="${LIBDIR}:${LD_LIBRARY_PATH:-}"
+    fi
+fi
+
+# ── Build ────────────────────────────────────────────────────────────────────
+echo "==> Building patched NVIDIA modules for kernel ${KVER} ..."
+make -C "$SRC" -j"$(nproc)" modules "${MK[@]}"
+
+mapfile -t kos < <(find "$SRC/kernel-open" -maxdepth 1 -name '*.ko' 2>/dev/null)
+[[ ${#kos[@]} -gt 0 ]] || { echo "ERROR: build produced no .ko files" >&2; exit 1; }
+echo "==> Built: ${kos[*]##*/}"
+
+mkdir -p "$DEST"
+rm -f "$DEST"/*.ko
+cp "${kos[@]}" "$DEST/"
+install -m 755 "$SHARE/nvidia-p2p-install-ko" "$DEST/nvidia-p2p-install-ko"
+
+# ── Install onto the host ────────────────────────────────────────────────────
+# /lib/modules is read-only in this container, so the copy-to-updates + depmod +
+# initramfs regen must run on the HOST. sudo prompts here (you have a real TTY).
+echo "==> Installing modules onto the host (sudo may prompt)..."
+distrobox-host-exec sudo "$DEST/nvidia-p2p-install-ko" "$KVER" "$DEST"
+
+cat <<EOF
+
+==> Done. The patched module set is installed to /lib/modules/${KVER}/updates/.
+
+    REBOOT NOW to load it — the live NVIDIA driver is in use by your display and
+    cannot be hot-swapped. After reboot, verify:
+
+      cat /sys/module/nvidia/srcversion      # should be the patched build
+      # (also make sure nvidia-acs-service is set up, then measure with nvbandwidth)
+EOF

@@ -1,0 +1,29 @@
+FROM docker.io/library/archlinux:base-devel
+
+# Build environment for the aikitoria GeForce-P2P-patched NVIDIA open kernel
+# modules on Arch-family hosts. CachyOS kernels are built with Clang + LLD/ThinLTO,
+# so an out-of-tree module must be built with the LLVM toolchain (clang/lld/llvm) —
+# GCC produces a module that won't link/load against a Clang-LTO kernel. This is the
+# same reason corefreq ships an Arch variant. `llvm` (not just `lld`) is needed for
+# Kbuild's LLVM=1 path (llvm-objcopy/ar/nm for BTF post-processing). pahole (Arch's
+# name; "dwarves" is the Debian name) is required for CONFIG_DEBUG_INFO_BTF. curl
+# lets distrobox-host-exec bootstrap its host-spawn helper on a fresh box.
+RUN pacman -Syu --noconfirm --needed \
+        clang lld llvm pahole git make gcc kmod sudo curl ca-certificates && \
+    (yes | pacman -Scc --noconfirm >/dev/null 2>&1 || true)
+
+# aikitoria fork + branch pinned to a specific driver version (has GeForce PCIe P2P
+# via BAR1). Override with --build-arg to track a different driver. CACHE_BUST (set
+# by `tools build`) busts the clone layer so a rebuild re-pulls the branch head.
+ARG P2P_REMOTE=https://github.com/aikitoria/open-gpu-kernel-modules
+ARG P2P_BRANCH=610.43.03-p2p
+ARG CACHE_BUST=0
+RUN git clone --depth=1 --branch "${P2P_BRANCH}" "${P2P_REMOTE}" /opt/open-gpu-kernel-modules
+
+# Build wrapper (exported to the host PATH) + host-side install helper.
+COPY nvidia-p2p-build /usr/bin/nvidia-p2p-build
+RUN mkdir -p /usr/share/nvidia-p2p
+COPY nvidia-p2p-install-ko /usr/share/nvidia-p2p/nvidia-p2p-install-ko
+RUN chmod +x /usr/bin/nvidia-p2p-build /usr/share/nvidia-p2p/nvidia-p2p-install-ko
+
+CMD ["/bin/bash"]
