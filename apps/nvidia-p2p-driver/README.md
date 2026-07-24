@@ -81,14 +81,48 @@ distrobox-host-exec podman build --build-arg P2P_BRANCH=<branch> \
 | `~/.local/nvidia-p2p/*.ko` | built modules (staging, shared home) |
 | `/lib/modules/<kver>/updates/nvidia*.ko` | installed patched modules (host) |
 
-## Verify (after reboot)
+## Verify the full P2P stack (after reboot)
+
+This checks all three pieces at once — the patched driver (this app), the ACS boot
+service (`nvidia-p2p-acs`), and the CDI service (`nvidia-cdi-regenerate`).
+
+**1. Read-only status (no sudo).** The patched module should be *loaded* and *from
+`updates/`*, both boot services enabled+active, and IOMMU in passthrough:
 
 ```bash
-cat /sys/module/nvidia/srcversion        # = the patched build's srcversion
-# with nvidia-p2p-acs applied and only P2P GPUs visible:
-CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=0,1 \
-  nvbandwidth -t device_to_device_memcpy_read_ce   # ~26 GB/s on 2×3090 over a switch
+KVER=$(uname -r)
+echo "loaded srcversion : $(cat /sys/module/nvidia/srcversion)"   # patched build, NOT the stock extramodules one
+echo "loaded from       : $(modinfo -F filename nvidia)"          # …/updates/nvidia.ko*
+modinfo -F srcversion /usr/lib/modules/$KVER/updates/nvidia.ko*   # patched .ko installed for THIS kernel
+for u in nvidia-cdi-regenerate.service nvidia-p2p-acs.service; do
+  printf '%-32s enabled:%s active:%s\n' "$u" "$(systemctl is-enabled $u)" "$(systemctl is-active $u)"
+done
+[ -f /etc/cdi/nvidia.yaml ] && echo "cdi spec: present ($(grep -c name: /etc/cdi/nvidia.yaml) devices)"
+grep -o 'iommu=[a-z]*' /proc/cmdline                              # expect iommu=pt
 ```
+
+The loaded `srcversion` matching the patched build (not the stock `extramodules`
+one) is the single most important line — if it's changed, the patched module was
+orphaned (see [Durability](#durability-important)).
+
+**2. ACS actually cleared** (the boot service logs what it did):
+
+```bash
+journalctl -u nvidia-p2p-acs.service -b --no-pager   # lists the bridges it cleared this boot
+```
+
+**3. P2P bandwidth — the end-to-end proof** (needs the `nvbandwidth` app; list only
+the P2P GPUs so a non-P2P card can't poison the result):
+
+```bash
+CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=0,1 nvbandwidth \
+  -t device_to_device_memcpy_read_ce -t device_to_device_bidirectional_memcpy_read_ce
+```
+
+Expect ~26 GB/s unidirectional / ~52 GB/s bidirectional on 2×RTX 3090 over a PEX880xx
+switch, a near-zero coefficient of variation, and **no** `Invalid value when checking
+the pattern` error (that error means peer writes are being redirected — ACS is not
+cleared).
 
 ## Related
 
