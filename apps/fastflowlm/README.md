@@ -46,7 +46,20 @@ hard, it has nowhere to go and prints:
 ```
 
 Requirements scale with the model. Small models fit under a typical 15–16 GB
-default and need no action; `qwen3.6-moe:35b-a3b` asks for **33.1 GB**.
+default; `qwen3.6-moe:35b-a3b` asks for **33.1 GB**.
+
+**The warning is not fatal, and in most cases nothing breaks.** FLM logs it and
+carries on without pinning: a `qwen3.6-moe:35b-a3b` session measured 24.5 GB RSS
+with `VmLck: 16 kB` — essentially nothing locked. It works because the NPU reaches
+memory through **IOMMU SVA**: the device walks the process's own page tables via a
+PASID, so it addresses ordinary pageable memory and needs no pre-pinned DMA
+buffers. Pinning is an optimization on this path, not a requirement.
+
+It matters when pages can actually be evicted. On a host with **no swap**,
+anonymous pages cannot be paged out at all, so `mlock` buys close to nothing and
+raising the limit is cosmetic. With swap enabled and real memory pressure, an
+evicted page the NPU is about to touch costs an IOMMU page-fault stall — that is
+the case the limit protects against.
 
 To raise the ceiling, add a drop-in — this is a *ceiling*, not a reservation,
 so nothing is preallocated and an idle system consumes nothing:
