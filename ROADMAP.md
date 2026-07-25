@@ -15,6 +15,7 @@ Priority order within each section: highest first.
 - [ ] `sgpt` — ShellGPT: AI shell assistant; OpenAI + Ollama backends (https://github.com/TheR1D/shell_gpt)
 - [x] `unsloth` — fast LLM fine-tuning (https://unsloth.ai/docs)
 - [x] `llama-cpp-rocm` — llama.cpp LLM inference engine (ROCm + Vulkan backends, `--device` selection, multi-stage build, `llama` dispatcher + `llama-serve`)
+- [x] `fastflowlm` — Ollama-style LLM runtime running fully on the AMD Ryzen AI NPU (XDNA2); XRT userspace from the lemonade PPA, release-picker wizard, `flm-doctor` host prerequisite check
 - [ ] `openclaw` — personal AI assistant CLI + gateway; routes across AI providers, persistent memory, messaging integrations (https://openclaw.ai/)
 
 ## Development Tools

@@ -1,0 +1,2 @@
+Run `flm-doctor` first — it checks the host-side pieces (amdxdna driver, IOMMU,
+memlock limit) that the container cannot provide. Then: `flm run llama3.2:1b`.

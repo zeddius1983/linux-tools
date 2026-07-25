@@ -64,6 +64,7 @@ distrobox enter <app>-box  # directly via distrobox
 | `copilot-cli` | GitHub Copilot CLI | `copilot-cli-box` |
 | [`corefreq`](apps/corefreq/README.md) | CoreFreq CPU monitor | `corefreq-box` |
 | [`dev-toolbox`](apps/dev-toolbox/README.md) | Dev Toolbox | `dev-toolbox-box` |
+| [`fastflowlm`](apps/fastflowlm/README.md) | FastFlowLM (Ryzen AI NPU) | `fastflowlm-box` |
 | [`jetbrains-toolbox`](apps/jetbrains-toolbox/README.md) | JetBrains Toolbox | `jetbrains-toolbox-box` |
 | [`llama-cpp-rocm`](apps/llama-cpp-rocm/README.md) | llama.cpp (ROCm+Vulkan) | `llama-cpp-rocm-box` |
 | [`lmstudio`](apps/lmstudio/README.md) | LM Studio (AMD/NVIDIA) | `lmstudio-box` |
