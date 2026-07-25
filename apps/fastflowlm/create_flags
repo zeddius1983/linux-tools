@@ -1,0 +1,1 @@
+--device /dev/accel/accel0 --group-add 992 --security-opt seccomp=unconfined --ipc=host

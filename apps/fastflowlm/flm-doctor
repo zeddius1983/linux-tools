@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+# Check every layer the Ryzen AI NPU stack needs, host-side and container-side.
+#
+# FastFlowLM only works when all of these line up:
+#   host   — kernel 7.0+ (or amdxdna-dkms), amdxdna module bound, NPU firmware
+#            1.1.0.0+, IOMMU enabled (the driver binds via IOMMU SVA), a
+#            memlock rlimit large enough for the model
+#   here   — /dev/accel/accel0 passed into the box, XRT userspace able to open it
+set -uo pipefail
+
+pass=0 warn=0 fail=0
+ok()   { printf '  \033[32m✔\033[0m %s\n' "$*"; pass=$((pass + 1)); }
+note() { printf '  \033[33m!\033[0m %s\n' "$*"; warn=$((warn + 1)); }
+bad()  { printf '  \033[31m✘\033[0m %s\n' "$*"; fail=$((fail + 1)); }
+hdr()  { printf '\n\033[1m%s\033[0m\n' "$*"; }
+
+hdr "Host kernel and driver"
+
+kver="$(uname -r)"
+kmaj="${kver%%.*}"
+if [[ "$kmaj" =~ ^[0-9]+$ ]] && ((kmaj >= 7)); then
+    ok "kernel $kver (in-tree amdxdna available)"
+else
+    note "kernel $kver — amdxdna is in-tree only on 7.0+; you need amdxdna-dkms below that"
+fi
+
+if [[ -d /sys/module/amdxdna ]]; then
+    ok "amdxdna module loaded"
+else
+    bad "amdxdna module not loaded on the host — install amdxdna-dkms or boot a 7.0+ kernel"
+fi
+
+hdr "NPU device"
+
+if [[ -e /dev/accel/accel0 ]]; then
+    ok "/dev/accel/accel0 visible inside the box"
+    if [[ -r /dev/accel/accel0 && -w /dev/accel/accel0 ]]; then
+        ok "/dev/accel/accel0 is readable and writable"
+    else
+        bad "/dev/accel/accel0 is not accessible — your host user must be in the group owning it (usually 'render')"
+    fi
+else
+    bad "/dev/accel/accel0 missing — either the host has no XDNA2 NPU, or create_flags did not pass the device in"
+fi
+
+hdr "IOMMU"
+
+# amdxdna_drm_open() binds the process address space through IOMMU SVA. With
+# the IOMMU disabled the device still probes and /dev/accel/accel0 still
+# appears, but every open() fails with "SVA bind device failed, ret -19".
+cmdline="$(cat /proc/cmdline 2>/dev/null || true)"
+if [[ "$cmdline" == *amd_iommu=off* || "$cmdline" == *iommu=off* ]]; then
+    bad "IOMMU is disabled on the kernel command line — the NPU will probe but never open"
+    printf '      remove amd_iommu=off / iommu=off from GRUB_CMDLINE_LINUX_DEFAULT in\n'
+    printf '      /etc/default/grub, then: sudo update-grub && reboot\n'
+    printf '      current cmdline: %s\n' "$cmdline"
+elif [[ -d /sys/kernel/iommu_groups ]] && [[ -n "$(ls -A /sys/kernel/iommu_groups 2>/dev/null)" ]]; then
+    ok "IOMMU active ($(ls /sys/kernel/iommu_groups | wc -l) groups)"
+else
+    note "no IOMMU groups found — if 'flm run' fails with an SVA bind error, enable the IOMMU in BIOS and on the kernel command line"
+fi
+
+hdr "Memlock limit"
+
+lim="$(ulimit -l)"
+if [[ "$lim" == "unlimited" ]]; then
+    ok "memlock unlimited"
+else
+    note "memlock limited to ${lim} KB — large models may fail to pin memory"
+    printf '      to lift it, add to /etc/security/limits.conf on the HOST and reboot:\n'
+    printf '        *    soft    memlock    unlimited\n'
+    printf '        *    hard    memlock    unlimited\n'
+fi
+
+hdr "XRT userspace"
+
+if command -v xrt-smi >/dev/null 2>&1; then
+    if xrt_out="$(xrt-smi examine 2>&1)"; then
+        if grep -qiE 'npu|ryzen' <<<"$xrt_out"; then
+            ok "xrt-smi sees the NPU"
+        else
+            bad "xrt-smi ran but listed no NPU — 'flm run' will fail with \"No such device with index '0'\""
+        fi
+    else
+        bad "xrt-smi examine failed"
+    fi
+    printf '%s\n' "$xrt_out" | sed 's/^/      /'
+else
+    bad "xrt-smi not found in the container image"
+fi
+
+hdr "flm validate"
+
+if command -v flm >/dev/null 2>&1; then
+    if flm_out="$(flm validate 2>&1)"; then
+        ok "flm validate passed"
+    else
+        bad "flm validate failed"
+    fi
+    printf '%s\n' "$flm_out" | sed 's/^/      /'
+else
+    bad "flm not found in the container image"
+fi
+
+printf '\n\033[1m%d ok, %d warning(s), %d problem(s)\033[0m\n' "$pass" "$warn" "$fail"
+((fail == 0))
