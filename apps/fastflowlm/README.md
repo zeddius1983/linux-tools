@@ -27,12 +27,59 @@ host-side and cannot be provided by a container:
 |---|---|
 | `amdxdna` kernel driver | In-tree on kernel **7.0+**; below that install `amdxdna-dkms` |
 | NPU firmware 1.1.0.0+ | Ships in `linux-firmware` / `linux-firmware-other` |
-| **IOMMU enabled** | The driver binds the process address space via IOMMU SVA. `amd_iommu=off` on the kernel command line makes every open of the NPU fail with `SVA bind device failed, ret -19` — the device probes and `/dev/accel/accel0` exists, but nothing can use it. |
-| memlock rlimit | See [memlock](#memlock) below — small models are fine at distro defaults, large ones are not |
+| **IOMMU enabled** | See [IOMMU](#iommu) below. The driver binds the process address space via IOMMU SVA, so `amd_iommu=off` makes every open of the NPU fail with `SVA bind device failed, ret -19`. |
+| memlock rlimit | See [memlock](#memlock) below — an optimization, not a blocker |
 | Group membership | Your host user must be in the group owning `/dev/accel/accel0` (usually `render`) |
 
 Run `flm-doctor` to check all of these at once — it reads the host kernel, driver,
 IOMMU and firmware state from inside the box and reports what is missing.
+
+### IOMMU
+
+`amdxdna_drm_open()` calls `iommu_sva_bind_device()` on every open of the NPU, so
+the NPU addresses memory through the IOMMU or not at all. With `amd_iommu=off` the
+driver still probes, the module still loads, and `/dev/accel/accel0` still exists —
+every cheap check passes — while every open fails with `-ENODEV (-19)`. There is no
+module parameter to bypass it.
+
+**On Strix Halo this is a real tradeoff, because the IOMMU costs iGPU throughput:**
+
+| iGPU workload | Cost of enabling the IOMMU |
+|---|---|
+| Token generation (decode) | ~2–3% — bandwidth-bound, largely insensitive |
+| Prompt processing (prefill) | 5–12%, scales with batch size |
+
+The prefill cost comes from ROCm runtime / HSA queue traffic going through the
+IOMMU. So chat-style use with modest prompts barely notices; long-context, RAG and
+batched workloads do.
+
+**There is no middle setting.** Passthrough mode is not an escape hatch —
+`iommu=pt` benchmarks *identically* to the default Translated mode, and
+`amd_iommu=off` is 5–12% faster than either. Two traps worth knowing:
+
+- **`amd_iommu=pt` is not a valid kernel parameter.** The kernel logs
+  `AMD-Vi: Unknown option - 'pt'` and silently falls back to Translated mode, so
+  anyone who sets it believes they have passthrough and does not. The valid
+  spelling is `iommu=pt`, without the `amd_` prefix.
+- `iommu=pt` buys nothing anyway. If you want the GPU performance back, the only
+  option is genuinely disabling the IOMMU — which disables the NPU.
+
+Measurements: [kyuz0/amd-strix-halo-toolboxes#66](https://github.com/kyuz0/amd-strix-halo-toolboxes/issues/66).
+
+#### Having both: a per-boot GRUB entry
+
+Since the choice is binary and set at boot, the practical answer is two boot
+entries — default with the IOMMU on for NPU work, and a second with
+`amd_iommu=off` for GPU-max sessions. Add a generator so it survives kernel
+updates (a static `40_custom` entry goes stale the moment the kernel changes):
+
+```sh
+# /etc/grub.d/45_iommu_off  (chmod +x; re-runs on every update-grub)
+```
+
+See `iommu-off-entry.sh` in this directory for a ready-to-run installer. The menu
+also has to be visible — Mint/Ubuntu ship `GRUB_TIMEOUT_STYLE=hidden` with
+`GRUB_TIMEOUT=0`, which hides it entirely.
 
 ### memlock
 
