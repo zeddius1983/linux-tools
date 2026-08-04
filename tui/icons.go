@@ -67,6 +67,23 @@ func (i iconSet) box(a App) (string, lipgloss.Style) {
 	}
 }
 
+// wizMarker is the checkbox (multi-choice) or radio (single-choice) marker in
+// a wizard page. Both sets are plain Unicode: these are box-drawing and
+// geometric shapes, present in any font, so there is nothing for a Nerd Font
+// variant to improve.
+func (i iconSet) wizMarker(multi, on bool) string {
+	switch {
+	case multi && on:
+		return "[✓]"
+	case multi:
+		return "[ ]"
+	case on:
+		return "(●)"
+	default:
+		return "( )"
+	}
+}
+
 func (i iconSet) check() string {
 	if i.nerd {
 		return ""

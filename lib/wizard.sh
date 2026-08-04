@@ -58,7 +58,11 @@ wizard_load_state() {
         fname="${page##*/}"
         pagename="${fname%.*}"
         varname="PAGE_$(_wizard_var_suffix "$pagename")"
-        [[ -n "${!varname:-}" ]] && _WIZARD_SELECTIONS["$pagename"]="${!varname}"
+        # Tested for being *defined*, not non-empty: an empty PAGE_ value is the
+        # "nothing selected" answer, and the apply handlers act on it by removing
+        # what is currently installed. Skipping it would silently turn
+        # "deselect everything" into "change nothing".
+        [[ -n "${!varname+set}" ]] && _WIZARD_SELECTIONS["$pagename"]="${!varname}"
     done
     return 0
 }

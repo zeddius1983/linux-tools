@@ -18,8 +18,8 @@ import (
 type State struct {
 	App       string
 	Action    string
-	BuildArgs []string          // already in "--build-arg NAME=value" form
-	Variant   string            // .runtime selection value (not its label)
+	BuildArgs []string            // already in "--build-arg NAME=value" form
+	Variant   string              // .runtime selection value (not its label)
 	Pages     map[string][]string // pagename -> selected item names
 }
 

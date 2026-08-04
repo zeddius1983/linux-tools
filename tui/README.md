@@ -5,8 +5,8 @@ right-hand info panel showing the selected app's README as rendered markdown.
 Built on the same stack gh-dash uses — Bubble Tea v2, Lip Gloss v2, Glamour v2.
 
 Apps are listed by their `description` (e.g. "Dev Toolbox"), not their directory
-name; the directory name is shown in the info panel as `dir`, since that is what
-commands and paths use.
+name; the directory name remains the identity used for commands and paths, and
+is what the footer and every action refer to.
 
 See [`docs/tui-migration.md`](../docs/tui-migration.md) for the design.
 
@@ -37,6 +37,9 @@ without linking the container's glibc.
 
 # render with a specific app selected
 ./tui/tools-tui --apps-dir apps --render --render-app dev-toolbox
+
+# render the wizard for an app instead of the dashboard
+./tui/tools-tui --apps-dir apps --render --render-app lmstudio --render-wizard setup
 ```
 
 ## Footer
@@ -62,7 +65,7 @@ would be cut short by its own resets.
 | `g` / `end` | first / last row |
 | `PgDn` / `PgUp` | scroll the README panel |
 | `/` | filter within the category |
-| `s` `b` `c` `e` `r` | setup · build · create · export · rm |
+| `s` `b` `c` `e` `r` | setup · build · create · export · rm (`s`/`b`/`c` open the wizard first when the app has pages) |
 | `⏎` | open a shell in the box |
 | `R` | reload app and container state |
 | `?` | toggle help |
@@ -74,10 +77,41 @@ Actions use `tea.ExecProcess`: the dashboard suspends, the bash backend gets the
 real terminal so podman output streams normally, and the dashboard resumes and
 refreshes container state when the command exits. It does not exec away.
 
-Because bash sees a real tty, `tools setup` still runs its **existing whiptail
-wizard**. Native wizard pages are the next step; the Go-side state-file bridge
-(`state.go`, `wizard.go`, and `wizard_load_state` in `lib/wizard.sh`) is
-already in place and tested for when they land.
+## Wizard
+
+`s`, `b` and `c` open the app's wizard pages natively (`wizardui.go`) when it
+has any that declare that action; apps without pages run the action straight
+away. Answers are written to a state file and handed to bash as
+`LT_SKIP_WIZARD=1 LT_WIZARD_STATE=<path>`, which `wizard_load_state`
+(`lib/wizard.sh`) re-hydrates into `_WIZARD_SELECTIONS` so every existing
+consumer — the apply handlers, `wizard_build_args`, `wizard_create_variant` —
+works unchanged. Without those variables bash asks its own whiptail pages, so
+the old path is still there for a scripted `tools setup`.
+
+| Page type | Widget | Result |
+|---|---|---|
+| `.packages` | checklist, pre-ticked from each item's detect path | `PAGE_<name>` → the app's `-install --tools` run |
+| `.mcp` | checklist | `PAGE_<name>` → `claude mcp add/remove` |
+| `.buildarg` | single choice, items from the page's `items-cmd` | `BUILD_ARGS` → `--build-arg NAME=value` |
+| `.runtime` | single choice | `VARIANT` → `create_flags.<value>` |
+
+A `.buildarg` page's `items-cmd` reaches the network (a GitHub API call, a
+`git ls-remote`), so it runs off the update loop with a 30s timeout, and Enter
+is held while it is in flight. If it produces nothing the page is left
+unanswered and the build keeps its Dockerfile default — the same outcome as the
+bash path.
+
+Ticked state is what will exist *after* the run, not what to add: unticking an
+already-installed tool removes it. The review screen before the run spells that
+out as a `+`/`-` diff, mirroring `tui_confirm_wizards`.
+
+Deselecting everything on a page is an answer, not an absence — the page is
+still written, with an empty value, so the apply handler removes what is
+installed. `wizard_load_state` therefore tests each `PAGE_` variable for being
+*defined* rather than non-empty.
+
+Keys: `space` toggle/select, `a`/`n` all/none, `↑`/`↓` move, `⏎` next page or
+review, `esc` back a page (and out of the wizard from the first), `q` cancel.
 
 ## Info panel
 
@@ -94,9 +128,8 @@ PATH. Run from inside a Distrobox container none of them exist, and
 `exec.Command` just fails — which showed every app as "not built" with no error.
 
 It now detects containerisation (`/run/.containerenv`, `/.dockerenv`, or
-`$CONTAINER_ID`) and routes those commands through `distrobox-host-exec`. The
-footer says `via distrobox-host-exec` when that is active, so it is never a
-silent mode.
+`$CONTAINER_ID`) and routes those commands through `distrobox-host-exec` —
+including a wizard page's `items-cmd`, which then runs where the build will.
 
 ## Platform glyph
 
@@ -179,8 +212,8 @@ appended alphabetically.
 | IMAGE / BOX table columns with glyphs | done |
 | filter, help overlay, footer | done |
 | actions via `ExecProcess` + state refresh | done |
-| native wizard pages (multi-select, select) | not started — bash whiptail still handles these |
-| state-file bridge to bash | built and tested, not yet used by the dashboard |
+| native wizard pages (checklist, single choice, review) | done — whiptail is no longer reached from here |
+| state-file bridge to bash | done, and now used by the wizard |
 | `cmd_install` building the binary | not started |
 | wiring `tools` to launch it | not started |
 
@@ -191,4 +224,9 @@ appended alphabetically.
 | `main.go` | model, update loop, rendering, theme |
 | `apps.go` | app discovery, categories, podman/distrobox state |
 | `wizard.go` | parser for the wizard page format |
+| `wizardui.go` | wizard session: pages, review screen, state hand-off |
 | `state.go` | state file rendering and shell quoting |
+| `info.go` | README panel (Glamour), cached per app and width |
+| `icons.go` | glyph sets, including the `--ascii` fallback |
+| `platform.go` | host distro detection and platform glyphs |
+| `host.go` | routing commands through `distrobox-host-exec` |

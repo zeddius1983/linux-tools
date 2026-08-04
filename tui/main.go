@@ -21,13 +21,14 @@ import (
 func main() {
 	var appsDir, toolsBin string
 	var render, asciiIcons bool
-	var renderApp string
+	var renderApp, renderWizard string
 	var renderW, renderH int
 	flag.StringVar(&appsDir, "apps-dir", "apps", "path to the apps/ directory")
 	flag.StringVar(&toolsBin, "tools", "tools", "bash entrypoint to run for actions")
 	flag.BoolVar(&asciiIcons, "ascii", false, "plain ASCII/Unicode markers instead of Nerd Font glyphs")
 	flag.BoolVar(&render, "render", false, "print one frame and exit (no tty needed)")
 	flag.StringVar(&renderApp, "render-app", "", "select this app for --render")
+	flag.StringVar(&renderWizard, "render-wizard", "", "open the wizard for this action (setup|build|create) in --render")
 	flag.IntVar(&renderW, "render-width", 100, "frame width for --render")
 	flag.IntVar(&renderH, "render-height", 28, "frame height for --render")
 	flag.Parse()
@@ -50,6 +51,14 @@ func main() {
 		m.w, m.h = renderW, renderH
 		if renderApp != "" {
 			m.selectApp(renderApp)
+		}
+		if renderWizard != "" {
+			// Draw the wizard instead of the dashboard. Any items-cmd is left
+			// unresolved: the command returned here would normally be run by
+			// the event loop, and a single frame has none.
+			if a, ok := m.current(); ok {
+				m.startWizard(action{name: renderWizard, wizard: true}, a)
+			}
 		}
 		fmt.Println(m.View().Content)
 		return
@@ -96,14 +105,18 @@ var (
 
 type action struct {
 	key, name, desc string
+	// wizard marks actions that wizard pages can declare themselves applicable
+	// to. It mirrors tools.sh: setup asks and applies, while build and create
+	// only consume what a state file already holds.
+	wizard bool
 }
 
 var actions = []action{
-	{"s", "setup", "Install (removes existing box+image first)"},
-	{"b", "build", "Build image only"},
-	{"c", "create", "Create box from image"},
-	{"e", "export", "Re-export to host"},
-	{"r", "rm", "Remove box (image kept)"},
+	{"s", "setup", "Install (removes existing box+image first)", true},
+	{"b", "build", "Build image only", true},
+	{"c", "create", "Create box from image", true},
+	{"e", "export", "Re-export to host", false},
+	{"r", "rm", "Remove box (image kept)", false},
 }
 
 type model struct {
@@ -124,6 +137,12 @@ type model struct {
 	statusErr bool
 	info      *infoPanel
 	icons     iconSet
+
+	// wiz is the open wizard session, if any: while it is non-nil it owns the
+	// screen and every key. stateFile is the file it wrote for the run
+	// currently in flight, removed once that run finishes.
+	wiz       *wizardSession
+	stateFile string
 }
 
 func newModel(apps []App, appsDir, toolsBin string, useNerdFonts bool) *model {
@@ -204,12 +223,28 @@ type actionDoneMsg struct {
 }
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// An open wizard owns the screen and every key until it is confirmed or
+	// cancelled; only the action result, which arrives after it has closed,
+	// bypasses it.
+	if m.wiz != nil {
+		if _, ok := msg.(actionDoneMsg); !ok {
+			return m.wizardUpdate(msg)
+		}
+	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.w, m.h = msg.Width, msg.Height
 		return m, nil
 
 	case actionDoneMsg:
+		// The state file exists only for the duration of one run; leaving it
+		// behind would have no effect (the backend only reads it when
+		// LT_WIZARD_STATE points at it) but it would still be stale answers on
+		// disk.
+		if m.stateFile != "" {
+			os.Remove(m.stateFile)
+			m.stateFile = ""
+		}
 		if msg.err != nil {
 			m.status = fmt.Sprintf("%s %s failed: %v", msg.action, msg.app, msg.err)
 			m.statusErr = true
@@ -300,14 +335,20 @@ func (m *model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	case "enter":
 		if a, ok := m.current(); ok && a.HasBox {
-			return m, m.runCmd("enter", a, "distrobox", "enter", a.BoxName())
+			return m, m.runCmd("enter", a, nil, "distrobox", "enter", a.BoxName())
 		}
 		m.status, m.statusErr = "no box to enter", true
 	default:
 		for _, act := range actions {
 			if k == act.key {
 				if a, ok := m.current(); ok {
-					return m, m.runCmd(act.name, a, m.toolsBin, act.name, a.Name)
+					// Actions that can carry wizard answers open the wizard
+					// first; startWizard falls through to the plain run when
+					// the app has no pages for this action.
+					if act.wizard {
+						return m, m.startWizard(act, a)
+					}
+					return m, m.runCmd(act.name, a, nil, m.toolsBin, act.name, a.Name)
 				}
 			}
 		}
@@ -340,11 +381,14 @@ func (m *model) clampRow() {
 }
 
 // runCmd suspends the dashboard, gives bash the terminal, then resumes.
-// The wizard still runs on the bash side here: it sees a real tty, so
-// whiptail behaves exactly as it does today.
-func (m *model) runCmd(name string, a App, bin string, args ...string) tea.Cmd {
+//
+// extraEnv carries the wizard bridge (LT_SKIP_WIZARD, LT_WIZARD_STATE) when
+// answers were collected here. Without it bash sees a real tty and asks its own
+// whiptail pages, which is still the right behaviour for an app whose wizard
+// this front-end skipped.
+func (m *model) runCmd(name string, a App, extraEnv []string, bin string, args ...string) tea.Cmd {
 	c := hostCommand(bin, args...)
-	c.Env = os.Environ()
+	c.Env = append(os.Environ(), extraEnv...)
 	return tea.ExecProcess(c, func(err error) tea.Msg {
 		return actionDoneMsg{action: name, app: a.Name, err: err}
 	})
@@ -364,6 +408,9 @@ func (m *model) bodyHeight() int {
 }
 
 func (m *model) View() tea.View {
+	if m.wiz != nil {
+		return altView(m.wizardView())
+	}
 	if m.showHelp {
 		return altView(m.helpView())
 	}
@@ -645,6 +692,7 @@ func (m *model) helpView() string {
 		{"s", "setup — install (removes existing box+image)"},
 		{"b", "build — image only"},
 		{"c", "create — box from image"},
+		{"", "s/b/c open the app's wizard first when it has pages"},
 		{"e", "export — re-export to host"},
 		{"r", "rm — remove box, keep image"},
 		{"⏎", "open a shell in the box"},

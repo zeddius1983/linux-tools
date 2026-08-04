@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"os/exec"
 )
@@ -44,4 +45,14 @@ func hostCommand(name string, args ...string) *exec.Cmd {
 		return exec.Command(hostExecPath, append([]string{name}, args...)...)
 	}
 	return exec.Command(name, args...)
+}
+
+// hostCommandContext is hostCommand with a deadline, for the wizard's
+// items-cmd lookups: those reach the network, and an unbounded one would leave
+// the wizard stuck on "loading" with no way out.
+func hostCommandContext(ctx context.Context, name string, args ...string) *exec.Cmd {
+	if hostExecPath != "" {
+		return exec.CommandContext(ctx, hostExecPath, append([]string{name}, args...)...)
+	}
+	return exec.CommandContext(ctx, name, args...)
 }

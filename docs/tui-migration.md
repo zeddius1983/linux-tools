@@ -121,10 +121,11 @@ output streams exactly as today, then resumes and re-reads container state. This
 is better than exec-and-never-return: the dashboard survives a build and reports
 its result.
 
-One consequence worth naming: because bash sees a real tty, `tools setup` still
-runs its **existing whiptail wizard**. That is a working seam, not a finished
-one — the state-file bridge is built and tested but not yet used by the
-dashboard.
+Because bash sees a real tty it would otherwise ask its own whiptail pages, so
+the wizard hand-off is what suppresses them: a run started from a wizard carries
+`LT_SKIP_WIZARD=1` and `LT_WIZARD_STATE`, and one started without a wizard does
+not — which keeps the whiptail path working for anything this front-end has not
+taken over.
 
 ---
 
@@ -154,7 +155,7 @@ field.
 | full-width selection highlight | per-segment background, no arrow |
 | platform / image / box indicators | Nerd Font glyphs, `--ascii` fallback |
 | actions | `tea.ExecProcess` |
-| wizard pages | **still whiptail** — native pages are the next step |
+| wizard pages | hand-rolled checklist / single choice + a review screen (`tui/wizardui.go`) |
 
 ---
 
@@ -194,12 +195,13 @@ the existing `command -v whiptail` check (`tools.sh:71`):
 - category tabs, app table, README info panel, filter, help overlay, footer
 - actions via `ExecProcess`, with container state refreshed on completion
 - state-file bridge and `wizard_load_state`, covered by tests
+- native wizard pages: checklists with detect prefill, single choice for
+  `.buildarg`/`.runtime`, and a review screen — whiptail is no longer reached
+  from the dashboard
 - `apps/<name>/category` for all 23 apps
 - Go toolchain in dev-toolbox (merged)
 
 **Next**
-- native wizard pages (multi-select with detect prefill, select) — the last
-  thing whiptail is still doing
 - `cmd_install` building or fetching the binary
 - wiring `tools` to launch it, behind the fallback gate
 
@@ -230,6 +232,17 @@ the existing `command -v whiptail` check (`tools.sh:71`):
   Detect containerisation and route through `distrobox-host-exec`.
 - **Column padding must count display cells, not bytes.** `●` is one rune and
   three bytes; `%-*s` silently shortens those columns.
+- **An empty wizard answer is an answer.** `wizard_load_state` originally
+  re-hydrated a page only when its `PAGE_` variable was non-empty, which turned
+  "untick everything" into "change nothing" — the whiptail path assigns the
+  empty string and the apply handler then removes what is installed. It now
+  tests for the variable being *defined*, and the Go side always writes a line
+  for every page it asked.
+- **`.buildarg` items come from the network.** The page's `items-cmd` is a
+  GitHub API call or a `git ls-remote`; running it inline would freeze the first
+  frame of the wizard. It runs as a `tea.Cmd` with a timeout, and a failure is
+  not fatal — the page is left unanswered so the Dockerfile default stands,
+  matching what bash does.
 
 ---
 
