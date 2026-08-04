@@ -3,8 +3,7 @@
 // It is a pre-processor, not a wrapper: it collects the app, the action and
 // every wizard answer, writes them to a state file, and then execs the bash
 // backend. Bubble Tea is fully torn down before the build runs, so podman
-// output streams to the terminal exactly as it does today. See
-// docs/tui-migration.md §3.
+// output streams to the terminal exactly as today. See docs/tui-migration.md.
 package main
 
 import (
@@ -12,10 +11,11 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/huh/spinner"
 )
 
 var actions = []struct{ Name, Desc string }{
@@ -25,6 +25,20 @@ var actions = []struct{ Name, Desc string }{
 	{"export", "Re-export apps/bins to host"},
 	{"enter", "Open shell inside box"},
 	{"rm", "Remove distrobox (image is kept)"},
+}
+
+// keyMap advertises the keys the default huh map leaves invisible.
+//
+// huh v0.7.0 binds Quit to ctrl+c only, and without a help string, so nothing
+// in the UI tells you how to leave. Esc is not bound to quit at all. Both are
+// bound here, and the help line is left on so back/quit are discoverable.
+func keyMap() *huh.KeyMap {
+	km := huh.NewDefaultKeyMap()
+	km.Quit = key.NewBinding(
+		key.WithKeys("esc", "ctrl+c"),
+		key.WithHelp("esc", "quit"),
+	)
+	return km
 }
 
 func main() {
@@ -42,6 +56,14 @@ func main() {
 	}
 }
 
+// binding holds the live value of one wizard page within the form.
+type binding struct {
+	page   Page
+	app    string
+	multi  *[]string
+	single *string
+}
+
 func run(appsDir, statePath, toolsBin string, dryRun bool) error {
 	apps, err := LoadApps(appsDir)
 	if err != nil {
@@ -51,31 +73,32 @@ func run(appsDir, statePath, toolsBin string, dryRun bool) error {
 		return fmt.Errorf("no apps found in %s", appsDir)
 	}
 
-	// --- app + action -----------------------------------------------------
 	var appName, action string
+	var confirmed bool
+	home, _ := os.UserHomeDir()
 
+	// --- app + action groups ----------------------------------------------
 	appOpts := make([]huh.Option[string], 0, len(apps))
 	for _, a := range apps {
 		label := a.Name
 		if a.Description != "" {
 			label += " — " + a.Description
 		}
-		// No padding, no truncation: the 26-char description budget that
-		// whiptail's fixed columns imposed is simply gone.
+		// No padding, no truncation: the ~26-char description budget that
+		// whiptail's fixed columns imposed is gone.
 		label += "  [" + a.Status() + "]"
 		appOpts = append(appOpts, huh.NewOption(label, a.Name))
 	}
-
 	actionOpts := make([]huh.Option[string], 0, len(actions))
 	for _, a := range actions {
 		actionOpts = append(actionOpts, huh.NewOption(a.Name+" — "+a.Desc, a.Name))
 	}
 
-	pick := huh.NewForm(
+	groups := []*huh.Group{
 		huh.NewGroup(
 			huh.NewSelect[string]().
 				Title("linux-tools").
-				Description("Select an app (type to filter)").
+				Description("Select an app  ·  / filters  ·  shift+tab goes back  ·  esc quits").
 				Options(appOpts...).
 				Filtering(true).
 				Height(16).
@@ -89,160 +112,48 @@ func run(appsDir, statePath, toolsBin string, dryRun bool) error {
 				Height(10).
 				Value(&action),
 		),
-	)
-	if err := pick.Run(); err != nil {
-		return handleAbort(err)
 	}
 
-	// --- wizard pages -----------------------------------------------------
-	var app App
+	// --- one group per wizard page, across every app ----------------------
+	//
+	// The whole flow has to live in a single huh.Form for shift+tab to walk
+	// backwards across stages, but the relevant wizard pages are not known
+	// until an app is picked. So every page of every app becomes a group that
+	// hides itself unless its app is selected and its action applies.
+	var bindings []*binding
 	for _, a := range apps {
-		if a.Name == appName {
-			app = a
+		pages, err := LoadPages(a.WizardDir)
+		if err != nil {
+			return err
 		}
-	}
-
-	state := State{App: appName, Action: action, Pages: map[string][]string{}}
-	pages, err := LoadPages(app.WizardDir)
-	if err != nil {
-		return err
-	}
-
-	home, _ := os.UserHomeDir()
-	var groups []*huh.Group
-	// Bindings keep each page's live value addressable after the form runs.
-	multi := map[string]*[]string{}
-	single := map[string]*string{}
-
-	for _, p := range pages {
-		if !p.AppliesTo(action) {
-			continue
-		}
-		switch p.Type {
-		case "packages", "mcp":
-			opts := make([]huh.Option[string], 0, len(p.Items))
-			for _, it := range p.Items {
-				label := it.Name
-				if it.Desc != "" {
-					label += " — " + it.Desc
-				}
-				opts = append(opts, huh.NewOption(label, it.Name).Selected(it.PreSelected(home)))
-			}
-			if len(opts) == 0 {
+		for _, p := range pages {
+			g, b := pageGroup(a.Name, p, home, &appName, &action)
+			if g == nil {
 				continue
 			}
-			dst := new([]string)
-			multi[p.Name] = dst
-			groups = append(groups, huh.NewGroup(
-				huh.NewMultiSelect[string]().
-					Title(p.Title).
-					Description(p.Prompt).
-					Options(opts...).
-					Height(14).
-					Value(dst),
-			))
-
-		case "runtime":
-			opts := make([]huh.Option[string], 0, len(p.Items))
-			for _, it := range p.Items {
-				label := it.Name
-				if it.Desc != "" {
-					label += " — " + it.Desc
-				}
-				// The Option carries label and value together, so there is no
-				// label->value round-trip like wizard_create_variant needs.
-				opts = append(opts, huh.NewOption(label, it.Payload))
-			}
-			if len(opts) == 0 {
-				continue
-			}
-			dst := new(string)
-			single[p.Name] = dst
-			groups = append(groups, huh.NewGroup(
-				huh.NewSelect[string]().
-					Title(p.Title).
-					Description(p.Prompt).
-					Options(opts...).
-					Value(dst),
-			))
-
-		case "buildarg":
-			// items-cmd is often a network call (fastflowlm hits the GitHub
-			// releases API). whiptail froze silently here; a spinner makes the
-			// wait visible.
-			var values []string
-			var cmdErr error
-			_ = spinner.New().
-				Title(" " + p.Title + ": fetching options…").
-				Action(func() { values, cmdErr = runItemsCmd(p.ItemsCmd) }).
-				Run()
-			if cmdErr != nil || len(values) == 0 {
-				fmt.Fprintf(os.Stderr,
-					"warning: wizard page %q: items-cmd produced no items, using build default\n", p.Name)
-				continue
-			}
-			opts := make([]huh.Option[string], 0, len(values))
-			for i, v := range values {
-				label := v
-				if i == 0 {
-					label += "  (default)"
-				}
-				opts = append(opts, huh.NewOption(label, v))
-			}
-			dst := new(string)
-			*dst = values[0]
-			single[p.Name] = dst
-			groups = append(groups, huh.NewGroup(
-				huh.NewSelect[string]().
-					Title(p.Title).
-					Description(p.Prompt).
-					Options(opts...).
-					Height(14).
-					Value(dst),
-			))
-		}
-	}
-
-	if len(groups) > 0 {
-		// One form, many groups: unlike whiptail's standalone dialogs this
-		// gives back-navigation across pages for free.
-		if err := huh.NewForm(groups...).Run(); err != nil {
-			return handleAbort(err)
-		}
-	}
-
-	// --- resolve selections into the state --------------------------------
-	for _, p := range pages {
-		if !p.AppliesTo(action) {
-			continue
-		}
-		switch p.Type {
-		case "packages", "mcp":
-			if dst, ok := multi[p.Name]; ok {
-				state.Pages[p.Name] = *dst
-			}
-		case "runtime":
-			if dst, ok := single[p.Name]; ok && *dst != "" {
-				state.Variant = *dst
-			}
-		case "buildarg":
-			if dst, ok := single[p.Name]; ok && *dst != "" && p.ArgName != "" {
-				state.BuildArgs = append(state.BuildArgs,
-					"--build-arg", p.ArgName+"="+*dst)
-			}
+			groups = append(groups, g)
+			bindings = append(bindings, b)
 		}
 	}
 
 	// --- confirm ----------------------------------------------------------
-	confirmed := false
-	if err := huh.NewForm(huh.NewGroup(
+	groups = append(groups, huh.NewGroup(
 		huh.NewConfirm().
-			Title(fmt.Sprintf("Run '%s' on '%s'?", action, appName)).
-			Description(summarize(state)).
+			TitleFunc(func() string {
+				return fmt.Sprintf("Run '%s' on '%s'?", action, appName)
+			}, &appName).
+			DescriptionFunc(func() string {
+				return summarize(collect(appName, action, bindings))
+			}, &appName).
 			Affirmative("Yes").
 			Negative("Cancel").
 			Value(&confirmed),
-	)).Run(); err != nil {
+	))
+
+	form := huh.NewForm(groups...).
+		WithKeyMap(keyMap()).
+		WithShowHelp(true)
+	if err := form.Run(); err != nil {
 		return handleAbort(err)
 	}
 	if !confirmed {
@@ -250,6 +161,7 @@ func run(appsDir, statePath, toolsBin string, dryRun bool) error {
 	}
 
 	// --- hand off to bash -------------------------------------------------
+	state := collect(appName, action, bindings)
 	if statePath == "" {
 		statePath = DefaultStatePath(appName)
 	}
@@ -275,13 +187,129 @@ func run(appsDir, statePath, toolsBin string, dryRun bool) error {
 	return syscallExec(bin, []string{toolsBin, action, appName}, env)
 }
 
+// pageGroup builds the hidden-until-relevant group for one wizard page.
+func pageGroup(app string, p Page, home string, appName, action *string) (*huh.Group, *binding) {
+	b := &binding{page: p, app: app}
+	hide := func() bool { return *appName != app || !p.AppliesTo(*action) }
+
+	switch p.Type {
+	case "packages", "mcp":
+		if len(p.Items) == 0 {
+			return nil, nil
+		}
+		opts := make([]huh.Option[string], 0, len(p.Items))
+		for _, it := range p.Items {
+			opts = append(opts, huh.NewOption(label(it), it.Name).Selected(it.PreSelected(home)))
+		}
+		b.multi = new([]string)
+		return huh.NewGroup(
+			huh.NewMultiSelect[string]().
+				Title(p.Title).
+				Description(p.Prompt).
+				Options(opts...).
+				Height(14).
+				Value(b.multi),
+		).WithHideFunc(hide), b
+
+	case "runtime":
+		if len(p.Items) == 0 {
+			return nil, nil
+		}
+		opts := make([]huh.Option[string], 0, len(p.Items))
+		for _, it := range p.Items {
+			// The Option carries label and value together, so there is no
+			// label->value round-trip like wizard_create_variant needs.
+			opts = append(opts, huh.NewOption(label(it), it.Payload))
+		}
+		b.single = new(string)
+		*b.single = p.Items[0].Payload
+		return huh.NewGroup(
+			huh.NewSelect[string]().
+				Title(p.Title).
+				Description(p.Prompt).
+				Options(opts...).
+				Value(b.single),
+		).WithHideFunc(hide), b
+
+	case "buildarg":
+		b.single = new(string)
+		return huh.NewGroup(
+			huh.NewSelect[string]().
+				Title(p.Title).
+				Description(p.Prompt).
+				// Lazily fetched: items-cmd is often a network call (fastflowlm
+				// hits the GitHub releases API). Binding it to appName keeps
+				// the fetch from running for apps that were never selected,
+				// and huh shows its own loading state while it runs.
+				OptionsFunc(func() []huh.Option[string] {
+					if *appName != app {
+						return nil
+					}
+					values, err := runItemsCmd(p.ItemsCmd)
+					if err != nil || len(values) == 0 {
+						return nil
+					}
+					opts := make([]huh.Option[string], 0, len(values))
+					for i, v := range values {
+						l := v
+						if i == 0 {
+							l += "  (default)"
+						}
+						opts = append(opts, huh.NewOption(l, v))
+					}
+					return opts
+				}, appName).
+				Height(14).
+				Value(b.single),
+		).WithHideFunc(hide), b
+	}
+	return nil, nil
+}
+
+func label(it Item) string {
+	if it.Desc == "" {
+		return it.Name
+	}
+	return it.Name + " — " + it.Desc
+}
+
+// collect turns the live form bindings into a State for the selected app.
+func collect(appName, action string, bindings []*binding) State {
+	s := State{App: appName, Action: action, Pages: map[string][]string{}}
+	for _, b := range bindings {
+		if b.app != appName || !b.page.AppliesTo(action) {
+			continue
+		}
+		switch b.page.Type {
+		case "packages", "mcp":
+			if b.multi != nil {
+				s.Pages[b.page.Name] = *b.multi
+			}
+		case "runtime":
+			if b.single != nil && *b.single != "" {
+				s.Variant = *b.single
+			}
+		case "buildarg":
+			if b.single != nil && *b.single != "" && b.page.ArgName != "" {
+				s.BuildArgs = append(s.BuildArgs, "--build-arg", b.page.ArgName+"="+*b.single)
+			}
+		}
+	}
+	return s
+}
+
 func summarize(s State) string {
 	var parts []string
-	for name, sel := range s.Pages {
-		if len(sel) > 0 {
-			parts = append(parts, name+": "+strings.Join(sel, ", "))
+	names := make([]string, 0, len(s.Pages))
+	for k := range s.Pages {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		if sel := s.Pages[n]; len(sel) > 0 {
+			parts = append(parts, n+": "+strings.Join(sel, ", "))
 		} else {
-			parts = append(parts, name+": (none)")
+			parts = append(parts, n+": (none)")
 		}
 	}
 	if s.Variant != "" {
@@ -289,6 +317,9 @@ func summarize(s State) string {
 	}
 	if len(s.BuildArgs) > 0 {
 		parts = append(parts, "build: "+strings.Join(s.BuildArgs, " "))
+	}
+	if len(parts) == 0 {
+		return "No wizard selections for this app."
 	}
 	return strings.Join(parts, "\n")
 }

@@ -38,6 +38,21 @@ without linking the container's glibc.
 Needs a real terminal: `huh` exits with `could not open a new TTY` when stdin
 is not a tty.
 
+## Keys
+
+| Key | Action |
+|---|---|
+| `↑` / `↓` | move |
+| `enter` | select / next |
+| `shift+tab` | **back** — walks backwards across every stage, including from a wizard page to the action and app menus |
+| `/` | filter the app list |
+| `space` | toggle a checkbox on multi-select pages |
+| `esc` | quit |
+
+`esc` is bound explicitly. huh v0.7.0 binds quit to `ctrl+c` alone and gives it
+no help string, so out of the box nothing in the UI says how to leave — see
+`keyMap()` in `main.go`.
+
 ## What it does
 
 Collects the app, the action and every wizard answer, writes a flat `KEY=value`
