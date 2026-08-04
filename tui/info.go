@@ -64,61 +64,24 @@ func (p *infoPanel) readme(app string, width int) string {
 	return md
 }
 
-// view renders the panel for one app, clipped to width x height.
+// view renders the panel for one app: the rendered README, nothing else.
+// Image/box state lives in the table columns, so repeating it here would only
+// steal rows from the README.
 func (p *infoPanel) view(a App, width, height int) string {
-	var head []string
-	head = append(head, styTitle.Render(a.Label()))
-	if a.Label() != a.Name {
-		head = append(head, styDesc.Render("dir  ")+styRow.Render(a.Name))
-	}
-
-	img := styStatusNo.Render("not built")
-	if a.HasImage {
-		img = styStatusOK.Render(a.ImageName())
-	}
-	box := styStatusNo.Render("—")
-	switch {
-	case a.BoxRunning:
-		box = styStatusOK.Render(a.BoxName() + " (running)")
-	case a.HasBox:
-		box = styWarn.Render(a.BoxName() + " (stopped)")
-	}
-	head = append(head,
-		styDesc.Render("image ")+img,
-		styDesc.Render("box   ")+box,
-	)
-	if a.HasWizard {
-		head = append(head, styDesc.Render("wizard ")+styStatusOK.Render("yes"))
-	}
-	if len(a.Exports) > 0 {
-		head = append(head, styDesc.Render("exports ")+styRow.Render(trunc(strings.Join(a.Exports, "  "), width-9)))
-	}
-	if a.HostOnly {
-		head = append(head, styWarn.Render("host-only — installs straight to the host"))
-	}
-	head = append(head, styBorder.Render(strings.Repeat("─", width)))
-
 	body := strings.Split(p.readme(a.Name, width), "\n")
 
-	// Clip the README to whatever height is left under the metadata block.
-	avail := height - len(head)
-	if avail < 1 {
-		avail = 1
-	}
-	if p.top > len(body)-avail {
-		p.top = len(body) - avail
+	if p.top > len(body)-height {
+		p.top = len(body) - height
 	}
 	if p.top < 0 {
 		p.top = 0
 	}
-	end := p.top + avail
+	end := p.top + height
 	if end > len(body) {
 		end = len(body)
 	}
 
-	lines := append([]string{}, head...)
-	lines = append(lines, body[p.top:end]...)
-
+	lines := append([]string{}, body[p.top:end]...)
 	// Pad so the panel keeps a constant height and the footer does not jump.
 	for len(lines) < height {
 		lines = append(lines, "")
@@ -127,6 +90,11 @@ func (p *infoPanel) view(a App, width, height int) string {
 		lines[i] = lipgloss.NewStyle().MaxWidth(width).Render(l)
 	}
 	return strings.Join(lines, "\n")
+}
+
+// scrollInfo reports whether the README overflows the panel, for a hint.
+func (p *infoPanel) canScroll(a App, width, height int) bool {
+	return len(strings.Split(p.readme(a.Name, width), "\n")) > height
 }
 
 // scroll moves the README view, clamped by the caller's next render.

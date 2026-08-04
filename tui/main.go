@@ -21,11 +21,12 @@ import (
 
 func main() {
 	var appsDir, toolsBin string
-	var render bool
+	var render, asciiIcons bool
 	var renderApp string
 	var renderW, renderH int
 	flag.StringVar(&appsDir, "apps-dir", "apps", "path to the apps/ directory")
 	flag.StringVar(&toolsBin, "tools", "tools", "bash entrypoint to run for actions")
+	flag.BoolVar(&asciiIcons, "ascii", false, "plain ASCII/Unicode markers instead of Nerd Font glyphs")
 	flag.BoolVar(&render, "render", false, "print one frame and exit (no tty needed)")
 	flag.StringVar(&renderApp, "render-app", "", "select this app for --render")
 	flag.IntVar(&renderW, "render-width", 100, "frame width for --render")
@@ -42,7 +43,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	m := newModel(apps, appsDir, toolsBin)
+	m := newModel(apps, appsDir, toolsBin, !asciiIcons)
 
 	// --render draws a single frame to stdout. Bubble Tea needs a tty, so this
 	// is the only way to check layout in a pipe, a test, or a screenshot.
@@ -116,15 +117,17 @@ type model struct {
 	status    string
 	statusErr bool
 	info      *infoPanel
+	icons     iconSet
 }
 
-func newModel(apps []App, appsDir, toolsBin string) *model {
+func newModel(apps []App, appsDir, toolsBin string, useNerdFonts bool) *model {
 	return &model{
 		apps:     apps,
 		cats:     Categories(apps),
 		appsDir:  appsDir,
 		toolsBin: toolsBin,
 		info:     newInfoPanel(appsDir),
+		icons:    newIconSet(useNerdFonts),
 		w:        100,
 		h:        30,
 	}
@@ -272,9 +275,9 @@ func (m *model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.rowIdx--
 		m.clampRow()
 		m.info.resetScroll()
-	case "J", "pgdown", "ctrl+d":
+	case "J", "shift+j", "pgdown", "ctrl+d":
 		m.info.scroll(10)
-	case "K", "pgup", "ctrl+u":
+	case "K", "shift+k", "pgup", "ctrl+u":
 		m.info.scroll(-10)
 	case "g", "home":
 		m.rowIdx, m.top = 0, 0
@@ -404,10 +407,24 @@ func (m *model) infoView(width int) string {
 	return m.info.view(a, width, m.bodyHeight())
 }
 
+// superscript renders an integer with Unicode superscript digits, so the count
+// sits above the baseline next to the tab name instead of taking a whole word.
+func superscript(n int) string {
+	digits := []rune("⁰¹²³⁴⁵⁶⁷⁸⁹")
+	if n == 0 {
+		return string(digits[0])
+	}
+	var out []rune
+	for _, c := range fmt.Sprintf("%d", n) {
+		out = append(out, digits[c-'0'])
+	}
+	return string(out)
+}
+
 func (m *model) tabsView() string {
 	var tabs []string
 	for i, c := range m.cats {
-		label := fmt.Sprintf("%s %d", c, m.countIn(c))
+		label := m.icons.category(c) + c + superscript(m.countIn(c))
 		if i == m.catIdx {
 			tabs = append(tabs, styTabOn.Render(label))
 		} else {
@@ -420,14 +437,15 @@ func (m *model) tabsView() string {
 
 func (m *model) tableView(width int) string {
 	v := m.visible()
-	statusW := 11
-	nameW := width - statusW - 5
+	imgW, boxW := 9, 11
+	nameW := width - imgW - boxW - 7
 	if nameW < 12 {
 		nameW = 12
 	}
 
 	var b strings.Builder
-	b.WriteString(styHeader.Render(fmt.Sprintf("  %-*s  %-*s", nameW, "APP", statusW, "STATUS")))
+	b.WriteString(styHeader.Render(fmt.Sprintf("  %-*s %-*s %-*s",
+		nameW, "APP", imgW, "IMAGE", boxW, "BOX")))
 	b.WriteString("\n")
 
 	if len(v) == 0 {
@@ -442,21 +460,37 @@ func (m *model) tableView(width int) string {
 	}
 	for i := m.top; i < end; i++ {
 		a := v[i]
-		line := fmt.Sprintf("%s %-*s  %-*s",
-			marker(i == m.rowIdx),
-			nameW, trunc(a.Label(), nameW),
-			statusW, a.Status())
-		if i == m.rowIdx {
-			b.WriteString(styRowSel.Render(line))
+		sel := i == m.rowIdx
+
+		imgTxt, imgSty := m.icons.image(a)
+		boxTxt, boxSty := m.icons.box(a)
+
+		name := fmt.Sprintf("%s %-*s", marker(sel), nameW, trunc(a.Label(), nameW))
+		if sel {
+			b.WriteString(styRowSel.Render(name))
 		} else {
-			b.WriteString(styRow.Render(line))
+			b.WriteString(styRow.Render(name))
 		}
+		// Columns keep their own colour so state stays readable on the
+		// highlighted row too; pad() counts runes, since glyphs are 1 rune but
+		// several bytes.
+		b.WriteString(" " + imgSty.Render(pad(imgTxt, imgW)))
+		b.WriteString(" " + boxSty.Render(pad(boxTxt, boxW)))
 		b.WriteString("\n")
 	}
 	if len(v) > h {
 		b.WriteString(styDesc.Render(fmt.Sprintf("  %d-%d of %d", m.top+1, end, len(v))))
 	}
 	return b.String()
+}
+
+// pad right-pads to w display cells, counting runes rather than bytes.
+func pad(s string, w int) string {
+	n := len([]rune(s))
+	if n >= w {
+		return s
+	}
+	return s + strings.Repeat(" ", w-n)
 }
 
 func (m *model) footerView() string {
@@ -476,6 +510,7 @@ func (m *model) footerView() string {
 	}
 	parts = append(parts,
 		styKey.Render("⏎")+styDesc.Render(" shell"),
+		styKey.Render("J/K")+styDesc.Render(" scroll"),
 		styKey.Render("/")+styDesc.Render(" filter"),
 		styKey.Render("?")+styDesc.Render(" help"),
 		styKey.Render("q")+styDesc.Render(" quit"),

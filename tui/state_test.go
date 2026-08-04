@@ -66,3 +66,21 @@ func TestEmptyStateRendersEmptyValues(t *testing.T) {
 		t.Errorf("empty selections should still render empty vars:\n%s", out)
 	}
 }
+
+func TestSuperscript(t *testing.T) {
+	for in, want := range map[int]string{0: "⁰", 6: "⁶", 12: "¹²", 23: "²³"} {
+		if got := superscript(in); got != want {
+			t.Errorf("superscript(%d) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// pad counts runes, not bytes: a multi-byte glyph must not eat column width.
+func TestPadCountsRunes(t *testing.T) {
+	if got := pad("● running", 11); len([]rune(got)) != 11 {
+		t.Errorf("pad produced %d runes, want 11", len([]rune(got)))
+	}
+	if got := pad("toolong-value", 4); got != "toolong-value" {
+		t.Errorf("pad must not truncate, got %q", got)
+	}
+}

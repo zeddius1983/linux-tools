@@ -46,7 +46,7 @@ without linking the container's glibc.
 | `↑`/`k` `↓`/`j` | move selection |
 | `←`/`h` `→`/`l`, `tab`/`shift+tab` | previous / next category |
 | `g` / `end` | first / last row |
-| `J`/`K`, `pgdn`/`pgup` | scroll the README panel |
+| `J`/`K`, `pgdn`/`pgup`, `ctrl+d`/`ctrl+u` | scroll the README panel |
 | `/` | filter within the category |
 | `s` `b` `c` `e` `r` | setup · build · create · export · rm |
 | `⏎` | open a shell in the box |
@@ -67,9 +67,21 @@ already in place and tested for when they land.
 
 ## Info panel
 
-Renders `apps/<name>/README.md` with Glamour. Results are cached per app and
-width. Apps without a README show a placeholder — currently 9 of 23 apps have
-none, even though `CLAUDE.md` requires one.
+Shows only the rendered `apps/<name>/README.md` — image and box state live in
+the table columns, so repeating them here would just cost README rows. Rendered
+with Glamour, cached per app and width, scrollable. Apps without a README show a
+placeholder — currently 9 of 23 apps have none, even though `CLAUDE.md`
+requires one.
+
+## Icons
+
+Nerd Font glyphs are used for category tabs and image state by default, as
+gh-dash does. They render as tofu without a patched font, so `--ascii` swaps in
+plain Unicode (`✓`, `✗`) instead. Run/stop dots (`●`/`○`) are plain Unicode in
+both modes.
+
+Tab counts are Unicode superscripts (`Development⁷`). For gh-dash's
+parenthesised style instead, change `superscript()` in `main.go`.
 
 ## Categories
 
@@ -83,7 +95,8 @@ appended alphabetically.
 |---|---|
 | category tabs with counts | done |
 | app table, terminal-width columns | done — no fixed 26-char budget |
-| info panel: metadata + rendered README | done |
+| info panel: rendered README, scrollable | done |
+| IMAGE / BOX table columns with glyphs | done |
 | filter, help overlay, footer | done |
 | actions via `ExecProcess` + state refresh | done |
 | native wizard pages (multi-select, select) | not started — bash whiptail still handles these |
