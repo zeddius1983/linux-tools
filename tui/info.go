@@ -1,0 +1,140 @@
+package main
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"charm.land/glamour/v2"
+	"charm.land/lipgloss/v2"
+)
+
+// infoPanel renders the right-hand pane: app metadata followed by the app's
+// README.md as rendered markdown.
+//
+// Rendering markdown is not free, so results are cached per (app, width).
+type infoPanel struct {
+	appsDir string
+	cache   map[string]string
+	top     int // scroll offset in rendered lines
+}
+
+func newInfoPanel(appsDir string) *infoPanel {
+	return &infoPanel{appsDir: appsDir, cache: map[string]string{}}
+}
+
+// readme returns the rendered README for an app, or a placeholder.
+func (p *infoPanel) readme(app string, width int) string {
+	key := fmt.Sprintf("%s@%d", app, width)
+	if v, ok := p.cache[key]; ok {
+		return v
+	}
+
+	raw, err := os.ReadFile(filepath.Join(p.appsDir, app, "README.md"))
+	if err != nil {
+		out := styDesc.Render("No README.md for this app.")
+		p.cache[key] = out
+		return out
+	}
+
+	// Word wrap has to leave room for glamour's own left margin, or long lines
+	// spill past the panel and corrupt the column layout.
+	w := width - 2
+	if w < 20 {
+		w = 20
+	}
+	r, err := glamour.NewTermRenderer(
+		glamour.WithStandardStyle("dark"),
+		glamour.WithWordWrap(w),
+	)
+	if err != nil {
+		out := styWarn.Render("markdown renderer unavailable: " + err.Error())
+		p.cache[key] = out
+		return out
+	}
+	md, err := r.Render(string(raw))
+	if err != nil {
+		out := styWarn.Render("could not render README: " + err.Error())
+		p.cache[key] = out
+		return out
+	}
+	md = strings.TrimRight(md, "\n")
+	p.cache[key] = md
+	return md
+}
+
+// view renders the panel for one app, clipped to width x height.
+func (p *infoPanel) view(a App, width, height int) string {
+	var head []string
+	head = append(head, styTitle.Render(a.Label()))
+	if a.Label() != a.Name {
+		head = append(head, styDesc.Render("dir  ")+styRow.Render(a.Name))
+	}
+
+	img := styStatusNo.Render("not built")
+	if a.HasImage {
+		img = styStatusOK.Render(a.ImageName())
+	}
+	box := styStatusNo.Render("—")
+	switch {
+	case a.BoxRunning:
+		box = styStatusOK.Render(a.BoxName() + " (running)")
+	case a.HasBox:
+		box = styWarn.Render(a.BoxName() + " (stopped)")
+	}
+	head = append(head,
+		styDesc.Render("image ")+img,
+		styDesc.Render("box   ")+box,
+	)
+	if a.HasWizard {
+		head = append(head, styDesc.Render("wizard ")+styStatusOK.Render("yes"))
+	}
+	if len(a.Exports) > 0 {
+		head = append(head, styDesc.Render("exports ")+styRow.Render(trunc(strings.Join(a.Exports, "  "), width-9)))
+	}
+	if a.HostOnly {
+		head = append(head, styWarn.Render("host-only — installs straight to the host"))
+	}
+	head = append(head, styBorder.Render(strings.Repeat("─", width)))
+
+	body := strings.Split(p.readme(a.Name, width), "\n")
+
+	// Clip the README to whatever height is left under the metadata block.
+	avail := height - len(head)
+	if avail < 1 {
+		avail = 1
+	}
+	if p.top > len(body)-avail {
+		p.top = len(body) - avail
+	}
+	if p.top < 0 {
+		p.top = 0
+	}
+	end := p.top + avail
+	if end > len(body) {
+		end = len(body)
+	}
+
+	lines := append([]string{}, head...)
+	lines = append(lines, body[p.top:end]...)
+
+	// Pad so the panel keeps a constant height and the footer does not jump.
+	for len(lines) < height {
+		lines = append(lines, "")
+	}
+	for i, l := range lines {
+		lines[i] = lipgloss.NewStyle().MaxWidth(width).Render(l)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// scroll moves the README view, clamped by the caller's next render.
+func (p *infoPanel) scroll(delta int) {
+	p.top += delta
+	if p.top < 0 {
+		p.top = 0
+	}
+}
+
+func (p *infoPanel) resetScroll() { p.top = 0 }

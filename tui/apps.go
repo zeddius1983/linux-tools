@@ -27,6 +27,16 @@ type App struct {
 // UncategorisedLabel is used for apps with no apps/<name>/category file.
 const UncategorisedLabel = "Other"
 
+// Label is the display name: the human-friendly description when present,
+// falling back to the directory name. The directory name remains the identity
+// used for commands and paths.
+func (a App) Label() string {
+	if a.Description != "" {
+		return a.Description
+	}
+	return a.Name
+}
+
 // ImageName mirrors image_name() in lib/helpers.sh.
 func (a App) ImageName() string { return "linux-tools/" + a.Name + ":latest" }
 

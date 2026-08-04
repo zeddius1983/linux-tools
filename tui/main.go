@@ -22,10 +22,12 @@ import (
 func main() {
 	var appsDir, toolsBin string
 	var render bool
+	var renderApp string
 	var renderW, renderH int
 	flag.StringVar(&appsDir, "apps-dir", "apps", "path to the apps/ directory")
 	flag.StringVar(&toolsBin, "tools", "tools", "bash entrypoint to run for actions")
 	flag.BoolVar(&render, "render", false, "print one frame and exit (no tty needed)")
+	flag.StringVar(&renderApp, "render-app", "", "select this app for --render")
 	flag.IntVar(&renderW, "render-width", 100, "frame width for --render")
 	flag.IntVar(&renderH, "render-height", 28, "frame height for --render")
 	flag.Parse()
@@ -46,6 +48,9 @@ func main() {
 	// is the only way to check layout in a pipe, a test, or a screenshot.
 	if render {
 		m.w, m.h = renderW, renderH
+		if renderApp != "" {
+			m.selectApp(renderApp)
+		}
 		fmt.Println(m.View().Content)
 		return
 	}
@@ -110,6 +115,7 @@ type model struct {
 	showHelp  bool
 	status    string
 	statusErr bool
+	info      *infoPanel
 }
 
 func newModel(apps []App, appsDir, toolsBin string) *model {
@@ -118,12 +124,29 @@ func newModel(apps []App, appsDir, toolsBin string) *model {
 		cats:     Categories(apps),
 		appsDir:  appsDir,
 		toolsBin: toolsBin,
+		info:     newInfoPanel(appsDir),
 		w:        100,
 		h:        30,
 	}
 }
 
 func (m *model) Init() tea.Cmd { return nil }
+
+// selectApp moves the cursor to a named app, switching category if needed.
+func (m *model) selectApp(name string) bool {
+	for ci := range m.cats {
+		m.catIdx = ci
+		for ri, a := range m.visible() {
+			if a.Name == name {
+				m.rowIdx = ri
+				m.clampRow()
+				return true
+			}
+		}
+	}
+	m.catIdx = 0
+	return false
+}
 
 // visible returns the apps in the current category matching the filter.
 func (m *model) visible() []App {
@@ -137,12 +160,12 @@ func (m *model) visible() []App {
 		if a.Category != cat {
 			continue
 		}
-		if f != "" && !strings.Contains(strings.ToLower(a.Name+" "+a.Description), f) {
+		if f != "" && !strings.Contains(strings.ToLower(a.Name+" "+a.Label()), f) {
 			continue
 		}
 		out = append(out, a)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	sort.Slice(out, func(i, j int) bool { return out[i].Label() < out[j].Label() })
 	return out
 }
 
@@ -233,23 +256,33 @@ func (m *model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if len(m.cats) > 0 {
 			m.catIdx = (m.catIdx + 1) % len(m.cats)
 			m.rowIdx, m.top = 0, 0
+			m.info.resetScroll()
 		}
 	case "shift+tab", "h", "left":
 		if len(m.cats) > 0 {
 			m.catIdx = (m.catIdx - 1 + len(m.cats)) % len(m.cats)
 			m.rowIdx, m.top = 0, 0
+			m.info.resetScroll()
 		}
 	case "j", "down":
 		m.rowIdx++
 		m.clampRow()
+		m.info.resetScroll()
 	case "k", "up":
 		m.rowIdx--
 		m.clampRow()
+		m.info.resetScroll()
+	case "J", "pgdown", "ctrl+d":
+		m.info.scroll(10)
+	case "K", "pgup", "ctrl+u":
+		m.info.scroll(-10)
 	case "g", "home":
 		m.rowIdx, m.top = 0, 0
-	case "G", "end":
+		m.info.resetScroll()
+	case "end":
 		m.rowIdx = len(m.visible()) - 1
 		m.clampRow()
+		m.info.resetScroll()
 	case "R":
 		if apps, err := LoadApps(m.appsDir); err == nil {
 			m.apps = apps
@@ -285,7 +318,7 @@ func (m *model) clampRow() {
 	if m.rowIdx >= n {
 		m.rowIdx = n - 1
 	}
-	h := m.tableHeight()
+	h := m.bodyHeight() - 1
 	if m.rowIdx < m.top {
 		m.top = m.rowIdx
 	}
@@ -310,12 +343,12 @@ func (m *model) runCmd(name string, a App, bin string, args ...string) tea.Cmd {
 
 // --- view --------------------------------------------------------------------
 
-// tableHeight is the row budget left after chrome (tabs, header, detail,
-// footer). Kept in one place so scrolling and rendering cannot disagree.
-func (m *model) tableHeight() int {
-	h := m.h - 12
-	if h < 3 {
-		h = 3
+// bodyHeight is the row budget for the table and info panel, after the tab bar
+// and footer. Kept in one place so scrolling and rendering cannot disagree.
+func (m *model) bodyHeight() int {
+	h := m.h - 6
+	if h < 4 {
+		h = 4
 	}
 	return h
 }
@@ -327,12 +360,48 @@ func (m *model) View() tea.View {
 	var b strings.Builder
 	b.WriteString(m.tabsView())
 	b.WriteString("\n")
-	b.WriteString(m.tableView())
+
+	// Table on the left, README info panel on the right.
+	infoW := m.infoWidth()
+	tableW := m.w - infoW - 3
+	body := lipgloss.JoinHorizontal(lipgloss.Top,
+		lipgloss.NewStyle().Width(tableW).Render(m.tableView(tableW)),
+		styBorder.Render(" │ "),
+		m.infoView(infoW),
+	)
+	b.WriteString(body)
 	b.WriteString("\n")
-	b.WriteString(m.detailView())
+	b.WriteString(styBorder.Render(strings.Repeat("─", m.w)))
 	b.WriteString("\n")
 	b.WriteString(m.footerView())
 	return altView(b.String())
+}
+
+// infoWidth is the README panel width: roughly 45% of the terminal, bounded so
+// it neither starves the table nor becomes unreadably narrow.
+func (m *model) infoWidth() int {
+	w := m.w * 45 / 100
+	if w < 34 {
+		w = 34
+	}
+	if w > 72 {
+		w = 72
+	}
+	if w > m.w-30 {
+		w = m.w - 30
+	}
+	if w < 20 {
+		w = 20
+	}
+	return w
+}
+
+func (m *model) infoView(width int) string {
+	a, ok := m.current()
+	if !ok {
+		return lipgloss.NewStyle().Width(width).Render(styDesc.Render("no app selected"))
+	}
+	return m.info.view(a, width, m.bodyHeight())
 }
 
 func (m *model) tabsView() string {
@@ -349,16 +418,16 @@ func (m *model) tabsView() string {
 	return row + "\n" + styBorder.Render(strings.Repeat("─", m.w))
 }
 
-func (m *model) tableView() string {
+func (m *model) tableView(width int) string {
 	v := m.visible()
-	nameW, descW, statusW := 20, 34, 12
-	if m.w > 92 {
-		descW = m.w - nameW - statusW - 12
+	statusW := 11
+	nameW := width - statusW - 5
+	if nameW < 12 {
+		nameW = 12
 	}
 
 	var b strings.Builder
-	b.WriteString(styHeader.Render(fmt.Sprintf("  %-*s  %-*s  %-*s",
-		nameW, "APP", descW, "DESCRIPTION", statusW, "STATUS")))
+	b.WriteString(styHeader.Render(fmt.Sprintf("  %-*s  %-*s", nameW, "APP", statusW, "STATUS")))
 	b.WriteString("\n")
 
 	if len(v) == 0 {
@@ -366,17 +435,16 @@ func (m *model) tableView() string {
 		return b.String()
 	}
 
-	h := m.tableHeight()
+	h := m.bodyHeight() - 1
 	end := m.top + h
 	if end > len(v) {
 		end = len(v)
 	}
 	for i := m.top; i < end; i++ {
 		a := v[i]
-		line := fmt.Sprintf("%s %-*s  %-*s  %-*s",
+		line := fmt.Sprintf("%s %-*s  %-*s",
 			marker(i == m.rowIdx),
-			nameW, trunc(a.Name, nameW),
-			descW, trunc(a.Description, descW),
+			nameW, trunc(a.Label(), nameW),
 			statusW, a.Status())
 		if i == m.rowIdx {
 			b.WriteString(styRowSel.Render(line))
@@ -389,45 +457,6 @@ func (m *model) tableView() string {
 		b.WriteString(styDesc.Render(fmt.Sprintf("  %d-%d of %d", m.top+1, end, len(v))))
 	}
 	return b.String()
-}
-
-func (m *model) detailView() string {
-	a, ok := m.current()
-	if !ok {
-		return styBorder.Render(strings.Repeat("─", m.w))
-	}
-	sep := styBorder.Render(strings.Repeat("─", m.w))
-
-	img := styStatusNo.Render("not built")
-	if a.HasImage {
-		img = styStatusOK.Render(a.ImageName())
-	}
-	box := styStatusNo.Render("—")
-	switch {
-	case a.BoxRunning:
-		box = styStatusOK.Render(a.BoxName() + " (running)")
-	case a.HasBox:
-		box = styWarn.Render(a.BoxName() + " (stopped)")
-	}
-	wiz := styStatusNo.Render("—")
-	if a.HasWizard {
-		wiz = styStatusOK.Render("yes")
-	}
-	exports := strings.Join(a.Exports, "  ")
-	if exports == "" {
-		exports = "—"
-	}
-
-	title := styTitle.Render(a.Name)
-	if a.HostOnly {
-		title += styWarn.Render("  [host-only]")
-	}
-
-	return sep + "\n" +
-		title + styDesc.Render("  ·  "+a.Description) + "\n" +
-		styDesc.Render("image  ") + img + "\n" +
-		styDesc.Render("box    ") + box + styDesc.Render("     wizard  ") + wiz + "\n" +
-		styDesc.Render("exports ") + styRow.Render(trunc(exports, maxInt(m.w-10, 20)))
 }
 
 func (m *model) footerView() string {
@@ -461,7 +490,8 @@ func (m *model) helpView() string {
 		{"↑/k  ↓/j", "move selection"},
 		{"←/h  →/l", "previous / next category"},
 		{"tab / shift+tab", "previous / next category"},
-		{"g / G", "first / last row"},
+		{"g / end", "first / last row"},
+		{"J / K, pgdn / pgup", "scroll the README panel"},
 		{"/", "filter within category"},
 		{"s", "setup — install (removes existing box+image)"},
 		{"b", "build — image only"},

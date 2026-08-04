@@ -1,8 +1,12 @@
 # tools-tui — dashboard front-end (prototype)
 
-A `gh-dash`-style dashboard for linux-tools: category tabs, an app table, a
-detail pane, and a keybinding footer. Built on the same stack gh-dash uses —
-Bubble Tea v2, Lip Gloss v2.
+A `gh-dash`-style dashboard for linux-tools: category tabs, an app table, and a
+right-hand info panel showing the selected app's README as rendered markdown.
+Built on the same stack gh-dash uses — Bubble Tea v2, Lip Gloss v2, Glamour v2.
+
+Apps are listed by their `description` (e.g. "Dev Toolbox"), not their directory
+name; the directory name is shown in the info panel as `dir`, since that is what
+commands and paths use.
 
 See [`docs/tui-migration.md`](../docs/tui-migration.md) for the design.
 
@@ -30,6 +34,9 @@ without linking the container's glibc.
 
 # print one frame and exit; no tty needed, useful for layout checks
 ./tui/tools-tui --apps-dir apps --render --render-width 104
+
+# render with a specific app selected
+./tui/tools-tui --apps-dir apps --render --render-app dev-toolbox
 ```
 
 ## Keys
@@ -38,7 +45,8 @@ without linking the container's glibc.
 |---|---|
 | `↑`/`k` `↓`/`j` | move selection |
 | `←`/`h` `→`/`l`, `tab`/`shift+tab` | previous / next category |
-| `g` / `G` | first / last row |
+| `g` / `end` | first / last row |
+| `J`/`K`, `pgdn`/`pgup` | scroll the README panel |
 | `/` | filter within the category |
 | `s` `b` `c` `e` `r` | setup · build · create · export · rm |
 | `⏎` | open a shell in the box |
@@ -57,6 +65,12 @@ wizard**. Native wizard pages are the next step; the Go-side state-file bridge
 (`state.go`, `wizard.go`, and `wizard_load_state` in `lib/wizard.sh`) is
 already in place and tested for when they land.
 
+## Info panel
+
+Renders `apps/<name>/README.md` with Glamour. Results are cached per app and
+width. Apps without a README show a placeholder — currently 9 of 23 apps have
+none, even though `CLAUDE.md` requires one.
+
 ## Categories
 
 Read from `apps/<name>/category`, one line per app. Missing ⇒ `Other`.
@@ -69,7 +83,7 @@ appended alphabetically.
 |---|---|
 | category tabs with counts | done |
 | app table, terminal-width columns | done — no fixed 26-char budget |
-| detail pane (image, box, exports, wizard) | done |
+| info panel: metadata + rendered README | done |
 | filter, help overlay, footer | done |
 | actions via `ExecProcess` + state refresh | done |
 | native wizard pages (multi-select, select) | not started — bash whiptail still handles these |
