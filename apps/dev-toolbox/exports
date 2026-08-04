@@ -6,6 +6,8 @@ bin:npx
 bin:uv
 bin:uvx
 bin:firecrawl
+bin:go
+bin:gofmt
 bin:rustup
 bin:rustc
 bin:cargo
