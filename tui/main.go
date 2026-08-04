@@ -466,11 +466,14 @@ func (m *model) tableView(width int) string {
 	// a bare "✗" is what left them ragged before. The help overlay carries the
 	// legend.
 	imgW, boxW := 5, 3
+	// Gap between the two state columns. They are only a glyph wide each, so a
+	// single space read as one column rather than two.
+	const colGap = 4
 	// Both the header and the rows open with a 4-cell prefix — "    " above,
 	// gutter + glyph + space below — so the APP field must be the same width in
 	// each, or the state columns start two cells later on rows than in the
 	// header.
-	nameW := width - imgW - boxW - 6
+	nameW := width - imgW - boxW - colGap - 5
 	if nameW < 12 {
 		nameW = 12
 	}
@@ -479,8 +482,8 @@ func (m *model) tableView(width int) string {
 	// State columns are right-aligned, header and values alike: the values vary
 	// in length ("✓ built" vs a bare "✗"), so left-aligning left the header
 	// visibly offset from the text beneath it.
-	b.WriteString(styHeader.Render(fmt.Sprintf("    %-*s %s %s",
-		nameW, "APP", "IMAGE", "BOX")))
+	b.WriteString(styHeader.Render(fmt.Sprintf("    %-*s %s%s%s",
+		nameW, "APP", "IMAGE", strings.Repeat(" ", colGap), "BOX")))
 	b.WriteString("\n")
 
 	if len(v) == 0 {
@@ -518,7 +521,7 @@ func (m *model) tableView(width int) string {
 		}
 
 		label := trunc(a.Label(), nameW)
-		used := 4 + nameW + 1 + imgW + 1 + boxW
+		used := 4 + nameW + 1 + imgW + colGap + boxW
 		trail := maxInt(width-used, 0)
 
 		b.WriteString(on(plain).Render("  "))
@@ -527,7 +530,7 @@ func (m *model) tableView(width int) string {
 		b.WriteString(on(nameSty).Render(pad(label, nameW)))
 		b.WriteString(on(plain).Render(" "))
 		b.WriteString(on(imgSty).Render(padCenter(imgTxt, imgW)))
-		b.WriteString(on(plain).Render(" "))
+		b.WriteString(on(plain).Render(strings.Repeat(" ", colGap)))
 		b.WriteString(on(boxSty).Render(padCenter(boxTxt, boxW)))
 		b.WriteString(on(plain).Render(strings.Repeat(" ", trail)))
 		b.WriteString("\n")
