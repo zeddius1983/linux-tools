@@ -41,9 +41,10 @@ func (i iconSet) category(name string) string {
 // image renders the IMAGE column for an app.
 func (i iconSet) image(a App) (string, lipgloss.Style) {
 	if a.HostOnly {
-		// Host-only apps genuinely have no image and no box; the badge on the
-		// name says why, so these read as "not applicable", not "not built".
-		return i.dash(), styDesc
+		// Host-only apps have no image and no box. Left blank rather than
+		// marked: the platform glyph beside the name already says why, and a
+		// marker here reads as a value when there is none.
+		return "", styDesc
 	}
 	if a.HasImage {
 		return i.check() + " built", styStatusOK
@@ -54,7 +55,7 @@ func (i iconSet) image(a App) (string, lipgloss.Style) {
 // box renders the BOX column for an app.
 func (i iconSet) box(a App) (string, lipgloss.Style) {
 	if a.HostOnly {
-		return i.dash(), styDesc
+		return "", styDesc
 	}
 	switch {
 	case a.BoxRunning:
@@ -82,4 +83,3 @@ func (i iconSet) cross() string {
 
 func (i iconSet) dotFilled() string { return "●" }
 func (i iconSet) dotHollow() string { return "○" }
-func (i iconSet) dash() string      { return "─" }

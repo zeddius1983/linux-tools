@@ -107,8 +107,9 @@ Each app carries a one-cell glyph beside its name saying where it runs:
 | containerised (20 of 23) | Docker (`--ascii`: `◆`) |
 | host-only (`shell-toolbox`, `nvidia-acs-service`, `nvidia-cdi-service`) | the host distro's logo, e.g. Mint (`--ascii`: `⌂`) |
 
-Host-only apps also show a dim `─` in IMAGE and BOX — distinct from `✗ —`,
-which means "could be built, is not".
+Host-only apps leave IMAGE and BOX blank — they have neither, and the glyph
+beside the name already says why. That is distinct from `✗ —`, which means
+"could be built, is not".
 
 It sits with the name rather than in its own column because it is a fixed
 property of the app, not live state like IMAGE and BOX.
