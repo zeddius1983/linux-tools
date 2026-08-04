@@ -59,14 +59,54 @@ func TestShortDistro(t *testing.T) {
 	}
 }
 
-// Containerised apps report the runtime; host-only apps report the host distro.
-func TestPlatformColumn(t *testing.T) {
-	i := newIconSet(false)
-	if got, _ := i.platform(App{Name: "comfyui"}); got != "container" {
-		t.Errorf("containerised app platform = %q, want container", got)
+// The name glyph distinguishes containerised from host-only apps, and must
+// stay exactly one cell wide so it cannot skew the name column.
+func TestAppGlyph(t *testing.T) {
+	for _, nerd := range []bool{true, false} {
+		i := newIconSet(nerd)
+		cont, _ := i.appGlyph(App{Name: "comfyui"})
+		hostly, _ := i.appGlyph(App{Name: "shell-toolbox", HostOnly: true})
+		if cont == hostly {
+			t.Errorf("nerd=%v: container and host-only glyphs must differ", nerd)
+		}
+		for _, g := range []string{cont, hostly} {
+			if n := len([]rune(g)); n != 1 {
+				t.Errorf("nerd=%v: glyph %q is %d runes, want 1", nerd, g, n)
+			}
+		}
 	}
-	got, _ := i.platform(App{Name: "shell-toolbox", HostOnly: true})
-	if got != shortDistro(host.ID) {
-		t.Errorf("host-only app platform = %q, want %q", got, shortDistro(host.ID))
+}
+
+// When os-release cannot be read or carries no usable ID, the glyph must fall
+// back to generic Linux rather than rendering nothing (which silently ate a
+// column cell) or tofu.
+func TestGlyphFallsBackToGenericLinux(t *testing.T) {
+	cases := []struct {
+		name string
+		id   string
+		like []string
+	}{
+		{"undetected", "", nil},
+		{"placeholder id", "linux", nil},
+		{"unknown distro", "some-unheard-of-os", nil},
+		{"unknown with unknown ID_LIKE", "weird", []string{"also-weird"}},
+	}
+	for _, c := range cases {
+		if got := distroGlyph(c.id, c.like); got != glyphTux {
+			t.Errorf("%s: glyph = %q, want the generic Tux glyph %q", c.name, got, glyphTux)
+		}
+	}
+}
+
+// Every glyph must be exactly one cell; an empty string silently collapses the
+// name column, which is how the missing Docker glyph slipped through before.
+func TestGlyphsAreNonEmpty(t *testing.T) {
+	if glyphDocker == "" || glyphTux == "" {
+		t.Fatal("glyph constants must not be empty")
+	}
+	for _, id := range []string{"ubuntu", "arch", "fedora", "linuxmint", "cachyos"} {
+		if g := distroGlyph(id, nil); len([]rune(g)) != 1 {
+			t.Errorf("distroGlyph(%q) = %q, want exactly 1 rune", id, g)
+		}
 	}
 }

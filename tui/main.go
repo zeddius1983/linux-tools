@@ -390,8 +390,8 @@ func (m *model) infoWidth() int {
 		w = 96
 	}
 	// The table still needs room for the app label plus both state columns.
-	if w > m.w-58 {
-		w = m.w - 58
+	if w > m.w-48 {
+		w = m.w - 48
 	}
 	if w < 20 {
 		w = 20
@@ -437,15 +437,16 @@ func (m *model) tabsView() string {
 
 func (m *model) tableView(width int) string {
 	v := m.visible()
-	platW, imgW, boxW := 11, 9, 11
-	nameW := width - platW - imgW - boxW - 9
+	imgW, boxW := 9, 11
+	// 2 cells are reserved inside the name field for the platform glyph.
+	nameW := width - imgW - boxW - 7
 	if nameW < 12 {
 		nameW = 12
 	}
 
 	var b strings.Builder
-	b.WriteString(styHeader.Render(fmt.Sprintf("  %-*s %-*s %-*s %-*s",
-		nameW, "APP", platW, "PLATFORM", imgW, "IMAGE", boxW, "BOX")))
+	b.WriteString(styHeader.Render(fmt.Sprintf("    %-*s %-*s %-*s",
+		nameW-2, "APP", imgW, "IMAGE", boxW, "BOX")))
 	b.WriteString("\n")
 
 	if len(v) == 0 {
@@ -462,11 +463,15 @@ func (m *model) tableView(width int) string {
 		a := v[i]
 		sel := i == m.rowIdx
 
-		platTxt, platSty := m.icons.platform(a)
+		glyph, glyphSty := m.icons.appGlyph(a)
 		imgTxt, imgSty := m.icons.image(a)
 		boxTxt, boxSty := m.icons.box(a)
 
-		name := fmt.Sprintf("%s %-*s", marker(sel), nameW, trunc(a.Label(), nameW))
+		// Glyph rendered separately so it keeps its own colour, then the label
+		// padded to fill the rest of the name field.
+		label := trunc(a.Label(), nameW-2)
+		name := fmt.Sprintf("%-*s", nameW-2, label)
+		b.WriteString(marker(sel) + " " + glyphSty.Render(glyph) + " ")
 		if sel {
 			b.WriteString(styRowSel.Render(name))
 		} else {
@@ -475,7 +480,6 @@ func (m *model) tableView(width int) string {
 		// Columns keep their own colour so state stays readable on the
 		// highlighted row too; pad() counts runes, since glyphs are 1 rune but
 		// several bytes.
-		b.WriteString(" " + platSty.Render(pad(platTxt, platW)))
 		b.WriteString(" " + imgSty.Render(pad(imgTxt, imgW)))
 		b.WriteString(" " + boxSty.Render(pad(boxTxt, boxW)))
 		b.WriteString("\n")

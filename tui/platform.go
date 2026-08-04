@@ -66,41 +66,47 @@ func parseOSRelease(path string) (hostDistro, bool) {
 	return d, true
 }
 
+// Nerd Font logos, written as explicit escapes: these are private-use
+// codepoints, and pasting them as literals is fragile — they silently become
+// empty strings when they pass through tooling that does not preserve the
+// private-use area.
+const (
+	glyphTux    = "\uf17c" // nf-linux-tux — the generic fallback
+	glyphDocker = "\ue7b0" // nf-dev-docker
+)
+
 // distroGlyph maps an os-release ID to a Nerd Font logo, falling back through
-// ID_LIKE and finally to the Tux glyph. Rolling derivatives (CachyOS,
-// EndeavourOS, …) mostly have no logo of their own, which is exactly what
-// ID_LIKE is for.
+// ID_LIKE and finally to Tux. Only distros whose codepoints are known are
+// listed; everything else resolves through ID_LIKE (EndeavourOS and CachyOS to
+// Arch, Pop!_OS to Ubuntu) or lands on Tux, which is better than guessing a
+// codepoint and rendering tofu.
 func distroGlyph(id string, like []string) string {
 	glyphs := map[string]string{
-		"ubuntu":      "",
-		"debian":      "",
-		"linuxmint":   "",
-		"arch":        "",
-		"cachyos":     "", // Arch-family, no logo of its own
-		"manjaro":     "",
-		"endeavouros": "",
-		"fedora":      "",
-		"rhel":        "",
-		"centos":      "",
-		"opensuse":    "",
-		"gentoo":      "",
-		"alpine":      "",
-		"nixos":       "",
-		"void":        "",
-		"pop":         "",
-		"elementary":  "",
-		"kali":        "",
-		"raspbian":    "",
+		"ubuntu":    "\uf31b",
+		"debian":    "\uf306",
+		"linuxmint": "\uf30e",
+		"arch":      "\uf303",
+		"cachyos":   "\uf303", // Arch-family, no logo of its own
+		"manjaro":   "\uf312",
+		"fedora":    "\uf30a",
+		"centos":    "\uf304",
+		"opensuse":  "\uf314",
+		"gentoo":    "\uf30d",
+		"alpine":    "\uf300",
+		"nixos":     "\uf313",
 	}
-	if g, ok := glyphs[id]; ok {
-		return g
+	if id != "" {
+		if g, ok := glyphs[id]; ok {
+			return g
+		}
 	}
 	for _, l := range like {
 		if g, ok := glyphs[l]; ok {
 			return g
 		}
 	}
-	return "" // Tux
+	// Unknown, undetected, or a distro with no logo: generic Linux.
+	return glyphTux
 }
 
 // shortDistro trims an os-release ID to something that fits a narrow column.
@@ -116,20 +122,22 @@ func shortDistro(id string) string {
 	return id
 }
 
-// platform renders the PLATFORM column: which machine an app actually runs on.
-// Containerised apps report the container runtime; host-only apps report the
-// host's distro, since that is where their payload lands.
-func (i iconSet) platform(a App) (string, lipgloss.Style) {
+// appGlyph is the marker shown beside an app's name: the container runtime for
+// containerised apps, or the host's own distro logo for host-only ones, whose
+// payload lands on the host itself.
+//
+// It sits with the name rather than in its own column: the value is a fixed
+// property of the app, not live state like IMAGE and BOX, so it does not earn
+// a column of its own.
+func (i iconSet) appGlyph(a App) (string, lipgloss.Style) {
 	if a.HostOnly {
-		g := ""
 		if i.nerd {
-			g = distroGlyph(host.ID, host.Like) + " "
+			return distroGlyph(host.ID, host.Like), styWarn
 		}
-		return g + shortDistro(host.ID), styWarn
+		return "⌂", styWarn
 	}
-	g := ""
 	if i.nerd {
-		g = " " // nf-dev-docker
+		return glyphDocker, styDesc
 	}
-	return g + "container", styDesc
+	return "◆", styDesc
 }

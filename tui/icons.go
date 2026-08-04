@@ -38,42 +38,6 @@ func (i iconSet) category(name string) string {
 	}
 }
 
-// superscriptLetters renders text with Unicode modifier letters, matching the
-// superscript tab counts. Unlike digits, not every letter has a superscript
-// form (q has none, i and others are inconsistent across fonts), so this
-// reports false and the caller falls back to plain text rather than emitting a
-// half-superscripted word.
-func superscriptLetters(s string) (string, bool) {
-	forms := map[rune]rune{
-		'a': 'ᵃ', 'b': 'ᵇ', 'c': 'ᶜ', 'd': 'ᵈ', 'e': 'ᵉ', 'f': 'ᶠ', 'g': 'ᵍ',
-		'h': 'ʰ', 'i': 'ⁱ', 'j': 'ʲ', 'k': 'ᵏ', 'l': 'ˡ', 'm': 'ᵐ', 'n': 'ⁿ',
-		'o': 'ᵒ', 'p': 'ᵖ', 'r': 'ʳ', 's': 'ˢ', 't': 'ᵗ', 'u': 'ᵘ', 'v': 'ᵛ',
-		'w': 'ʷ', 'x': 'ˣ', 'y': 'ʸ', 'z': 'ᶻ',
-	}
-	var out []rune
-	for _, c := range s {
-		f, ok := forms[c]
-		if !ok {
-			return s, false
-		}
-		out = append(out, f)
-	}
-	return string(out), true
-}
-
-// hostBadge marks a host-only app next to its name. Host-only is a trait of 3
-// of 23 apps, so it is encoded as a badge rather than a column that would be
-// blank on almost every row.
-//
-// Superscript keeps it to 4 cells, which matters because the badge competes
-// with the app label for width on exactly the rows that carry it.
-func (i iconSet) hostBadge() string {
-	if b, ok := superscriptLetters("host"); ok {
-		return b
-	}
-	return "host"
-}
-
 // image renders the IMAGE column for an app.
 func (i iconSet) image(a App) (string, lipgloss.Style) {
 	if a.HostOnly {

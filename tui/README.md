@@ -84,24 +84,33 @@ It now detects containerisation (`/run/.containerenv`, `/.dockerenv`, or
 footer says `via distrobox-host-exec` when that is active, so it is never a
 silent mode.
 
-## PLATFORM column
+## Platform glyph
 
-Says which machine an app actually runs on:
+Each app carries a one-cell glyph beside its name saying where it runs:
 
-| App kind | Shown |
+| App kind | Glyph |
 |---|---|
-| containerised (20 of 23) |  `container` |
-| host-only (`shell-toolbox`, `nvidia-acs-service`, `nvidia-cdi-service`) | the host distro, e.g. ` mint` |
+| containerised (20 of 23) | Docker (`--ascii`: `◆`) |
+| host-only (`shell-toolbox`, `nvidia-acs-service`, `nvidia-cdi-service`) | the host distro's logo, e.g. Mint (`--ascii`: `⌂`) |
 
 Host-only apps also show a dim `─` in IMAGE and BOX — distinct from `✗ —`,
 which means "could be built, is not".
 
+It sits with the name rather than in its own column because it is a fixed
+property of the app, not live state like IMAGE and BOX.
+
 The host distro comes from os-release. Inside a Distrobox container
 `/etc/os-release` describes the *container* (ubuntu), so
-`/run/host/etc/os-release` is read first — otherwise host-only apps would be
-labelled with the container's distro. Distros with no logo of their own
-(CachyOS, EndeavourOS, …) fall back through `ID_LIKE` to a parent distro's
-glyph, and finally to Tux.
+`/run/host/etc/os-release` is read first. Distros with no logo of their own
+(CachyOS, EndeavourOS, …) fall back through `ID_LIKE` to a parent distro, and
+anything still unresolved — including a completely failed detection — falls
+back to the generic Tux glyph.
+
+Nerd Font glyphs are written as explicit `\u` escapes rather than pasted
+literals: they live in the Unicode private-use area and silently become empty
+strings when they pass through tooling that does not preserve it. That is
+exactly how the Docker glyph was lost once; there is now a test asserting no
+glyph is empty.
 
 ## Icons
 
