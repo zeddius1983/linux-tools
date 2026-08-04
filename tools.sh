@@ -68,7 +68,12 @@ case "$command_" in
         # pages can influence the image build; other page types are applied
         # after setup as before.
         wizard_active=0
-        if [[ -t 0 ]] && command -v whiptail &>/dev/null \
+        # LT_SKIP_WIZARD is set by the Go front-end, which has already asked
+        # everything and left its answers in LT_WIZARD_STATE.
+        if [[ -n "${LT_SKIP_WIZARD:-}" ]]; then
+            wizard_load_state "$app"
+            [[ $_WIZARD_STATE_LOADED -eq 1 ]] && wizard_active=1
+        elif [[ -t 0 ]] && command -v whiptail &>/dev/null \
                        && [[ -d "$APPS_DIR/$app/wizard" ]]; then
             wizard_active=1
             setup_tui_theme
@@ -81,8 +86,10 @@ case "$command_" in
         fi
         cmd_setup_finish "$app"
         ;;
-    build)  cmd_build  "$app" ;;
-    create) cmd_create "$app" ;;
+    # wizard_load_state is a no-op unless LT_WIZARD_STATE points at a real
+    # file, so these stay safe for plain scripted invocations.
+    build)  wizard_load_state "$app"; cmd_build  "$app" ;;
+    create) wizard_load_state "$app"; cmd_create "$app" ;;
     export) cmd_export "$app" ;;
     enter)  cmd_enter  "$app" ;;
     rm)     cmd_rm     "$app" ;;

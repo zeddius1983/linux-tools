@@ -22,6 +22,46 @@
 # it in the case statement inside tui_apply_wizards().
 
 declare -A _WIZARD_SELECTIONS=()
+_WIZARD_STATE_LOADED=0
+
+# --- Go front-end bridge -----------------------------------------------------
+# tools-tui (see tui/) collects every answer up front and writes a flat
+# KEY=value state file, then execs this script with LT_WIZARD_STATE pointing at
+# it. Rather than teaching each consumer a second code path, the file is
+# re-hydrated into _WIZARD_SELECTIONS so everything downstream — the apply
+# handlers, wizard_build_args, wizard_create_variant — works unchanged.
+#
+# Page variables are named PAGE_<sanitised pagename> because a page name like
+# "00-statusline" is not a valid shell identifier. The sanitisation is not
+# reversible, so the page files are walked and each name re-sanitised the same
+# way Go does, rather than trying to decode the variable name.
+#
+# A missing or unset state file is not an error: it is the normal
+# non-interactive path (`tools setup <app>` from a script), which must keep
+# taking build defaults exactly as before.
+_wizard_var_suffix() {
+    local s="$1"
+    printf '%s' "${s//[^a-zA-Z0-9]/_}"
+}
+
+wizard_load_state() {
+    local app="$1"
+    [[ -n "${LT_WIZARD_STATE:-}" && -f "${LT_WIZARD_STATE}" ]] || return 0
+
+    # shellcheck disable=SC1090
+    source "$LT_WIZARD_STATE"
+    _WIZARD_STATE_LOADED=1
+
+    local page fname pagename varname
+    for page in "$APPS_DIR/$app/wizard"/[0-9][0-9]-*.*; do
+        [[ -f "$page" ]] || continue
+        fname="${page##*/}"
+        pagename="${fname%.*}"
+        varname="PAGE_$(_wizard_var_suffix "$pagename")"
+        [[ -n "${!varname:-}" ]] && _WIZARD_SELECTIONS["$pagename"]="${!varname}"
+    done
+    return 0
+}
 
 tui_run_wizards() {
     local app="$1" action="$2"
@@ -186,6 +226,11 @@ _wizard_run_runtime_page() {
 # Translates the stored Label back to its "Label|value|desc" value field.
 wizard_create_variant() {
     local app="$1"
+    # Go already resolved the label to its value, so no round-trip is needed.
+    if [[ $_WIZARD_STATE_LOADED -eq 1 ]]; then
+        printf '%s' "${VARIANT:-}"
+        return 0
+    fi
     declare -p _WIZARD_SELECTIONS &>/dev/null || return 0
     local page fname pagename selected name value _desc
     for page in "$APPS_DIR/$app/wizard"/[0-9][0-9]-*.runtime; do
@@ -209,6 +254,13 @@ wizard_create_variant() {
 # Called by cmd_build; prints nothing when no wizard ran (non-interactive).
 wizard_build_args() {
     local app="$1"
+    # BUILD_ARGS arrives pre-rendered as "--build-arg NAME=value ..."; split it
+    # back into the one-token-per-line form cmd_build reads with mapfile.
+    if [[ $_WIZARD_STATE_LOADED -eq 1 ]]; then
+        local tok
+        for tok in ${BUILD_ARGS:-}; do printf '%s\n' "$tok"; done
+        return 0
+    fi
     declare -p _WIZARD_SELECTIONS &>/dev/null || return 0
     local wizard_dir="$APPS_DIR/$app/wizard"
     local page
