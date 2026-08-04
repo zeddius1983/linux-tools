@@ -70,7 +70,7 @@ var (
 	colOK       = lipgloss.Color("#b8bb26")
 	colWarn     = lipgloss.Color("#fe8019")
 	colBorder   = lipgloss.Color("#504945")
-	colGlyph    = lipgloss.Color("#83a598") // gruvbox blue
+	colGlyph    = lipgloss.Color("#83a598") // gruvbox blue, shared by tab and row glyphs
 	colSelBg    = lipgloss.Color("#3c3836")
 	styTabOn    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#1d2021")).Background(colAccent).Padding(0, 1)
 	styTabOff   = lipgloss.NewStyle().Foreground(colDim).Padding(0, 1)
@@ -84,9 +84,11 @@ var (
 	styStatusOK = lipgloss.NewStyle().Foreground(colOK)
 	styStatusNo = lipgloss.NewStyle().Foreground(colDim)
 	styWarn     = lipgloss.NewStyle().Foreground(colWarn)
-	// Platform glyphs share one colour: the glyph shape already says container
-	// vs host, so colour only has to make them legible. The dim style they used
-	// before rendered Docker's thin classic logo nearly invisible.
+	// One colour for every glyph, tab bar and rows alike, so they read as a set.
+	// The shape already says container vs host, so colour only has to make them
+	// legible — the dim style used before rendered Docker's logo nearly
+	// invisible. The active tab keeps its inverted styling, since a blue glyph
+	// on the accent background would lose contrast.
 	styGlyph = lipgloss.NewStyle().Foreground(colGlyph)
 )
 
@@ -371,10 +373,21 @@ func (m *model) View() tea.View {
 	// Table on the left, README info panel on the right.
 	infoW := m.infoWidth()
 	tableW := m.w - infoW - 3
+	// The divider must be built as a column of its own. JoinHorizontal pads a
+	// single-line element with blanks on every following line rather than
+	// repeating it, so " │ " on its own drew the separator only on row one.
+	// Its height is taken from the taller of the two panes, since the table
+	// gains an extra line when it shows a "n-m of N" counter.
+	table, info := m.tableView(tableW), m.infoView(infoW)
+	rows := maxInt(strings.Count(table, "\n")+1, strings.Count(info, "\n")+1)
+	divider := make([]string, rows)
+	for i := range divider {
+		divider[i] = styBorder.Render(" │ ")
+	}
 	body := lipgloss.JoinHorizontal(lipgloss.Top,
-		lipgloss.NewStyle().Width(tableW).Render(m.tableView(tableW)),
-		styBorder.Render(" │ "),
-		m.infoView(infoW),
+		lipgloss.NewStyle().Width(tableW).Render(table),
+		strings.Join(divider, "\n"),
+		info,
 	)
 	b.WriteString(body)
 	b.WriteString("\n")
@@ -429,11 +442,15 @@ func superscript(n int) string {
 func (m *model) tabsView() string {
 	var tabs []string
 	for i, c := range m.cats {
-		label := m.icons.category(c) + c + superscript(m.countIn(c))
+		g, name := m.icons.category(c), c+superscript(m.countIn(c))
 		if i == m.catIdx {
-			tabs = append(tabs, styTabOn.Render(label))
+			tabs = append(tabs, styTabOn.Render(g+name))
 		} else {
-			tabs = append(tabs, styTabOff.Render(label))
+			// Glyph in the shared accent, label dim: the same pairing the rows
+			// use, so an inactive tab and a row read alike.
+			tabs = append(tabs,
+				styTabOff.UnsetPadding().PaddingLeft(1).Foreground(colGlyph).Render(g)+
+					styTabOff.UnsetPadding().PaddingRight(1).Render(name))
 		}
 	}
 	row := lipgloss.JoinHorizontal(lipgloss.Top, tabs...)

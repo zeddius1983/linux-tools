@@ -71,8 +71,17 @@ func parseOSRelease(path string) (hostDistro, bool) {
 // empty strings when they pass through tooling that does not preserve the
 // private-use area.
 const (
+	// Terminals cannot scale a glyph — a cell is a fixed size — so apparent
+	// weight is a property of the icon family. Both of these come from the
+	// nf-linux block (U+F300–F32F), the same family as the distro logos, so
+	// they share their weight.
+	//
+	// Do not reach for nf-md-docker (U+F0868) to get a heavier logo: it lives
+	// in a supplementary plane, and terminals render those PUA codepoints
+	// double-width even though wcwidth — and therefore lipgloss.Width —
+	// reports 1. That silently shifts every column right of it by one cell.
 	glyphTux    = "\uf17c" // nf-linux-tux — the generic fallback
-	glyphDocker = "\ue7b0" // nf-dev-docker
+	glyphDocker = "\uf308" // nf-linux-docker
 )
 
 // distroGlyph maps an os-release ID to a Nerd Font logo, falling back through

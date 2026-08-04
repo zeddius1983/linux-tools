@@ -106,10 +106,17 @@ which means "could be built, is not".
 It sits with the name rather than in its own column because it is a fixed
 property of the app, not live state like IMAGE and BOX.
 
-Both glyphs share one colour (gruvbox blue, `colGlyph` in `main.go`). The shape
-already distinguishes container from host, so colour only has to make them
-legible — Docker's thin classic logo was nearly invisible in the dim style it
-used before, and the colour carried no information the glyph did not.
+Every glyph — tab bar and rows alike — uses one colour (gruvbox blue,
+`colGlyph` in `main.go`) so they read as a set. The shape already distinguishes
+container from host, so colour only has to make them legible. The active tab
+keeps its inverted styling, since a blue glyph on the accent background would
+lose contrast.
+
+All glyphs come from the `nf-linux` block (U+F300–F32F), including the Docker
+logo, so they share a weight. Do **not** substitute `nf-md-docker` (U+F0868) to
+get a heavier icon: it lives in a supplementary plane, and terminals render
+those PUA codepoints double-width even though wcwidth — and so
+`lipgloss.Width` — reports 1, which shifts every column right of it by a cell.
 
 The host distro comes from os-release. Inside a Distrobox container
 `/etc/os-release` describes the *container* (ubuntu), so
