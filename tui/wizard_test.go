@@ -25,6 +25,7 @@ func TestParseRealPages(t *testing.T) {
 		{"lmstudio", "00-runtime", "runtime", 2},
 		{"fastflowlm", "00-release", "buildarg", 0},
 		{"codex-cli", "00-release", "buildarg", 0},
+		{"codex-cli", "01-statusline", "packages", 1},
 	}
 
 	for _, c := range cases {
