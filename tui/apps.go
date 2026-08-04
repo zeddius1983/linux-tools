@@ -42,25 +42,6 @@ func (a App) ImageName() string { return "linux-tools/" + a.Name + ":latest" }
 // BoxName mirrors box_name() in lib/helpers.sh.
 func (a App) BoxName() string { return a.Name + "-box" }
 
-// Status is the short right-hand annotation shown next to an app in the list.
-// Unlike the whiptail front-end this is not padded to a fixed width, so app
-// descriptions are no longer constrained to ~26 characters.
-func (a App) Status() string {
-	if a.HostOnly {
-		return "host"
-	}
-	switch {
-	case a.BoxRunning:
-		return "running"
-	case a.HasBox:
-		return "stopped"
-	case a.HasImage:
-		return "image only"
-	default:
-		return "—"
-	}
-}
-
 // boxState is what `distrobox list` reports for one container.
 type boxState struct {
 	exists  bool

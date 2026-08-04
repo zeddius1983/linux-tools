@@ -461,15 +461,21 @@ func (m *model) tabsView() string {
 func (m *model) tableView(width int) string {
 	v := m.visible()
 	imgW, boxW := 9, 11
-	// Leading gutter (2) + glyph (1) + space (1), then the three fields.
-	nameW := width - imgW - boxW - 7
+	// Both the header and the rows open with a 4-cell prefix — "    " above,
+	// gutter + glyph + space below — so the APP field must be the same width in
+	// each, or the state columns start two cells later on rows than in the
+	// header.
+	nameW := width - imgW - boxW - 6
 	if nameW < 12 {
 		nameW = 12
 	}
 
 	var b strings.Builder
-	b.WriteString(styHeader.Render(fmt.Sprintf("    %-*s %-*s %-*s",
-		nameW-2, "APP", imgW, "IMAGE", boxW, "BOX")))
+	// State columns are right-aligned, header and values alike: the values vary
+	// in length ("✓ built" vs a bare "✗"), so left-aligning left the header
+	// visibly offset from the text beneath it.
+	b.WriteString(styHeader.Render(fmt.Sprintf("    %-*s %s %s",
+		nameW, "APP", padLeft("IMAGE", imgW), padLeft("BOX", boxW))))
 	b.WriteString("\n")
 
 	if len(v) == 0 {
@@ -507,7 +513,7 @@ func (m *model) tableView(width int) string {
 		}
 
 		label := trunc(a.Label(), nameW)
-		used := 2 + 1 + 1 + nameW + 1 + imgW + 1 + boxW
+		used := 4 + nameW + 1 + imgW + 1 + boxW
 		trail := maxInt(width-used, 0)
 
 		b.WriteString(on(plain).Render("  "))
@@ -515,9 +521,9 @@ func (m *model) tableView(width int) string {
 		b.WriteString(on(plain).Render(" "))
 		b.WriteString(on(nameSty).Render(pad(label, nameW)))
 		b.WriteString(on(plain).Render(" "))
-		b.WriteString(on(imgSty).Render(pad(imgTxt, imgW)))
+		b.WriteString(on(imgSty).Render(padLeft(imgTxt, imgW)))
 		b.WriteString(on(plain).Render(" "))
-		b.WriteString(on(boxSty).Render(pad(boxTxt, boxW)))
+		b.WriteString(on(boxSty).Render(padLeft(boxTxt, boxW)))
 		b.WriteString(on(plain).Render(strings.Repeat(" ", trail)))
 		b.WriteString("\n")
 	}
@@ -525,6 +531,15 @@ func (m *model) tableView(width int) string {
 		b.WriteString(styDesc.Render(fmt.Sprintf("  %d-%d of %d", m.top+1, end, len(v))))
 	}
 	return b.String()
+}
+
+// padLeft left-pads to w cells, right-aligning the text.
+func padLeft(s string, w int) string {
+	n := len([]rune(s))
+	if n >= w {
+		return s
+	}
+	return strings.Repeat(" ", w-n) + s
 }
 
 // pad right-pads to w display cells, counting runes rather than bytes.

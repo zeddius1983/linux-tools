@@ -49,7 +49,7 @@ func (i iconSet) image(a App) (string, lipgloss.Style) {
 	if a.HasImage {
 		return i.check() + " built", styStatusOK
 	}
-	return i.cross() + " —", styStatusNo
+	return i.cross(), styStatusNo
 }
 
 // box renders the BOX column for an app.
@@ -63,7 +63,7 @@ func (i iconSet) box(a App) (string, lipgloss.Style) {
 	case a.HasBox:
 		return i.dotHollow() + " stopped", styWarn
 	default:
-		return i.cross() + " —", styStatusNo
+		return i.cross(), styStatusNo
 	}
 }
 
