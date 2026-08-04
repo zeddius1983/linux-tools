@@ -83,6 +83,19 @@ func readExports(path string) []string {
 	return out
 }
 
+// ExportNames is the list of commands this app puts on the host, parsed from
+// the "type:name[:Display Name]" lines in its exports file.
+func (a App) ExportNames() []string {
+	var out []string
+	for _, e := range a.Exports {
+		parts := strings.Split(e, ":")
+		if len(parts) >= 2 && parts[1] != "" {
+			out = append(out, parts[1])
+		}
+	}
+	return out
+}
+
 // Categories returns the category names present, in a stable preferred order
 // with any unknown ones appended alphabetically.
 func Categories(apps []App) []string {

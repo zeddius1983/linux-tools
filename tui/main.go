@@ -355,7 +355,8 @@ func (m *model) runCmd(name string, a App, bin string, args ...string) tea.Cmd {
 // bodyHeight is the row budget for the table and info panel, after the tab bar
 // and footer. Kept in one place so scrolling and rendering cannot disagree.
 func (m *model) bodyHeight() int {
-	h := m.h - 6
+	// tab bar (2) + divider (1) + footer (2) + slack
+	h := m.h - 7
 	if h < 4 {
 		h = 4
 	}
@@ -535,33 +536,66 @@ func pad(s string, w int) string {
 	return s + strings.Repeat(" ", w-n)
 }
 
+// footerView renders two lines: what the selected app is, then the keys.
 func (m *model) footerView() string {
+	return m.contextLine() + "\n" + m.keysLine()
+}
+
+// contextLine shows the selected app's image reference and the commands it
+// exports to the host — the two things you usually want before running an
+// action on it.
+func (m *model) contextLine() string {
 	if m.filtering {
-		return styKey.Render("/") + styRow.Render(m.filter) + styDesc.Render("  ⏎ apply · esc cancel")
+		return styKey.Render("/") + styRow.Render(m.filter) +
+			styDesc.Render("   ⏎ apply · esc cancel")
 	}
 	if m.status != "" {
 		st := styStatusOK
 		if m.statusErr {
 			st = styWarn
 		}
-		return st.Render("• "+m.status) + styDesc.Render("   ? help · q quit")
+		return st.Render("• " + m.status)
 	}
+
+	a, ok := m.current()
+	if !ok {
+		return ""
+	}
+
+	var img string
+	switch {
+	case a.HostOnly:
+		img = styDesc.Render("installs to the host")
+	case a.HasImage:
+		img = styStatusOK.Render(a.ImageName())
+	default:
+		img = styStatusNo.Render(a.ImageName() + " (not built)")
+	}
+
+	exports := a.ExportNames()
+	if len(exports) == 0 {
+		return img
+	}
+	// Exports can be long; the image reference is the more important half, so
+	// the command list is what gets clipped.
+	room := m.w - lipgloss.Width(img) - 5
+	return img + styDesc.Render("   ⇥ ") +
+		styRow.Render(trunc(strings.Join(exports, " "), maxInt(room, 10)))
+}
+
+func (m *model) keysLine() string {
 	var parts []string
 	for _, a := range actions {
 		parts = append(parts, styKey.Render(a.key)+styDesc.Render(" "+a.name))
 	}
 	parts = append(parts,
 		styKey.Render("⏎")+styDesc.Render(" shell"),
-		styKey.Render("pgdn/pgup")+styDesc.Render(" scroll readme"),
+		styKey.Render("PgDn/PgUp")+styDesc.Render(" scroll readme"),
 		styKey.Render("/")+styDesc.Render(" filter"),
 		styKey.Render("?")+styDesc.Render(" help"),
 		styKey.Render("q")+styDesc.Render(" quit"),
 	)
-	line := strings.Join(parts, styDesc.Render(" · "))
-	if n := hostNote(); n != "" {
-		line += styDesc.Render("   " + n)
-	}
-	return line
+	return strings.Join(parts, styDesc.Render(" · "))
 }
 
 func (m *model) helpView() string {
@@ -572,7 +606,7 @@ func (m *model) helpView() string {
 		{"←/h  →/l", "previous / next category"},
 		{"tab / shift+tab", "previous / next category"},
 		{"g / end", "first / last row"},
-		{"pgdn / pgup", "scroll the README panel"},
+		{"PgDn / PgUp", "scroll the README panel"},
 		{"/", "filter within category"},
 		{"s", "setup — install (removes existing box+image)"},
 		{"b", "build — image only"},

@@ -45,11 +45,3 @@ func hostCommand(name string, args ...string) *exec.Cmd {
 	}
 	return exec.Command(name, args...)
 }
-
-// hostNote describes the delegation for the footer, or "" when running natively.
-func hostNote() string {
-	if hostExecPath == "" {
-		return ""
-	}
-	return "via distrobox-host-exec"
-}

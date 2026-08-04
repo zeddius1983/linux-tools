@@ -39,6 +39,13 @@ without linking the container's glibc.
 ./tui/tools-tui --apps-dir apps --render --render-app dev-toolbox
 ```
 
+## Footer
+
+Two lines. The first is context for the selected app — its image reference
+(or "installs to the host") and the commands it exports — and is taken over by
+the filter prompt while filtering, or by the result of the last action. The
+second is the key legend.
+
 ## Selection
 
 The selected row is marked by a background running the full table width, not a
@@ -53,7 +60,7 @@ would be cut short by its own resets.
 | `↑`/`k` `↓`/`j` | move selection |
 | `←`/`h` `→`/`l`, `tab`/`shift+tab` | previous / next category |
 | `g` / `end` | first / last row |
-| `pgdn` / `pgup` | scroll the README panel |
+| `PgDn` / `PgUp` | scroll the README panel |
 | `/` | filter within the category |
 | `s` `b` `c` `e` `r` | setup · build · create · export · rm |
 | `⏎` | open a shell in the box |
