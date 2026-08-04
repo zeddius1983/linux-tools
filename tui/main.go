@@ -465,7 +465,15 @@ func (m *model) tableView(width int) string {
 		imgTxt, imgSty := m.icons.image(a)
 		boxTxt, boxSty := m.icons.box(a)
 
-		name := fmt.Sprintf("%s %-*s", marker(sel), nameW, trunc(a.Label(), nameW))
+		// The badge is appended after truncation so it can never be cut off.
+		label, badge := a.Label(), ""
+		if a.HostOnly {
+			badge = " " + m.icons.hostBadge()
+		}
+		label = trunc(label, nameW-len([]rune(badge)))
+		name := fmt.Sprintf("%s %s%s%s", marker(sel),
+			label, styWarn.Render(badge),
+			strings.Repeat(" ", maxInt(nameW-len([]rune(label))-len([]rune(badge)), 0)))
 		if sel {
 			b.WriteString(styRowSel.Render(name))
 		} else {

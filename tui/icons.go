@@ -38,10 +38,22 @@ func (i iconSet) category(name string) string {
 	}
 }
 
+// hostBadge marks a host-only app next to its name. Host-only is a trait of 3
+// of 23 apps, so it is encoded as a badge rather than a column that would be
+// blank on almost every row.
+func (i iconSet) hostBadge() string {
+	if i.nerd {
+		return " host" // nf-fa-home
+	}
+	return "⌂ host"
+}
+
 // image renders the IMAGE column for an app.
 func (i iconSet) image(a App) (string, lipgloss.Style) {
 	if a.HostOnly {
-		return i.dash() + " host", styDesc
+		// Host-only apps genuinely have no image and no box; the badge on the
+		// name says why, so these read as "not applicable", not "not built".
+		return i.dash(), styDesc
 	}
 	if a.HasImage {
 		return i.check() + " built", styStatusOK
@@ -52,7 +64,7 @@ func (i iconSet) image(a App) (string, lipgloss.Style) {
 // box renders the BOX column for an app.
 func (i iconSet) box(a App) (string, lipgloss.Style) {
 	if a.HostOnly {
-		return i.dash() + " —", styDesc
+		return i.dash(), styDesc
 	}
 	switch {
 	case a.BoxRunning:

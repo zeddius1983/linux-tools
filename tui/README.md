@@ -84,6 +84,16 @@ It now detects containerisation (`/run/.containerenv`, `/.dockerenv`, or
 footer says `via distrobox-host-exec` when that is active, so it is never a
 silent mode.
 
+## Host-only apps
+
+The 3 host-only apps (`shell-toolbox`, `nvidia-acs-service`,
+`nvidia-cdi-service`) install straight to the host and have no image and no
+box. They carry a `⌂ host` badge next to their name and show a dim `─` in both
+state columns — distinct from `✗ —`, which means "could be built, is not".
+
+This is deliberately a badge rather than a HOST column: a column would be blank
+on 20 of 23 rows while permanently costing width the app label needs.
+
 ## Icons
 
 Nerd Font glyphs are used for category tabs and image state by default, as
