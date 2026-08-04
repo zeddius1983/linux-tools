@@ -36,8 +36,32 @@ The MCP config is written to `~/.claude.json` on the host (shared `$HOME`), and 
 ## Status line (optional)
 
 The setup wizard can install a Powerline-style status line into your Claude Code
-config. It renders the model, context-window usage, cache hit rate, and 5h/7d
-rate-limit remaining in a `powerlevel10k`-inspired bar.
+config, styled after a [starship](https://starship.rs/) prompt using the
+**gruvbox dark** palette — rounded end caps, powerline arrows between segments,
+24-bit color.
+
+Left group:
+
+| Segment | Shows |
+|---|---|
+| OS | Glyph for the **host** distro (not the container — see pitfalls) |
+| Directory | Path with parent components shortened to one character |
+| Git | Branch, `●N` tracked changes, `?N` untracked, `⇡N`/`⇣N` ahead/behind. Turns orange only for *tracked* changes; a clean-but-untracked tree stays green |
+| Pull request | `#N` for the open PR on this branch, colored by review state (green approved, red changes-requested, yellow pending). A ctrl-clickable link in terminals that support OSC 8 |
+
+Right group:
+
+| Segment | Shows |
+|---|---|
+| Model | e.g. `Opus 5` |
+| Agent | Subagent name, when running under one |
+| Context | Tokens used / window size / percent, green→yellow→red |
+| Cache | Hit rate with read/write token counts |
+| 5h / 7d | Rate-limit remaining plus a countdown to reset |
+| Host | `user@host`, only over SSH or as root |
+| Clock | Current time |
+
+Segments with no data are omitted rather than rendered empty.
 
 Enable it by ticking **statusline** in the wizard during `tools setup claude-code`,
 or apply it directly:
@@ -63,6 +87,14 @@ our command, so a hand-rolled status line of your own is left alone.
 
 **Font requirement:** the bar uses Nerd Font / Powerline glyphs, so your terminal
 must be using a [Nerd Font](https://www.nerdfonts.com/) for the icons to render.
+The rounded end caps are  (U+E0B6) and  (U+E0B4); if those show as boxes but
+the arrows don't, your font ships the base Powerline set without the extras.
+
+**Changing the palette:** the colors live in one block near the top of
+`~/.claude/statusline.sh`, as `R;G;B` triples copied from gruvbox dark. Swap those
+values for another palette and every segment follows. Edits there survive until
+the next `--tools statusline` run, which backs up your version to
+`statusline.sh.bak-<timestamp>` before replacing it.
 
 ## Usage
 
