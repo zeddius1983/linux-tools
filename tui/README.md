@@ -99,6 +99,11 @@ which means "could be built, is not".
 It sits with the name rather than in its own column because it is a fixed
 property of the app, not live state like IMAGE and BOX.
 
+Both glyphs share one colour (gruvbox blue, `colGlyph` in `main.go`). The shape
+already distinguishes container from host, so colour only has to make them
+legible — Docker's thin classic logo was nearly invisible in the dim style it
+used before, and the colour carried no information the glyph did not.
+
 The host distro comes from os-release. Inside a Distrobox container
 `/etc/os-release` describes the *container* (ubuntu), so
 `/run/host/etc/os-release` is read first. Distros with no logo of their own

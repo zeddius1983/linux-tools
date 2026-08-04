@@ -132,12 +132,12 @@ func shortDistro(id string) string {
 func (i iconSet) appGlyph(a App) (string, lipgloss.Style) {
 	if a.HostOnly {
 		if i.nerd {
-			return distroGlyph(host.ID, host.Like), styWarn
+			return distroGlyph(host.ID, host.Like), styGlyph
 		}
-		return "⌂", styWarn
+		return "⌂", styGlyph
 	}
 	if i.nerd {
-		return glyphDocker, styDesc
+		return glyphDocker, styGlyph
 	}
-	return "◆", styDesc
+	return "◆", styGlyph
 }

@@ -70,6 +70,7 @@ var (
 	colOK       = lipgloss.Color("#b8bb26")
 	colWarn     = lipgloss.Color("#fe8019")
 	colBorder   = lipgloss.Color("#504945")
+	colGlyph    = lipgloss.Color("#83a598") // gruvbox blue
 	colSelBg    = lipgloss.Color("#3c3836")
 	styTabOn    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#1d2021")).Background(colAccent).Padding(0, 1)
 	styTabOff   = lipgloss.NewStyle().Foreground(colDim).Padding(0, 1)
@@ -83,6 +84,10 @@ var (
 	styStatusOK = lipgloss.NewStyle().Foreground(colOK)
 	styStatusNo = lipgloss.NewStyle().Foreground(colDim)
 	styWarn     = lipgloss.NewStyle().Foreground(colWarn)
+	// Platform glyphs share one colour: the glyph shape already says container
+	// vs host, so colour only has to make them legible. The dim style they used
+	// before rendered Docker's thin classic logo nearly invisible.
+	styGlyph = lipgloss.NewStyle().Foreground(colGlyph)
 )
 
 // --- model -------------------------------------------------------------------
