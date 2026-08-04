@@ -46,7 +46,7 @@ without linking the container's glibc.
 | `↑`/`k` `↓`/`j` | move selection |
 | `←`/`h` `→`/`l`, `tab`/`shift+tab` | previous / next category |
 | `g` / `end` | first / last row |
-| `J`/`K`, `pgdn`/`pgup`, `ctrl+d`/`ctrl+u` | scroll the README panel |
+| `pgdn` / `pgup` | scroll the README panel |
 | `/` | filter within the category |
 | `s` `b` `c` `e` `r` | setup · build · create · export · rm |
 | `⏎` | open a shell in the box |
@@ -72,6 +72,17 @@ the table columns, so repeating them here would just cost README rows. Rendered
 with Glamour, cached per app and width, scrollable. Apps without a README show a
 placeholder — currently 9 of 23 apps have none, even though `CLAUDE.md`
 requires one.
+
+## Running from inside a container
+
+The binary targets the host, where `podman`, `distrobox` and `tools` are on
+PATH. Run from inside a Distrobox container none of them exist, and
+`exec.Command` just fails — which showed every app as "not built" with no error.
+
+It now detects containerisation (`/run/.containerenv`, `/.dockerenv`, or
+`$CONTAINER_ID`) and routes those commands through `distrobox-host-exec`. The
+footer says `via distrobox-host-exec` when that is active, so it is never a
+silent mode.
 
 ## Icons
 

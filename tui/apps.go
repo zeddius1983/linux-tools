@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -160,7 +159,7 @@ func readTrimmed(path string) string {
 // inside a container during development).
 func podmanImages() map[string]bool {
 	out := map[string]bool{}
-	cmd := exec.Command("podman", "images", "--format", "{{.Repository}}:{{.Tag}}")
+	cmd := hostCommand("podman", "images", "--format", "{{.Repository}}:{{.Tag}}")
 	b, err := cmd.Output()
 	if err != nil {
 		return out
@@ -181,7 +180,7 @@ func podmanImages() map[string]bool {
 // distroboxNames returns the state of every distrobox container.
 func distroboxNames() map[string]boxState {
 	out := map[string]boxState{}
-	b, err := exec.Command("distrobox", "list", "--no-color").Output()
+	b, err := hostCommand("distrobox", "list", "--no-color").Output()
 	if err != nil {
 		return out
 	}

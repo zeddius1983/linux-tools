@@ -11,7 +11,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"os/exec"
 	"sort"
 	"strings"
 
@@ -275,9 +274,9 @@ func (m *model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.rowIdx--
 		m.clampRow()
 		m.info.resetScroll()
-	case "J", "shift+j", "pgdown", "ctrl+d":
+	case "pgdown":
 		m.info.scroll(10)
-	case "K", "shift+k", "pgup", "ctrl+u":
+	case "pgup":
 		m.info.scroll(-10)
 	case "g", "home":
 		m.rowIdx, m.top = 0, 0
@@ -337,7 +336,7 @@ func (m *model) clampRow() {
 // The wizard still runs on the bash side here: it sees a real tty, so
 // whiptail behaves exactly as it does today.
 func (m *model) runCmd(name string, a App, bin string, args ...string) tea.Cmd {
-	c := exec.Command(bin, args...)
+	c := hostCommand(bin, args...)
 	c.Env = os.Environ()
 	return tea.ExecProcess(c, func(err error) tea.Msg {
 		return actionDoneMsg{action: name, app: a.Name, err: err}
@@ -380,18 +379,19 @@ func (m *model) View() tea.View {
 	return altView(b.String())
 }
 
-// infoWidth is the README panel width: roughly 45% of the terminal, bounded so
+// infoWidth is the README panel width: roughly 60% of the terminal, bounded so
 // it neither starves the table nor becomes unreadably narrow.
 func (m *model) infoWidth() int {
-	w := m.w * 45 / 100
-	if w < 34 {
-		w = 34
+	w := m.w * 60 / 100
+	if w < 40 {
+		w = 40
 	}
-	if w > 72 {
-		w = 72
+	if w > 96 {
+		w = 96
 	}
-	if w > m.w-30 {
-		w = m.w - 30
+	// The table still needs room for the app label plus both state columns.
+	if w > m.w-42 {
+		w = m.w - 42
 	}
 	if w < 20 {
 		w = 20
@@ -510,12 +510,16 @@ func (m *model) footerView() string {
 	}
 	parts = append(parts,
 		styKey.Render("⏎")+styDesc.Render(" shell"),
-		styKey.Render("J/K")+styDesc.Render(" scroll"),
+		styKey.Render("pgdn/pgup")+styDesc.Render(" scroll readme"),
 		styKey.Render("/")+styDesc.Render(" filter"),
 		styKey.Render("?")+styDesc.Render(" help"),
 		styKey.Render("q")+styDesc.Render(" quit"),
 	)
-	return strings.Join(parts, styDesc.Render(" · "))
+	line := strings.Join(parts, styDesc.Render(" · "))
+	if n := hostNote(); n != "" {
+		line += styDesc.Render("   " + n)
+	}
+	return line
 }
 
 func (m *model) helpView() string {
@@ -526,7 +530,7 @@ func (m *model) helpView() string {
 		{"←/h  →/l", "previous / next category"},
 		{"tab / shift+tab", "previous / next category"},
 		{"g / end", "first / last row"},
-		{"J / K, pgdn / pgup", "scroll the README panel"},
+		{"pgdn / pgup", "scroll the README panel"},
 		{"/", "filter within category"},
 		{"s", "setup — install (removes existing box+image)"},
 		{"b", "build — image only"},
