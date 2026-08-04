@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Install selected development runtimes into Distrobox's shared home.
-# Usage: dev-toolbox-install [--tools "node uv firecrawl rust sdkman rust-lsp java-lsp kotlin-lsp"] [--node-major 22]
+# Usage: dev-toolbox-install [--tools "node uv firecrawl go rust sdkman rust-lsp java-lsp kotlin-lsp"] [--node-major 22]
 set -euo pipefail
 
 TOOLS=""
@@ -22,7 +22,7 @@ done
 
 for tool in $TOOLS; do
     case "$tool" in
-        node|uv|firecrawl|rust|sdkman|rust-lsp|java-lsp|kotlin-lsp) ;;
+        node|uv|firecrawl|go|rust|sdkman|rust-lsp|java-lsp|kotlin-lsp) ;;
         *) echo "Unknown tool: $tool" >&2; exit 1 ;;
     esac
 done
@@ -54,6 +54,13 @@ fi
 if ! has_tool firecrawl && [[ -d "$DATA_DIR/firecrawl" ]]; then
     step "Removing Firecrawl CLI"
     rm -rf "$DATA_DIR/firecrawl"
+fi
+
+# Removes only the managed GOROOT payload. GOPATH ($HOME/go) holds the user's
+# modules and 'go install' binaries and must survive deselection.
+if ! has_tool go && [[ -d "$DATA_DIR/go" ]]; then
+    step "Removing Go"
+    rm -rf "$DATA_DIR/go"
 fi
 
 if ! has_tool java-lsp && [[ -d "$DATA_DIR/jdtls" ]]; then
@@ -118,6 +125,35 @@ if has_tool firecrawl; then
     trap - EXIT
     echo "   installed $(env PATH="$DATA_DIR/node/bin:$PATH" \
         "$DATA_DIR/firecrawl/bin/firecrawl" --version)"
+fi
+
+if has_tool go; then
+    step "Installing latest stable Go"
+    case "$(uname -m)" in
+        x86_64) go_arch="amd64" ;;
+        aarch64|arm64) go_arch="arm64" ;;
+        *) echo "Unsupported Go architecture: $(uname -m)" >&2; exit 1 ;;
+    esac
+
+    # The dl index reports versions already prefixed with "go" (e.g. go1.26.5).
+    go_version=$(curl -fsSL 'https://go.dev/dl/?mode=json' \
+        | jq -r '[.[] | select(.stable)][0].version // ""')
+    [[ "$go_version" =~ ^go[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] || {
+        echo "Could not resolve a stable Go release" >&2
+        exit 1
+    }
+
+    tmp_dir=$(mktemp -d)
+    trap 'rm -rf "${tmp_dir:-}"' EXIT
+    go_archive="${go_version}.linux-${go_arch}.tar.gz"
+    curl -fsSL "https://go.dev/dl/${go_archive}" -o "$tmp_dir/$go_archive"
+    mkdir -p "$tmp_dir/go"
+    tar -xzf "$tmp_dir/$go_archive" -C "$tmp_dir/go" --strip-components=1
+    rm -rf "$DATA_DIR/go"
+    mv "$tmp_dir/go" "$DATA_DIR/go"
+    rm -rf "$tmp_dir"
+    trap - EXIT
+    echo "   installed $($DATA_DIR/go/bin/go version)"
 fi
 
 if has_tool rust; then

@@ -4,6 +4,7 @@ setup
 node|node|Node.js runtime with npm and npx|off|~/.local/share/dev-toolbox/node/bin/node
 uv|uv|Python project manager with uvx|off|~/.local/share/dev-toolbox/uv/bin/uv
 firecrawl|firecrawl|Web scraping CLI|off|~/.local/share/dev-toolbox/firecrawl/bin/firecrawl
+go|go|Go toolchain with gofmt|off|~/.local/share/dev-toolbox/go/bin/go
 rust|rust|Rust toolchain with cargo and bacon|off|~/.cargo/bin/rustup
 sdkman|sdkman|JVM toolchains through SDKMAN|off|~/.sdkman/bin/sdkman-init.sh
 rust-lsp|rust-lsp|Rust Analyzer language server|off|~/.cargo/bin/rust-analyzer

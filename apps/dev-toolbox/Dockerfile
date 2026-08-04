@@ -24,7 +24,7 @@ COPY dev-toolbox-install /usr/bin/dev-toolbox-install
 COPY dev-toolbox-run /usr/libexec/dev-toolbox-run
 
 RUN chmod +x /usr/bin/dev-toolbox-install /usr/libexec/dev-toolbox-run \
-    && for command in node npm npx uv uvx firecrawl rustup rustc cargo bacon rust-analyzer sdk jdtls kotlin-lsp; do \
+    && for command in node npm npx uv uvx firecrawl go gofmt rustup rustc cargo bacon rust-analyzer sdk jdtls kotlin-lsp; do \
         ln -s /usr/libexec/dev-toolbox-run "/usr/bin/${command}"; \
     done
 

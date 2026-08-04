@@ -1,6 +1,6 @@
 # dev-toolbox
 
-Selectable Node.js, Python, Rust, JVM, and Firecrawl tooling, exported to the
+Selectable Node.js, Python, Go, Rust, JVM, and Firecrawl tooling, exported to the
 host through Distrobox. Commands run in an Ubuntu environment while retaining
 access to projects and caches in the shared home directory.
 
@@ -10,7 +10,7 @@ access to projects and caches in the shared home directory.
 tools setup dev-toolbox
 ```
 
-The interactive wizard lets you install Node.js, uv, Rust, SDKMAN, language
+The interactive wizard lets you install Node.js, uv, Go, Rust, SDKMAN, language
 servers, and Firecrawl CLI. Re-running setup updates selected tools and removes
 deselected tools. Selecting Firecrawl also selects its managed Node.js runtime
 dependency. Selecting Rust Analyzer also selects the managed Rust toolchain.
@@ -19,7 +19,7 @@ For a non-interactive install, set up the box and then run the installer:
 
 ```bash
 tools setup dev-toolbox
-dev-toolbox-install --tools "node uv firecrawl rust sdkman rust-lsp java-lsp kotlin-lsp"
+dev-toolbox-install --tools "node uv firecrawl go rust sdkman rust-lsp java-lsp kotlin-lsp"
 ```
 
 Node.js defaults to major version 22. Override it for a manual install with
@@ -40,6 +40,8 @@ dev-toolbox-install --tools "node uv" --node-major 24
 | `uv` | Python project and package manager |
 | `uvx` | Run commands from Python packages |
 | `firecrawl` | Search, scrape, crawl, and run Firecrawl agent jobs |
+| `go` | Go toolchain: build, test, run, and module management |
+| `gofmt` | Go source formatter |
 | `rustup` | Rust toolchain manager |
 | `rustc` | Rust compiler |
 | `cargo` | Rust package manager and build tool |
@@ -58,6 +60,8 @@ uv init example-project
 uv run python --version
 uvx ruff check .
 firecrawl search "Linux containers" --limit 5
+go build ./...
+gofmt -l .
 rustup toolchain install nightly
 cargo test
 bacon
@@ -81,6 +85,8 @@ distrobox enter dev-toolbox-box
 | `~/.local/share/dev-toolbox/node/` | Selected Node.js runtime, npm, and npx |
 | `~/.local/share/dev-toolbox/uv/` | Selected uv and uvx binaries |
 | `~/.local/share/dev-toolbox/firecrawl/` | Selected Firecrawl CLI npm package |
+| `~/.local/share/dev-toolbox/go/` | Selected Go toolchain (GOROOT) |
+| `~/go/` | Go module cache and `go install` binaries (GOPATH) |
 | `~/.cargo/` | Cargo, cargo-installed tools, and Rust command shims |
 | `~/.rustup/` | Rustup-managed Rust toolchains |
 | `~/.sdkman/` | SDKMAN install and SDKMAN-managed candidates |
@@ -105,6 +111,16 @@ These paths and project directories are shared with the host by Distrobox.
   `cargo`, `rustc`, and `rustup` commands from this app.
 - Deselecting Rust during setup does not remove `~/.cargo` or `~/.rustup`, so
   existing Rust toolchains and cargo-installed tools are preserved.
+- Go installs the latest stable release as a self-contained GOROOT under
+  `~/.local/share/dev-toolbox/go`. GOPATH stays at its default `~/go`, so
+  module caches and `go install` binaries are shared with the host and
+  survive deselection. Add `~/go/bin` to your host PATH to run tools
+  installed with `go install`.
+- Go binaries built here run on the host directly when built with
+  `CGO_ENABLED=0`, which produces a fully static executable. Default builds may
+  link the container's glibc through cgo (via stdlib packages such as `net` and
+  `os/user`), so set `CGO_ENABLED=0` for anything meant to run outside
+  `dev-toolbox-box`.
 - SDKMAN is exported as `sdk` by sourcing SDKMAN's shell function inside the
   wrapper. After installing a JDK, configure JetBrains IDEs to use
   `~/.sdkman/candidates/java/current`.

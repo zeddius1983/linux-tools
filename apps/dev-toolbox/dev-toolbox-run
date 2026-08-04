@@ -19,6 +19,12 @@ case "$command_name" in
         executable="$data_dir/firecrawl/bin/firecrawl"
         export PATH="$data_dir/node/bin:$PATH"
         ;;
+    go|gofmt)
+        tool="go"
+        # go locates GOROOT relative to its own binary, so no export is needed.
+        # GOPATH stays at its default ($HOME/go) in the shared home.
+        executable="$data_dir/go/bin/$command_name"
+        ;;
     rustup|rustc|cargo|bacon)
         tool="rust"
         export CARGO_HOME="$HOME/.cargo"
