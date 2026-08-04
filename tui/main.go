@@ -1,9 +1,10 @@
-// Command tools-tui is the Go + huh front-end for linux-tools.
+// Command tools-tui is the dashboard front-end for linux-tools.
 //
-// It is a pre-processor, not a wrapper: it collects the app, the action and
-// every wizard answer, writes them to a state file, and then execs the bash
-// backend. Bubble Tea is fully torn down before the build runs, so podman
-// output streams to the terminal exactly as today. See docs/tui-migration.md.
+// Layout follows gh-dash: a category tab bar, a table of apps, a detail pane
+// for the selected row, and a keybinding footer. Actions suspend the dashboard
+// with tea.ExecProcess, hand the terminal to the bash backend so podman output
+// streams normally, then resume — so the dashboard survives a build rather
+// than exec'ing away.
 package main
 
 import (
@@ -14,337 +15,497 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/huh"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
-var actions = []struct{ Name, Desc string }{
-	{"setup", "Install (removes existing box+image first)"},
-	{"build", "Build container image only"},
-	{"create", "Create distrobox from built image"},
-	{"export", "Re-export apps/bins to host"},
-	{"enter", "Open shell inside box"},
-	{"rm", "Remove distrobox (image is kept)"},
-}
-
-// keyMap advertises the keys the default huh map leaves invisible.
-//
-// huh v0.7.0 binds Quit to ctrl+c only, and without a help string, so nothing
-// in the UI tells you how to leave. Esc is not bound to quit at all. Both are
-// bound here, and the help line is left on so back/quit are discoverable.
-func keyMap() *huh.KeyMap {
-	km := huh.NewDefaultKeyMap()
-	km.Quit = key.NewBinding(
-		key.WithKeys("esc", "ctrl+c"),
-		key.WithHelp("esc", "quit"),
-	)
-	return km
-}
-
 func main() {
-	var appsDir, statePath, toolsBin string
-	var dryRun bool
+	var appsDir, toolsBin string
+	var render bool
+	var renderW, renderH int
 	flag.StringVar(&appsDir, "apps-dir", "apps", "path to the apps/ directory")
-	flag.StringVar(&statePath, "state", "", "state file path (default: XDG_RUNTIME_DIR/linux-tools/wizard-<app>.state)")
-	flag.StringVar(&toolsBin, "tools", "tools", "bash entrypoint to exec")
-	flag.BoolVar(&dryRun, "dry-run", false, "write and print the state file, then exit without exec")
+	flag.StringVar(&toolsBin, "tools", "tools", "bash entrypoint to run for actions")
+	flag.BoolVar(&render, "render", false, "print one frame and exit (no tty needed)")
+	flag.IntVar(&renderW, "render-width", 100, "frame width for --render")
+	flag.IntVar(&renderH, "render-height", 28, "frame height for --render")
 	flag.Parse()
 
-	if err := run(appsDir, statePath, toolsBin, dryRun); err != nil {
+	apps, err := LoadApps(appsDir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		os.Exit(1)
+	}
+	if len(apps) == 0 {
+		fmt.Fprintf(os.Stderr, "no apps found in %s\n", appsDir)
+		os.Exit(1)
+	}
+
+	m := newModel(apps, appsDir, toolsBin)
+
+	// --render draws a single frame to stdout. Bubble Tea needs a tty, so this
+	// is the only way to check layout in a pipe, a test, or a screenshot.
+	if render {
+		m.w, m.h = renderW, renderH
+		fmt.Println(m.View().Content)
+		return
+	}
+
+	if _, err := tea.NewProgram(m).Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
 }
 
-// binding holds the live value of one wizard page within the form.
-type binding struct {
-	page   Page
-	app    string
-	multi  *[]string
-	single *string
+// --- theme -------------------------------------------------------------------
+
+var (
+	colFg       = lipgloss.Color("#ebdbb2")
+	colDim      = lipgloss.Color("#928374")
+	colAccent   = lipgloss.Color("#fabd2f")
+	colOK       = lipgloss.Color("#b8bb26")
+	colWarn     = lipgloss.Color("#fe8019")
+	colBorder   = lipgloss.Color("#504945")
+	colSelBg    = lipgloss.Color("#3c3836")
+	styTabOn    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#1d2021")).Background(colAccent).Padding(0, 1)
+	styTabOff   = lipgloss.NewStyle().Foreground(colDim).Padding(0, 1)
+	styHeader   = lipgloss.NewStyle().Bold(true).Foreground(colDim)
+	styRow      = lipgloss.NewStyle().Foreground(colFg)
+	styRowSel   = lipgloss.NewStyle().Foreground(colAccent).Background(colSelBg).Bold(true)
+	styBorder   = lipgloss.NewStyle().Foreground(colBorder)
+	styKey      = lipgloss.NewStyle().Bold(true).Foreground(colAccent)
+	styDesc     = lipgloss.NewStyle().Foreground(colDim)
+	styTitle    = lipgloss.NewStyle().Bold(true).Foreground(colFg)
+	styStatusOK = lipgloss.NewStyle().Foreground(colOK)
+	styStatusNo = lipgloss.NewStyle().Foreground(colDim)
+	styWarn     = lipgloss.NewStyle().Foreground(colWarn)
+)
+
+// --- model -------------------------------------------------------------------
+
+type action struct {
+	key, name, desc string
 }
 
-func run(appsDir, statePath, toolsBin string, dryRun bool) error {
-	apps, err := LoadApps(appsDir)
-	if err != nil {
-		return err
-	}
-	if len(apps) == 0 {
-		return fmt.Errorf("no apps found in %s", appsDir)
-	}
+var actions = []action{
+	{"s", "setup", "Install (removes existing box+image first)"},
+	{"b", "build", "Build image only"},
+	{"c", "create", "Create box from image"},
+	{"e", "export", "Re-export to host"},
+	{"r", "rm", "Remove box (image kept)"},
+}
 
-	var appName, action string
-	var confirmed bool
-	home, _ := os.UserHomeDir()
+type model struct {
+	apps     []App
+	cats     []string
+	appsDir  string
+	toolsBin string
 
-	// --- app + action groups ----------------------------------------------
-	appOpts := make([]huh.Option[string], 0, len(apps))
-	for _, a := range apps {
-		label := a.Name
-		if a.Description != "" {
-			label += " — " + a.Description
-		}
-		// No padding, no truncation: the ~26-char description budget that
-		// whiptail's fixed columns imposed is gone.
-		label += "  [" + a.Status() + "]"
-		appOpts = append(appOpts, huh.NewOption(label, a.Name))
-	}
-	actionOpts := make([]huh.Option[string], 0, len(actions))
-	for _, a := range actions {
-		actionOpts = append(actionOpts, huh.NewOption(a.Name+" — "+a.Desc, a.Name))
-	}
+	catIdx int
+	rowIdx int
+	top    int // first visible row, for scrolling
 
-	groups := []*huh.Group{
-		huh.NewGroup(
-			huh.NewSelect[string]().
-				Title("linux-tools").
-				Description("Select an app  ·  / filters  ·  shift+tab goes back  ·  esc quits").
-				Options(appOpts...).
-				Filtering(true).
-				Height(16).
-				Value(&appName),
-		),
-		huh.NewGroup(
-			huh.NewSelect[string]().
-				TitleFunc(func() string { return "linux-tools — " + appName }, &appName).
-				Description("Choose action").
-				Options(actionOpts...).
-				Height(10).
-				Value(&action),
-		),
-	}
+	w, h      int
+	filter    string
+	filtering bool
+	showHelp  bool
+	status    string
+	statusErr bool
+}
 
-	// --- one group per wizard page, across every app ----------------------
-	//
-	// The whole flow has to live in a single huh.Form for shift+tab to walk
-	// backwards across stages, but the relevant wizard pages are not known
-	// until an app is picked. So every page of every app becomes a group that
-	// hides itself unless its app is selected and its action applies.
-	var bindings []*binding
-	for _, a := range apps {
-		pages, err := LoadPages(a.WizardDir)
-		if err != nil {
-			return err
-		}
-		for _, p := range pages {
-			g, b := pageGroup(a.Name, p, home, &appName, &action)
-			if g == nil {
-				continue
-			}
-			groups = append(groups, g)
-			bindings = append(bindings, b)
-		}
+func newModel(apps []App, appsDir, toolsBin string) *model {
+	return &model{
+		apps:     apps,
+		cats:     Categories(apps),
+		appsDir:  appsDir,
+		toolsBin: toolsBin,
+		w:        100,
+		h:        30,
 	}
+}
 
-	// --- confirm ----------------------------------------------------------
-	groups = append(groups, huh.NewGroup(
-		huh.NewConfirm().
-			TitleFunc(func() string {
-				return fmt.Sprintf("Run '%s' on '%s'?", action, appName)
-			}, &appName).
-			DescriptionFunc(func() string {
-				return summarize(collect(appName, action, bindings))
-			}, &appName).
-			Affirmative("Yes").
-			Negative("Cancel").
-			Value(&confirmed),
-	))
+func (m *model) Init() tea.Cmd { return nil }
 
-	form := huh.NewForm(groups...).
-		WithKeyMap(keyMap()).
-		WithShowHelp(true)
-	if err := form.Run(); err != nil {
-		return handleAbort(err)
-	}
-	if !confirmed {
+// visible returns the apps in the current category matching the filter.
+func (m *model) visible() []App {
+	if len(m.cats) == 0 {
 		return nil
 	}
-
-	// --- hand off to bash -------------------------------------------------
-	state := collect(appName, action, bindings)
-	if statePath == "" {
-		statePath = DefaultStatePath(appName)
-	}
-	if err := state.Write(statePath); err != nil {
-		return err
-	}
-
-	if dryRun {
-		fmt.Printf("state written to %s\n\n%s\n", statePath, state.Render())
-		fmt.Printf("would exec: %s %s %s\n", toolsBin, action, appName)
-		return nil
-	}
-
-	bin, err := exec.LookPath(toolsBin)
-	if err != nil {
-		return fmt.Errorf("locating %q: %w", toolsBin, err)
-	}
-	env := append(os.Environ(),
-		"LT_WIZARD_STATE="+statePath,
-		"LT_SKIP_WIZARD=1",
-	)
-	// Exec and never return: bash owns the terminal from here.
-	return syscallExec(bin, []string{toolsBin, action, appName}, env)
-}
-
-// pageGroup builds the hidden-until-relevant group for one wizard page.
-func pageGroup(app string, p Page, home string, appName, action *string) (*huh.Group, *binding) {
-	b := &binding{page: p, app: app}
-	hide := func() bool { return *appName != app || !p.AppliesTo(*action) }
-
-	switch p.Type {
-	case "packages", "mcp":
-		if len(p.Items) == 0 {
-			return nil, nil
-		}
-		opts := make([]huh.Option[string], 0, len(p.Items))
-		for _, it := range p.Items {
-			opts = append(opts, huh.NewOption(label(it), it.Name).Selected(it.PreSelected(home)))
-		}
-		b.multi = new([]string)
-		return huh.NewGroup(
-			huh.NewMultiSelect[string]().
-				Title(p.Title).
-				Description(p.Prompt).
-				Options(opts...).
-				Height(14).
-				Value(b.multi),
-		).WithHideFunc(hide), b
-
-	case "runtime":
-		if len(p.Items) == 0 {
-			return nil, nil
-		}
-		opts := make([]huh.Option[string], 0, len(p.Items))
-		for _, it := range p.Items {
-			// The Option carries label and value together, so there is no
-			// label->value round-trip like wizard_create_variant needs.
-			opts = append(opts, huh.NewOption(label(it), it.Payload))
-		}
-		b.single = new(string)
-		*b.single = p.Items[0].Payload
-		return huh.NewGroup(
-			huh.NewSelect[string]().
-				Title(p.Title).
-				Description(p.Prompt).
-				Options(opts...).
-				Value(b.single),
-		).WithHideFunc(hide), b
-
-	case "buildarg":
-		b.single = new(string)
-		return huh.NewGroup(
-			huh.NewSelect[string]().
-				Title(p.Title).
-				Description(p.Prompt).
-				// Lazily fetched: items-cmd is often a network call (fastflowlm
-				// hits the GitHub releases API). Binding it to appName keeps
-				// the fetch from running for apps that were never selected,
-				// and huh shows its own loading state while it runs.
-				OptionsFunc(func() []huh.Option[string] {
-					if *appName != app {
-						return nil
-					}
-					values, err := runItemsCmd(p.ItemsCmd)
-					if err != nil || len(values) == 0 {
-						return nil
-					}
-					opts := make([]huh.Option[string], 0, len(values))
-					for i, v := range values {
-						l := v
-						if i == 0 {
-							l += "  (default)"
-						}
-						opts = append(opts, huh.NewOption(l, v))
-					}
-					return opts
-				}, appName).
-				Height(14).
-				Value(b.single),
-		).WithHideFunc(hide), b
-	}
-	return nil, nil
-}
-
-func label(it Item) string {
-	if it.Desc == "" {
-		return it.Name
-	}
-	return it.Name + " — " + it.Desc
-}
-
-// collect turns the live form bindings into a State for the selected app.
-func collect(appName, action string, bindings []*binding) State {
-	s := State{App: appName, Action: action, Pages: map[string][]string{}}
-	for _, b := range bindings {
-		if b.app != appName || !b.page.AppliesTo(action) {
+	cat := m.cats[m.catIdx]
+	var out []App
+	f := strings.ToLower(m.filter)
+	for _, a := range m.apps {
+		if a.Category != cat {
 			continue
 		}
-		switch b.page.Type {
-		case "packages", "mcp":
-			if b.multi != nil {
-				s.Pages[b.page.Name] = *b.multi
-			}
-		case "runtime":
-			if b.single != nil && *b.single != "" {
-				s.Variant = *b.single
-			}
-		case "buildarg":
-			if b.single != nil && *b.single != "" && b.page.ArgName != "" {
-				s.BuildArgs = append(s.BuildArgs, "--build-arg", b.page.ArgName+"="+*b.single)
-			}
+		if f != "" && !strings.Contains(strings.ToLower(a.Name+" "+a.Description), f) {
+			continue
 		}
+		out = append(out, a)
 	}
-	return s
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
 }
 
-func summarize(s State) string {
-	var parts []string
-	names := make([]string, 0, len(s.Pages))
-	for k := range s.Pages {
-		names = append(names, k)
+func (m *model) current() (App, bool) {
+	v := m.visible()
+	if m.rowIdx < 0 || m.rowIdx >= len(v) {
+		return App{}, false
 	}
-	sort.Strings(names)
-	for _, n := range names {
-		if sel := s.Pages[n]; len(sel) > 0 {
-			parts = append(parts, n+": "+strings.Join(sel, ", "))
+	return v[m.rowIdx], true
+}
+
+// countIn is the per-category app count shown in the tab bar.
+func (m *model) countIn(cat string) int {
+	n := 0
+	for _, a := range m.apps {
+		if a.Category == cat {
+			n++
+		}
+	}
+	return n
+}
+
+type reloadMsg struct{}
+type actionDoneMsg struct {
+	action, app string
+	err         error
+}
+
+func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.w, m.h = msg.Width, msg.Height
+		return m, nil
+
+	case actionDoneMsg:
+		if msg.err != nil {
+			m.status = fmt.Sprintf("%s %s failed: %v", msg.action, msg.app, msg.err)
+			m.statusErr = true
 		} else {
-			parts = append(parts, n+": (none)")
+			m.status = fmt.Sprintf("%s %s finished", msg.action, msg.app)
+			m.statusErr = false
 		}
+		// Container state almost certainly changed; re-read it.
+		if apps, err := LoadApps(m.appsDir); err == nil {
+			m.apps = apps
+			m.cats = Categories(apps)
+		}
+		return m, nil
+
+	case tea.KeyPressMsg:
+		return m.onKey(msg)
 	}
-	if s.Variant != "" {
-		parts = append(parts, "variant: "+s.Variant)
-	}
-	if len(s.BuildArgs) > 0 {
-		parts = append(parts, "build: "+strings.Join(s.BuildArgs, " "))
-	}
-	if len(parts) == 0 {
-		return "No wizard selections for this app."
-	}
-	return strings.Join(parts, "\n")
+	return m, nil
 }
 
-func runItemsCmd(cmd string) ([]string, error) {
-	if strings.TrimSpace(cmd) == "" {
-		return nil, nil
+func (m *model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	k := msg.String()
+
+	// Filter entry swallows most keys.
+	if m.filtering {
+		switch k {
+		case "enter", "esc":
+			m.filtering = false
+		case "backspace":
+			if m.filter != "" {
+				m.filter = m.filter[:len(m.filter)-1]
+			}
+		case "ctrl+c":
+			return m, tea.Quit
+		default:
+			if len(k) == 1 {
+				m.filter += k
+			}
+		}
+		m.clampRow()
+		return m, nil
 	}
-	out, err := exec.Command("bash", "-c", cmd).Output()
-	if err != nil {
-		return nil, err
-	}
-	var values []string
-	for _, l := range strings.Split(string(out), "\n") {
-		if l = strings.TrimSpace(l); l != "" {
-			values = append(values, l)
+
+	switch k {
+	case "q", "esc", "ctrl+c":
+		return m, tea.Quit
+	case "?":
+		m.showHelp = !m.showHelp
+	case "/":
+		m.filtering = true
+		m.filter = ""
+	case "tab", "l", "right":
+		if len(m.cats) > 0 {
+			m.catIdx = (m.catIdx + 1) % len(m.cats)
+			m.rowIdx, m.top = 0, 0
+		}
+	case "shift+tab", "h", "left":
+		if len(m.cats) > 0 {
+			m.catIdx = (m.catIdx - 1 + len(m.cats)) % len(m.cats)
+			m.rowIdx, m.top = 0, 0
+		}
+	case "j", "down":
+		m.rowIdx++
+		m.clampRow()
+	case "k", "up":
+		m.rowIdx--
+		m.clampRow()
+	case "g", "home":
+		m.rowIdx, m.top = 0, 0
+	case "G", "end":
+		m.rowIdx = len(m.visible()) - 1
+		m.clampRow()
+	case "R":
+		if apps, err := LoadApps(m.appsDir); err == nil {
+			m.apps = apps
+			m.cats = Categories(apps)
+			m.status, m.statusErr = "reloaded", false
+		}
+	case "enter":
+		if a, ok := m.current(); ok && a.HasBox {
+			return m, m.runCmd("enter", a, "distrobox", "enter", a.BoxName())
+		}
+		m.status, m.statusErr = "no box to enter", true
+	default:
+		for _, act := range actions {
+			if k == act.key {
+				if a, ok := m.current(); ok {
+					return m, m.runCmd(act.name, a, m.toolsBin, act.name, a.Name)
+				}
+			}
 		}
 	}
-	return values, nil
+	return m, nil
 }
 
-// handleAbort turns a user abort into a clean exit rather than an error.
-func handleAbort(err error) error {
-	if err == huh.ErrUserAborted {
-		os.Exit(0)
+func (m *model) clampRow() {
+	n := len(m.visible())
+	if n == 0 {
+		m.rowIdx, m.top = 0, 0
+		return
 	}
-	return err
+	if m.rowIdx < 0 {
+		m.rowIdx = 0
+	}
+	if m.rowIdx >= n {
+		m.rowIdx = n - 1
+	}
+	h := m.tableHeight()
+	if m.rowIdx < m.top {
+		m.top = m.rowIdx
+	}
+	if m.rowIdx >= m.top+h {
+		m.top = m.rowIdx - h + 1
+	}
+	if m.top < 0 {
+		m.top = 0
+	}
+}
+
+// runCmd suspends the dashboard, gives bash the terminal, then resumes.
+// The wizard still runs on the bash side here: it sees a real tty, so
+// whiptail behaves exactly as it does today.
+func (m *model) runCmd(name string, a App, bin string, args ...string) tea.Cmd {
+	c := exec.Command(bin, args...)
+	c.Env = os.Environ()
+	return tea.ExecProcess(c, func(err error) tea.Msg {
+		return actionDoneMsg{action: name, app: a.Name, err: err}
+	})
+}
+
+// --- view --------------------------------------------------------------------
+
+// tableHeight is the row budget left after chrome (tabs, header, detail,
+// footer). Kept in one place so scrolling and rendering cannot disagree.
+func (m *model) tableHeight() int {
+	h := m.h - 12
+	if h < 3 {
+		h = 3
+	}
+	return h
+}
+
+func (m *model) View() tea.View {
+	if m.showHelp {
+		return altView(m.helpView())
+	}
+	var b strings.Builder
+	b.WriteString(m.tabsView())
+	b.WriteString("\n")
+	b.WriteString(m.tableView())
+	b.WriteString("\n")
+	b.WriteString(m.detailView())
+	b.WriteString("\n")
+	b.WriteString(m.footerView())
+	return altView(b.String())
+}
+
+func (m *model) tabsView() string {
+	var tabs []string
+	for i, c := range m.cats {
+		label := fmt.Sprintf("%s %d", c, m.countIn(c))
+		if i == m.catIdx {
+			tabs = append(tabs, styTabOn.Render(label))
+		} else {
+			tabs = append(tabs, styTabOff.Render(label))
+		}
+	}
+	row := lipgloss.JoinHorizontal(lipgloss.Top, tabs...)
+	return row + "\n" + styBorder.Render(strings.Repeat("─", m.w))
+}
+
+func (m *model) tableView() string {
+	v := m.visible()
+	nameW, descW, statusW := 20, 34, 12
+	if m.w > 92 {
+		descW = m.w - nameW - statusW - 12
+	}
+
+	var b strings.Builder
+	b.WriteString(styHeader.Render(fmt.Sprintf("  %-*s  %-*s  %-*s",
+		nameW, "APP", descW, "DESCRIPTION", statusW, "STATUS")))
+	b.WriteString("\n")
+
+	if len(v) == 0 {
+		b.WriteString(styDesc.Render("  (no apps match)"))
+		return b.String()
+	}
+
+	h := m.tableHeight()
+	end := m.top + h
+	if end > len(v) {
+		end = len(v)
+	}
+	for i := m.top; i < end; i++ {
+		a := v[i]
+		line := fmt.Sprintf("%s %-*s  %-*s  %-*s",
+			marker(i == m.rowIdx),
+			nameW, trunc(a.Name, nameW),
+			descW, trunc(a.Description, descW),
+			statusW, a.Status())
+		if i == m.rowIdx {
+			b.WriteString(styRowSel.Render(line))
+		} else {
+			b.WriteString(styRow.Render(line))
+		}
+		b.WriteString("\n")
+	}
+	if len(v) > h {
+		b.WriteString(styDesc.Render(fmt.Sprintf("  %d-%d of %d", m.top+1, end, len(v))))
+	}
+	return b.String()
+}
+
+func (m *model) detailView() string {
+	a, ok := m.current()
+	if !ok {
+		return styBorder.Render(strings.Repeat("─", m.w))
+	}
+	sep := styBorder.Render(strings.Repeat("─", m.w))
+
+	img := styStatusNo.Render("not built")
+	if a.HasImage {
+		img = styStatusOK.Render(a.ImageName())
+	}
+	box := styStatusNo.Render("—")
+	switch {
+	case a.BoxRunning:
+		box = styStatusOK.Render(a.BoxName() + " (running)")
+	case a.HasBox:
+		box = styWarn.Render(a.BoxName() + " (stopped)")
+	}
+	wiz := styStatusNo.Render("—")
+	if a.HasWizard {
+		wiz = styStatusOK.Render("yes")
+	}
+	exports := strings.Join(a.Exports, "  ")
+	if exports == "" {
+		exports = "—"
+	}
+
+	title := styTitle.Render(a.Name)
+	if a.HostOnly {
+		title += styWarn.Render("  [host-only]")
+	}
+
+	return sep + "\n" +
+		title + styDesc.Render("  ·  "+a.Description) + "\n" +
+		styDesc.Render("image  ") + img + "\n" +
+		styDesc.Render("box    ") + box + styDesc.Render("     wizard  ") + wiz + "\n" +
+		styDesc.Render("exports ") + styRow.Render(trunc(exports, maxInt(m.w-10, 20)))
+}
+
+func (m *model) footerView() string {
+	if m.filtering {
+		return styKey.Render("/") + styRow.Render(m.filter) + styDesc.Render("  ⏎ apply · esc cancel")
+	}
+	if m.status != "" {
+		st := styStatusOK
+		if m.statusErr {
+			st = styWarn
+		}
+		return st.Render("• "+m.status) + styDesc.Render("   ? help · q quit")
+	}
+	var parts []string
+	for _, a := range actions {
+		parts = append(parts, styKey.Render(a.key)+styDesc.Render(" "+a.name))
+	}
+	parts = append(parts,
+		styKey.Render("⏎")+styDesc.Render(" shell"),
+		styKey.Render("/")+styDesc.Render(" filter"),
+		styKey.Render("?")+styDesc.Render(" help"),
+		styKey.Render("q")+styDesc.Render(" quit"),
+	)
+	return strings.Join(parts, styDesc.Render(" · "))
+}
+
+func (m *model) helpView() string {
+	var b strings.Builder
+	b.WriteString(styTitle.Render("linux-tools — keys") + "\n\n")
+	rows := [][2]string{
+		{"↑/k  ↓/j", "move selection"},
+		{"←/h  →/l", "previous / next category"},
+		{"tab / shift+tab", "previous / next category"},
+		{"g / G", "first / last row"},
+		{"/", "filter within category"},
+		{"s", "setup — install (removes existing box+image)"},
+		{"b", "build — image only"},
+		{"c", "create — box from image"},
+		{"e", "export — re-export to host"},
+		{"r", "rm — remove box, keep image"},
+		{"⏎", "open a shell in the box"},
+		{"R", "reload app/container state"},
+		{"?", "toggle this help"},
+		{"q / esc", "quit"},
+	}
+	for _, r := range rows {
+		b.WriteString(fmt.Sprintf("  %s  %s\n",
+			styKey.Render(fmt.Sprintf("%-16s", r[0])), styDesc.Render(r[1])))
+	}
+	b.WriteString("\n" + styDesc.Render("  Actions hand the terminal to the bash backend and return here when done."))
+	return b.String()
+}
+
+// altView renders full-screen. In bubbletea v2 the alt screen is a property of
+// the View rather than a program option, so it is set on every render.
+func altView(content string) tea.View {
+	v := tea.NewView(content)
+	v.AltScreen = true
+	return v
+}
+
+func marker(sel bool) string {
+	if sel {
+		return "▸"
+	}
+	return " "
+}
+
+func trunc(s string, w int) string {
+	if w <= 1 || len([]rune(s)) <= w {
+		return s
+	}
+	return string([]rune(s)[:w-1]) + "…"
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

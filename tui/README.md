@@ -1,11 +1,13 @@
-# tools-tui — Go + huh front-end (spike)
+# tools-tui — dashboard front-end (prototype)
 
-Phase 1 spike for the `whiptail` → Go + [`huh`](https://github.com/charmbracelet/huh)
-migration. See [`docs/tui-migration.md`](../docs/tui-migration.md) for the full
-design.
+A `gh-dash`-style dashboard for linux-tools: category tabs, an app table, a
+detail pane, and a keybinding footer. Built on the same stack gh-dash uses —
+Bubble Tea v2, Lip Gloss v2.
 
-**This is a prototype.** The whiptail front-end is untouched and still the
-default; nothing here runs unless you invoke the binary directly.
+See [`docs/tui-migration.md`](../docs/tui-migration.md) for the design.
+
+**Not wired in.** `tools` still opens the whiptail menu; this binary must be run
+directly.
 
 ## Build
 
@@ -24,75 +26,62 @@ without linking the container's glibc.
 ## Run
 
 ```bash
-# from the repo root; --dry-run prints the state file instead of exec'ing bash
-./tui/tools-tui --apps-dir apps --dry-run
+./tui/tools-tui --apps-dir apps
+
+# print one frame and exit; no tty needed, useful for layout checks
+./tui/tools-tui --apps-dir apps --render --render-width 104
 ```
-
-| Flag | Meaning |
-|---|---|
-| `--apps-dir` | path to `apps/` (default `apps`) |
-| `--dry-run` | write and print the state file, then exit without exec |
-| `--state` | state file path (default `$XDG_RUNTIME_DIR/linux-tools/wizard-<app>.state`) |
-| `--tools` | bash entrypoint to exec (default `tools`) |
-
-Needs a real terminal: `huh` exits with `could not open a new TTY` when stdin
-is not a tty.
 
 ## Keys
 
 | Key | Action |
 |---|---|
-| `↑` / `↓` | move |
-| `enter` | select / next |
-| `shift+tab` | **back** — walks backwards across every stage, including from a wizard page to the action and app menus |
-| `/` | filter the app list |
-| `space` | toggle a checkbox on multi-select pages |
-| `esc` | quit |
+| `↑`/`k` `↓`/`j` | move selection |
+| `←`/`h` `→`/`l`, `tab`/`shift+tab` | previous / next category |
+| `g` / `G` | first / last row |
+| `/` | filter within the category |
+| `s` `b` `c` `e` `r` | setup · build · create · export · rm |
+| `⏎` | open a shell in the box |
+| `R` | reload app and container state |
+| `?` | toggle help |
+| `q` / `esc` | quit |
 
-`esc` is bound explicitly. huh v0.7.0 binds quit to `ctrl+c` alone and gives it
-no help string, so out of the box nothing in the UI says how to leave — see
-`keyMap()` in `main.go`.
+## How actions run
 
-## What it does
+Actions use `tea.ExecProcess`: the dashboard suspends, the bash backend gets the
+real terminal so podman output streams normally, and the dashboard resumes and
+refreshes container state when the command exits. It does not exec away.
 
-Collects the app, the action and every wizard answer, writes a flat `KEY=value`
-state file, then `exec`s `tools <action> <app>` with `LT_WIZARD_STATE` and
-`LT_SKIP_WIZARD=1` set. It never wraps the build, so podman output streams to
-the terminal exactly as before.
+Because bash sees a real tty, `tools setup` still runs its **existing whiptail
+wizard**. Native wizard pages are the next step; the Go-side state-file bridge
+(`state.go`, `wizard.go`, and `wizard_load_state` in `lib/wizard.sh`) is
+already in place and tested for when they land.
 
-```
-APP="fastflowlm"
-ACTION="setup"
-BUILD_ARGS="--build-arg FLM_REF=v0.9.12"
-VARIANT="nvidia"
-PAGE_00_statusline="statusline"
-```
+## Categories
 
-`wizard_load_state` in `lib/wizard.sh` sources that file and re-hydrates
-`_WIZARD_SELECTIONS`, so the existing apply handlers, `wizard_build_args` and
-`wizard_create_variant` all work unchanged.
+Read from `apps/<name>/category`, one line per app. Missing ⇒ `Other`.
+Preferred tab order is in `Categories()` in `apps.go`; unknown names are
+appended alphabetically.
 
 ## Status
 
 | Piece | State |
 |---|---|
-| app menu with type-to-filter | done — no fixed-width columns, so the ~26-char `description` budget is gone |
-| action menu | done |
-| `.packages` / `.mcp` multi-select | done, with detect-path prefill |
-| `.runtime` select | done — `huh.Option` carries label and value, so no label→value round-trip |
-| `.buildarg` select | done, with a spinner over the `items-cmd` network call |
-| state file + bash bridge | done, covered by tests |
-| confirm screen | basic — does not yet show the install/remove diff `tui_confirm_wizards` produces |
+| category tabs with counts | done |
+| app table, terminal-width columns | done — no fixed 26-char budget |
+| detail pane (image, box, exports, wizard) | done |
+| filter, help overlay, footer | done |
+| actions via `ExecProcess` + state refresh | done |
+| native wizard pages (multi-select, select) | not started — bash whiptail still handles these |
+| state-file bridge to bash | built and tested, not yet used by the dashboard |
 | `cmd_install` building the binary | not started |
-| whiptail fallback gate | not started — whiptail is still the only default path |
-| multi-app select | not started (Phase 3) |
+| wiring `tools` to launch it | not started |
 
 ## Files
 
 | File | Contents |
 |---|---|
-| `main.go` | orchestration, huh forms, exec handoff |
-| `apps.go` | app discovery, podman/distrobox status |
-| `wizard.go` | the sole parser of the wizard page format |
+| `main.go` | model, update loop, rendering, theme |
+| `apps.go` | app discovery, categories, podman/distrobox state |
+| `wizard.go` | parser for the wizard page format |
 | `state.go` | state file rendering and shell quoting |
-| `exec_unix.go` | `syscall.Exec` handoff |

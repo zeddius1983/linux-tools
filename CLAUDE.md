@@ -73,6 +73,7 @@ Create `apps/<name>/` with the files below — `Dockerfile`, `exports`, `descrip
 | `Dockerfile` | Container image definition. Can instead be a `Dockerfile.ubuntu` + `Dockerfile.arch` pair — see [Multi-base-image pattern](#multi-base-image-pattern). |
 | `exports` | What to expose to the host (see export types below) |
 | `description` | One-line label shown in the interactive TUI (keep it under ~26 chars — that's the TUI description column width) |
+| `category` | One line naming the dashboard tab the app appears under (e.g. `AI / LLM`, `Development`, `System`, `Browsers`, `Communication`, `Shell`). Missing or empty ⇒ the app lands in an `Other` tab. Preferred tab order lives in `Categories()` in `tui/apps.go`; unknown names are appended alphabetically. |
 | `README.md` | **Required.** App-specific usage docs (see below). Cat-ed by `tools setup` at the end of install, so it doubles as the post-install screen. |
 | `create_flags` | Optional. Extra flags passed to the container engine via `distrobox create --additional-flags`. Use for privileged mode, device passthrough, or volume mounts needed at container creation time (e.g. `--privileged -v /usr/src:/usr/src:ro`). |
 | `post-install` | Optional. Short text snippet `cat`-ed by `tools setup` **before** the README — use it for terse "next step" hints (e.g. `corefreq-setup`). Long-form docs belong in `README.md`. |
@@ -200,6 +201,8 @@ Distrobox mounts the host's `$HOME` inside the container. This means:
 ### Interactive TUI
 
 `./tools.sh` with no arguments opens a `whiptail` menu. Each row shows `description | image ref | box name` with fixed column widths (26 / 34) — keep `description` under ~26 chars or it gets truncated with `…`.
+
+A replacement dashboard front-end lives in `tui/` (Go, Bubble Tea v2) — category tabs, an app table, a detail pane and a keybinding footer, modelled on `gh-dash`. It is **not** wired in yet: `tools` still opens whiptail, and the Go binary must be run directly. See [`tui/README.md`](tui/README.md) and [`docs/tui-migration.md`](docs/tui-migration.md). Once it lands, the 26-char `description` limit above goes away — the dashboard sizes its columns to the terminal.
 
 ## Working practices
 
