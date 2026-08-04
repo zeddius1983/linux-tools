@@ -39,6 +39,13 @@ without linking the container's glibc.
 ./tui/tools-tui --apps-dir apps --render --render-app dev-toolbox
 ```
 
+## Selection
+
+The selected row is marked by a background running the full table width, not a
+leading arrow. Each segment keeps its own foreground so state colour stays
+readable, and only gains the background — wrapping an already-styled string
+would be cut short by its own resets.
+
 ## Keys
 
 | Key | Action |
