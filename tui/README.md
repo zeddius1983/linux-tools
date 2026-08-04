@@ -84,15 +84,24 @@ It now detects containerisation (`/run/.containerenv`, `/.dockerenv`, or
 footer says `via distrobox-host-exec` when that is active, so it is never a
 silent mode.
 
-## Host-only apps
+## PLATFORM column
 
-The 3 host-only apps (`shell-toolbox`, `nvidia-acs-service`,
-`nvidia-cdi-service`) install straight to the host and have no image and no
-box. They carry a superscript `ʰᵒˢᵗ` badge next to their name and show a dim `─` in
-both state columns — distinct from `✗ —`, which means "could be built, is not".
+Says which machine an app actually runs on:
 
-This is deliberately a badge rather than a HOST column: a column would be blank
-on 20 of 23 rows while permanently costing width the app label needs.
+| App kind | Shown |
+|---|---|
+| containerised (20 of 23) |  `container` |
+| host-only (`shell-toolbox`, `nvidia-acs-service`, `nvidia-cdi-service`) | the host distro, e.g. ` mint` |
+
+Host-only apps also show a dim `─` in IMAGE and BOX — distinct from `✗ —`,
+which means "could be built, is not".
+
+The host distro comes from os-release. Inside a Distrobox container
+`/etc/os-release` describes the *container* (ubuntu), so
+`/run/host/etc/os-release` is read first — otherwise host-only apps would be
+labelled with the container's distro. Distros with no logo of their own
+(CachyOS, EndeavourOS, …) fall back through `ID_LIKE` to a parent distro's
+glyph, and finally to Tux.
 
 ## Icons
 

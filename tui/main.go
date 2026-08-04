@@ -390,8 +390,8 @@ func (m *model) infoWidth() int {
 		w = 96
 	}
 	// The table still needs room for the app label plus both state columns.
-	if w > m.w-42 {
-		w = m.w - 42
+	if w > m.w-58 {
+		w = m.w - 58
 	}
 	if w < 20 {
 		w = 20
@@ -437,15 +437,15 @@ func (m *model) tabsView() string {
 
 func (m *model) tableView(width int) string {
 	v := m.visible()
-	imgW, boxW := 9, 11
-	nameW := width - imgW - boxW - 7
+	platW, imgW, boxW := 11, 9, 11
+	nameW := width - platW - imgW - boxW - 9
 	if nameW < 12 {
 		nameW = 12
 	}
 
 	var b strings.Builder
-	b.WriteString(styHeader.Render(fmt.Sprintf("  %-*s %-*s %-*s",
-		nameW, "APP", imgW, "IMAGE", boxW, "BOX")))
+	b.WriteString(styHeader.Render(fmt.Sprintf("  %-*s %-*s %-*s %-*s",
+		nameW, "APP", platW, "PLATFORM", imgW, "IMAGE", boxW, "BOX")))
 	b.WriteString("\n")
 
 	if len(v) == 0 {
@@ -462,18 +462,11 @@ func (m *model) tableView(width int) string {
 		a := v[i]
 		sel := i == m.rowIdx
 
+		platTxt, platSty := m.icons.platform(a)
 		imgTxt, imgSty := m.icons.image(a)
 		boxTxt, boxSty := m.icons.box(a)
 
-		// The badge is appended after truncation so it can never be cut off.
-		label, badge := a.Label(), ""
-		if a.HostOnly {
-			badge = " " + m.icons.hostBadge()
-		}
-		label = trunc(label, nameW-len([]rune(badge)))
-		name := fmt.Sprintf("%s %s%s%s", marker(sel),
-			label, styWarn.Render(badge),
-			strings.Repeat(" ", maxInt(nameW-len([]rune(label))-len([]rune(badge)), 0)))
+		name := fmt.Sprintf("%s %-*s", marker(sel), nameW, trunc(a.Label(), nameW))
 		if sel {
 			b.WriteString(styRowSel.Render(name))
 		} else {
@@ -482,6 +475,7 @@ func (m *model) tableView(width int) string {
 		// Columns keep their own colour so state stays readable on the
 		// highlighted row too; pad() counts runes, since glyphs are 1 rune but
 		// several bytes.
+		b.WriteString(" " + platSty.Render(pad(platTxt, platW)))
 		b.WriteString(" " + imgSty.Render(pad(imgTxt, imgW)))
 		b.WriteString(" " + boxSty.Render(pad(boxTxt, boxW)))
 		b.WriteString("\n")
