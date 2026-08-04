@@ -84,3 +84,17 @@ func TestPadCountsRunes(t *testing.T) {
 		t.Errorf("pad must not truncate, got %q", got)
 	}
 }
+
+func TestSuperscriptLetters(t *testing.T) {
+	got, ok := superscriptLetters("host")
+	if !ok || got != "ʰᵒˢᵗ" {
+		t.Errorf("superscriptLetters(host) = %q ok=%v, want ʰᵒˢᵗ true", got, ok)
+	}
+	if len([]rune(got)) != 4 {
+		t.Errorf("badge should stay 4 cells, got %d", len([]rune(got)))
+	}
+	// 'q' has no superscript form: fall back to plain text, not a half-render.
+	if got, ok := superscriptLetters("quiet"); ok || got != "quiet" {
+		t.Errorf("unsupported letter should fall back, got %q ok=%v", got, ok)
+	}
+}
