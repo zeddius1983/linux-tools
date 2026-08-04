@@ -1,10 +1,17 @@
-# Design: migrating the host TUI from whiptail to Go + huh
+# Design: replacing the whiptail TUI with a Go dashboard
 
-**Status:** proposed — not started
+**Status:** prototype built — see [`tui/`](../tui) and PR #48. Not wired in:
+`tools` still opens whiptail.
 **Scope:** `lib/tui.sh`, `lib/wizard.sh`, `tools.sh` dispatch, `cmd_install`
 **Non-goals:** changing `lib/commands.sh` behaviour, changing what any app installs
 
 Roadmap entry: see *Tooling / Infrastructure* in [`ROADMAP.md`](../ROADMAP.md).
+
+> **This document was revised after the prototype.** The original plan was
+> Go + [`huh`](https://github.com/charmbracelet/huh) replacing whiptail's
+> dialogs one-for-one. The target became a `gh-dash`-style dashboard, which huh
+> cannot express. §3 and §5 record the decision that replaced it. §2 is
+> unchanged, because it proved correct.
 
 ---
 
@@ -15,180 +22,157 @@ outside itself.
 
 **Rendering limits leaking into project policy.** `_fw` (`lib/tui.sh:31`) pads
 and truncates every menu row to fixed 26/34-column fields because whiptail has
-no table support. That 26-character budget is now written into `CLAUDE.md:202`
-as a rule every new app must follow when writing its `description`.
-`fastflowlm` is already at 25 characters.
+no table support. That 26-character budget is written into `CLAUDE.md` as a rule
+every new app must follow.
 
 **A fragile selection round-trip.** The rendered detail line doubles as the
-whiptail menu *tag*, and the selected line is mapped back to an app name
-through `detail_to_app` (`lib/tui.sh:71-86`). Two apps with an identical
-description *and* identical image/box status render byte-identical rows and
-collide silently.
+whiptail menu *tag*, and the selected line is mapped back to an app name through
+`detail_to_app` (`lib/tui.sh:71-86`). Two apps with an identical description
+*and* identical status render byte-identical rows and collide silently.
 
-**Manual byte-vs-char arithmetic.** `_fw` computes `wc -c` against `${#s}` purely
-to keep the `…` truncation character from breaking column alignment.
+**No search, no multi-select, no categories.** 23 apps in a flat 10-row window,
+arrow keys only.
 
-**No search, no multi-select.** 23 apps in a 10-row window, arrow keys only.
-Every roadmap item makes this worse, and there is no way to set up several apps
-in one pass.
-
-**Wrong dependency hint.** `lib/tui.sh:58` hardcodes
-`sudo apt install whiptail` even though the repo explicitly supports
-Arch-family hosts via `host_distro_family` (`lib/helpers.sh`).
+**Wrong dependency hint.** `lib/tui.sh:58` hardcodes `sudo apt install whiptail`
+even though the repo supports Arch-family hosts via `host_distro_family`.
 
 **Theme fights.** The 16-colour `NEWT_COLORS` block (`lib/tui.sh:1-27`)
-approximates the intended palette with `brown`/`lightgray` and still loses
-checkbox and button contrast.
+approximates the palette with `brown`/`lightgray` and still loses contrast.
 
-**Esc does not quit.** newt swallows single-`Esc`, so leaving a page takes more
-keystrokes than it should.
+**Esc does not quit.** newt swallows single-`Esc`.
+
+> Correction: the roadmap entry claimed huh gives single-`Esc`-to-quit for free.
+> It does not — huh v0.7.0 binds Quit to `ctrl+c` only, declares it with no help
+> string, and does not bind Esc at all. Any front-end needs an explicit keymap.
 
 ---
 
 ## 2. The core problem: wizard state crosses a process boundary
 
-This is the part the roadmap one-liner does not address, and it drives the rest
-of the design.
-
-Wizard answers are not consumed by the rendering layer. They live in
-`_WIZARD_SELECTIONS`, a bash associative array (`lib/wizard.sh:24`), and are
-read at four separate points — two of them inside the backend that this
+Wizard answers live in `_WIZARD_SELECTIONS`, a bash associative array
+(`lib/wizard.sh:24`), and are read at four points — two inside the backend this
 migration is supposed to leave alone:
 
 | Consumer | Defined at | Called from | Needs |
 |---|---|---|---|
-| `tui_confirm_wizards` | `lib/wizard.sh:230` | `tools.sh:76` | selections + detect state → install/remove diff |
+| `tui_confirm_wizards` | `lib/wizard.sh:230` | `tools.sh:76` | selections + detect state → diff |
 | `wizard_build_args` | `lib/wizard.sh:210` | `cmd_build`, `lib/commands.sh:9` | `--build-arg NAME=value` |
-| `wizard_create_variant` | `lib/wizard.sh:187` | `cmd_create`, `lib/commands.sh:41` | `create_flags.<variant>` selection |
+| `wizard_create_variant` | `lib/wizard.sh:187` | `cmd_create`, `lib/commands.sh:41` | `create_flags.<variant>` |
 | `tui_apply_wizards` | `lib/wizard.sh:310` | `tools.sh:80` | post-action `distrobox enter … --tools` |
 
-A Go front-end that collects answers and then shells out to `tools setup <app>`
-starts a **new bash process with an empty array**. The build arg and the
-runtime variant would silently disappear — no error, just a default build.
+Any front-end that collects answers and then invokes `tools setup <app>` starts
+a **new bash process with an empty array** — the build arg and the runtime
+variant vanish silently, with no error. An explicit serialization contract is
+therefore mandatory, and defining it is the real work.
 
-So "Go replaces only the rendering and shells out" is achievable only with an
-explicit serialization contract between the two halves. Defining that contract
-is the real work; the widget porting is the easy part.
-
----
-
-## 3. Design: Go as pre-processor, not wrapper
-
-The existing flow already collects **every** wizard answer before any container
-work begins (`tools.sh:71-83`: `tui_run_wizards` → `tui_confirm_wizards` →
-`cmd_setup`). That ordering is what makes a clean split possible.
-
-```
-tools            →  tools-tui (Go + huh)        →  exec tools <action> <app>
-(no args)           · pick app                     LT_WIZARD_STATE=<file>
-                    · pick action                  LT_SKIP_WIZARD=1
-                    · run all wizard pages
-                    · confirm
-                    · write state file
-```
-
-The Go binary **execs and never returns**. It does not wrap the build, so
-Bubble Tea never has to hand the terminal back and forth while podman streams
-output — bash prints build progress exactly as it does today.
-
-### Why not have Go orchestrate the whole run?
-
-The alternative is Go calling `tools build` / `tools create` / `tools export`
-as discrete steps with explicit flags (`--build-arg`, `--variant`). That is
-attractive long-term because it would make the bash CLI fully non-interactive
-and scriptable — a win independent of the TUI. It is rejected *for now* as a
-larger, more invasive change that also has to define a stable flag surface.
-Worth revisiting once the state-file protocol has proven itself.
-
----
-
-## 4. State file protocol
-
-Go writes a flat `KEY=value` file; bash sources it. Location comes from
-`LT_WIZARD_STATE`, defaulting to
-`${XDG_RUNTIME_DIR:-/tmp}/linux-tools/wizard-<app>.state`.
+**This held up, and the fix was cheaper than predicted.** `wizard_load_state`
+sources a flat `KEY=value` file and re-hydrates `_WIZARD_SELECTIONS` from it, so
+every existing consumer works **unchanged**. This document originally assumed
+`wizard_build_args` and `wizard_create_variant` would collapse into readers of
+the new file; they did not have to change at all.
 
 ```sh
-# resolved by Go, consumed verbatim by bash
+APP="fastflowlm"
+ACTION="setup"
 BUILD_ARGS="--build-arg FLM_REF=v0.9.12"
 VARIANT="nvidia"
 PAGE_00_statusline="statusline"
-PAGE_00_tools="node uv rust"
 ```
 
-**Go is the sole parser of the page format.** This is a deliberate refinement
-of the roadmap note. If both halves parse
-`apps/<app>/wizard/NN-name.<type>`, there are two implementations of a fiddly
-positional grammar — three different body grammars share one file convention
-(`.packages` has 3-to-5 pipe-separated fields with optional trailing ones,
-`.buildarg` uses `key|value` config lines, `.runtime` uses
-`Label|value|desc` items) — and they will drift.
+Go is the **sole parser** of the wizard page format — three different body
+grammars share one file convention, and two implementations would drift. The
+state file carries already-resolved values.
 
-Instead Go resolves everything down to already-computed values, and the bash
-parsers are **deleted rather than ported**:
+Page variables are named `PAGE_<sanitised name>` because `00-statusline` is not
+a valid shell identifier; the sanitisation is not reversible, so bash re-derives
+it by walking the page files rather than decoding the variable name.
 
-- `wizard_build_args` (`lib/wizard.sh:210-228`) collapses to reading `BUILD_ARGS`
-- `wizard_create_variant` (`lib/wizard.sh:187-206`) collapses to reading `VARIANT`
-- `_wizard_apply_mcp` / `_wizard_apply_packages` still need per-item payloads, so
-  they keep reading their page files — but only for the *apply* step, which is
-  backend work that stays in bash regardless
-
-Bash gains one small `wizard_load_selections` helper, guarded so that a missing
-file (non-interactive `tools setup <app>` from a script) behaves exactly as an
-empty array does today.
+A missing state file is a no-op, preserving the non-interactive path where
+`tools setup <app>` from a script takes build defaults.
 
 ---
 
-## 5. Widget mapping
+## 3. Architecture: a dashboard, not a form sequence
 
-| Today (whiptail) | huh | Note |
-|---|---|---|
-| app menu, `lib/tui.sh:81` | `huh.NewSelect` + filtering | kills `_fw` and the 26-char budget |
-| action menu, `lib/tui.sh:90` | `huh.NewSelect` | |
-| `.packages` checklist, `lib/wizard.sh:113` | `huh.NewMultiSelect` | prefill from existing detect logic |
-| `.buildarg` radiolist, `lib/wizard.sh:151` | `huh.NewSelect` + spinner | see below |
-| `.runtime` radiolist, `lib/wizard.sh:178` | `huh.NewSelect` with `Option` key/value | see below |
-| `--yesno` confirm, `lib/wizard.sh:305` | `huh.NewConfirm` | |
-| one page = one blocking dialog | one page = one `huh.Group` in a single form | gains back-navigation |
+**Superseded.** The original plan was a huh form flow that collected everything
+up front, wrote the state file, then `exec`'d bash and never returned.
 
-Three wins here are concrete rather than cosmetic:
+The target is a `gh-dash`-style dashboard: category tabs, an app table, an info
+panel, a keybinding footer — a persistent full-screen program.
 
-**The `.runtime` label→value round-trip disappears.** whiptail returns the
-*display label*, so `wizard_create_variant` (`lib/wizard.sh:186-206`) has to
-re-open the page file and translate `"AMD (ROCm/Vulkan)"` back to `amd`. huh's
-`Option` carries display key and typed value together, so this code is deleted,
-not ported.
+### Why huh was dropped entirely
 
-**Pages stop being dead ends.** Today each dialog is standalone and cancelling
-any page returns 1, which aborts the whole wizard (`lib/tui.sh:100` → `exit 0`).
-A single form with one group per page gives back/forward navigation for free.
+huh is a *form* library: sequential prompts, one group at a time. It cannot
+express tabs plus a table plus a sidebar. Two facts settled it:
 
-**The `.buildarg` network freeze becomes visible.** `fastflowlm`'s
-`00-release.buildarg` runs `items-cmd` against the GitHub releases API; today
-that is a silent multi-second hang before the menu appears. A spinner covers
-it, and the empty-result case can be surfaced inline instead of as the stderr
-warning at `lib/wizard.sh:137-140` that scrolls past unnoticed.
+- **gh-dash uses no huh at all.** Its `go.mod` is `bubbletea/v2`, `bubbles/v2`,
+  `lipgloss/v2`, plus glamour and fuzzy search.
+- **huh v1.0.0 still depends on `bubbletea` v1.3.6**, not
+  `charm.land/bubbletea/v2`, so it could not be embedded in a v2 app even as a
+  wizard component.
 
-> API specifics (exact `huh` option constructors, whether filtering is enabled
-> per-field or per-form) are to be confirmed against the library during the
-> spike rather than assumed here.
+The wizard page parser and the state-file protocol are stack-independent and
+carried over unchanged.
+
+### Actions suspend rather than exec away
+
+`tea.ExecProcess` suspends the dashboard, hands bash the real terminal so podman
+output streams exactly as today, then resumes and re-reads container state. This
+is better than exec-and-never-return: the dashboard survives a build and reports
+its result.
+
+One consequence worth naming: because bash sees a real tty, `tools setup` still
+runs its **existing whiptail wizard**. That is a working seam, not a finished
+one — the state-file bridge is built and tested but not yet used by the
+dashboard.
+
+---
+
+## 4. Categories
+
+Read from `apps/<name>/category`, one line per app, following the existing
+per-app file convention (`description`, `host-only`, `create_flags`). Missing or
+empty ⇒ an `Other` tab. Preferred tab order lives in `Categories()` in
+`tui/apps.go`; unknown names are appended alphabetically.
+
+Rejected: a central manifest (a second place to edit whenever an app is added)
+and parsing `ROADMAP.md` headings (couples the UI to a prose doc's formatting,
+and covers only apps listed there).
+
+---
+
+## 5. Components
+
+**Superseded.** This section previously mapped each whiptail dialog to a huh
+field.
+
+| Element | Built with |
+|---|---|
+| category tabs, superscript counts | hand-rolled + lipgloss |
+| app table, terminal-width columns | hand-rolled; the 26-char budget is gone |
+| README info panel | glamour, cached per app and width |
+| full-width selection highlight | per-segment background, no arrow |
+| platform / image / box indicators | Nerd Font glyphs, `--ascii` fallback |
+| actions | `tea.ExecProcess` |
+| wizard pages | **still whiptail** — native pages are the next step |
 
 ---
 
 ## 6. Build and distribution
 
-`dev-toolbox` currently ships node, uv, rust and JVM toolchains — **there is no
-Go toolchain anywhere in the repo today**, so this needs deciding before work
-starts.
+Resolved for development: **Go is a selectable `dev-toolbox` tool** (PR #47),
+installing the latest stable release as a self-contained GOROOT under
+`~/.local/share/dev-toolbox/go`.
 
-| Option | Assessment |
-|---|---|
-| **Build in a throwaway `golang:*-alpine` container at `tools install` time** | **Preferred.** Matches the repo's philosophy — no host toolchain, the container does the build. `CGO_ENABLED=0` gives a static binary; drop it at `~/.local/bin/tools-tui`. Hooks into `cmd_install` (`lib/commands.sh:286`), which already writes to `~/.local/bin` and manages completion. |
-| Add Go to `dev-toolbox` | Couples a host-side tool's build to an unrelated app's image; `dev-toolbox` is for user projects, not for building this repo. |
-| Vendor a prebuilt binary in git | Puts a multi-MB binary under version control and needs per-arch builds. |
+This replaces the original recommendation of a throwaway `golang:*-alpine`
+build container. That recommendation conflated two questions — where a
+*developer* gets a toolchain, and how the *shipped* binary is produced.
+dev-toolbox answers the first cleanly. **The second is still open:** end users
+must not need dev-toolbox installed to get `tools-tui`, so `cmd_install` will
+still want a container build or a released artifact.
 
-Base image must be fully qualified per `CLAUDE.md` (`docker.io/golang:...`);
-exact version pin is an open question below.
+`CGO_ENABLED=0` is required either way — it produces a static binary that runs
+on the host without linking the container's glibc.
 
 ---
 
@@ -197,53 +181,70 @@ exact version pin is an open question below.
 The whiptail path stays intact and working. `tools.sh` gains a gate alongside
 the existing `command -v whiptail` check (`tools.sh:71`):
 
-1. `tools-tui` present and `LT_NO_GO_TUI` unset → Go front-end
+1. `tools-tui` present and `LT_NO_GO_TUI` unset → dashboard
 2. otherwise → current whiptail path, unchanged
 
-This keeps the migration non-breaking, lets pages port one type at a time, and
-gives an escape hatch if the Go binary misbehaves on some host. The gate is
-removed and `lib/tui.sh` retired only once all four page types are ported.
+`lib/tui.sh` is retired only once native wizard pages land.
 
 ---
 
-## 8. Spike
+## 8. Status
 
-The roadmap note proposes porting the app-selection menu plus `claude-code`'s
-`.packages` page. **The state-file protocol should be added to that scope** —
-it is the piece that can invalidate the design, and everything else is
-mechanical once it holds.
+**Done** — PR #48
+- category tabs, app table, README info panel, filter, help overlay, footer
+- actions via `ExecProcess`, with container state refreshed on completion
+- state-file bridge and `wizard_load_state`, covered by tests
+- `apps/<name>/category` for all 23 apps
+- Go toolchain in dev-toolbox — PR #47
 
-**Phase 1 — spike**
-- app-selection menu (proves the list, filtering, and the death of `_fw`)
-- `claude-code` `00-statusline.packages` (exercises the detect-path logic at
-  `lib/wizard.sh:89-103`)
-- state file written by Go, read by a `wizard_load_selections` in bash
-- `cmd_install` builds the binary in a container
-- whiptail fallback gate
+**Next**
+- native wizard pages (multi-select with detect prefill, select) — the last
+  thing whiptail is still doing
+- `cmd_install` building or fetching the binary
+- wiring `tools` to launch it, behind the fallback gate
 
-**Phase 2 — the pages that need the protocol**
-- `.buildarg` (`fastflowlm`, `llama-cpp-rocm`) — proves `BUILD_ARGS` through
-  `cmd_build`, plus the spinner
-- `.runtime` (`lmstudio`) — proves `VARIANT` through `cmd_create` and deletes
-  the label→value round-trip
-
-**Phase 3 — completion**
-- `.mcp`, confirm screen, multi-select across apps
-- retire `lib/tui.sh`, drop the whiptail gate
-- drop the 26-char `description` rule from `CLAUDE.md:202`
+**Then**
+- retire `lib/tui.sh`, drop the gate
+- drop the 26-char `description` rule from `CLAUDE.md`
+- multi-app select (`cmd_setup` is strictly single-app today)
 
 ---
 
-## 9. Open questions
+## 9. Pitfalls found building it
 
-- **Go version pin** for the build container, and whether to commit
-  `go.mod`/`go.sum` plus a vendored module tree so builds work without network
-  access.
-- **Where the Go source lives** — `tui/` at repo root is the obvious spot, but
-  it is the first non-app, non-lib source tree in the repo.
-- **Multi-app select** is listed as a win, but `cmd_setup` is strictly
-  single-app today. Batching means either looping in bash or teaching the
-  backend a list — deferred to Phase 3 deliberately.
-- **Non-interactive parity.** `tools setup <app>` from a script currently skips
-  wizards entirely and takes build defaults. That behaviour must be preserved
-  exactly; the state-file loader has to treat "no file" as "no selections".
+- **Podman prefixes locally-built images with `localhost/`**, while
+  `image_name()` in `lib/helpers.sh` produces the unprefixed form. Matching
+  exactly reported *every* app as "not built".
+- **Nerd Font glyphs are private-use codepoints** and silently become empty
+  strings when passing through tooling that does not preserve them — a
+  collapsed cell, not an error. Write them as explicit `\u` escapes and assert
+  non-empty in tests.
+- **`nf-md-docker` (U+F0868) renders double-width.** It lives in a supplementary
+  plane, and terminals widen those PUA codepoints while wcwidth — and therefore
+  `lipgloss.Width` — reports 1. Every column to its right shifts by a cell, and
+  nothing in the code can detect it. Prefer the BMP `nf-linux` block
+  (U+F300–F32F).
+- **`JoinHorizontal` pads a single-line element** with blanks on subsequent
+  lines rather than repeating it, so a `" │ "` divider drew only on row one.
+  Build it as its own column, sized to the taller pane.
+- **A background applied to an already-styled string ends early**, because the
+  inner ANSI resets terminate it. Style each segment individually.
+- **Running from inside a container degrades silently.** `podman`, `distrobox`
+  and `tools` are not on PATH there, and the deliberate degrade-to-empty
+  behaviour in the status lookups turns that into "everything not built".
+  Detect containerisation and route through `distrobox-host-exec`.
+- **Column padding must count display cells, not bytes.** `●` is one rune and
+  three bytes; `%-*s` silently shortens those columns.
+
+---
+
+## 10. Open questions
+
+- **How end users get the binary** — see §6.
+- **Go version pin** for any build container, and whether to vendor modules so
+  builds work without network access.
+- **Non-interactive parity.** `tools setup <app>` from a script must keep taking
+  build defaults; the state-file loader treats "no file" as "no selections",
+  which holds today and must not regress.
+- **9 of 23 apps have no `README.md`** despite `CLAUDE.md` requiring one. The
+  info panel makes the gap visible; it does not cause it.
