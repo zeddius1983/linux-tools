@@ -460,7 +460,12 @@ func (m *model) tabsView() string {
 
 func (m *model) tableView(width int) string {
 	v := m.visible()
-	imgW, boxW := 9, 11
+	// Both columns are glyph-only: IMAGE has two states and BOX three, few
+	// enough that a word adds nothing. Every value is one cell, so the glyphs
+	// align down the column by construction — right-aligning "✓ built" against
+	// a bare "✗" is what left them ragged before. The help overlay carries the
+	// legend.
+	imgW, boxW := 5, 3
 	// Both the header and the rows open with a 4-cell prefix — "    " above,
 	// gutter + glyph + space below — so the APP field must be the same width in
 	// each, or the state columns start two cells later on rows than in the
@@ -475,7 +480,7 @@ func (m *model) tableView(width int) string {
 	// in length ("✓ built" vs a bare "✗"), so left-aligning left the header
 	// visibly offset from the text beneath it.
 	b.WriteString(styHeader.Render(fmt.Sprintf("    %-*s %s %s",
-		nameW, "APP", padLeft("IMAGE", imgW), padLeft("BOX", boxW))))
+		nameW, "APP", "IMAGE", "BOX")))
 	b.WriteString("\n")
 
 	if len(v) == 0 {
@@ -521,9 +526,9 @@ func (m *model) tableView(width int) string {
 		b.WriteString(on(plain).Render(" "))
 		b.WriteString(on(nameSty).Render(pad(label, nameW)))
 		b.WriteString(on(plain).Render(" "))
-		b.WriteString(on(imgSty).Render(padLeft(imgTxt, imgW)))
+		b.WriteString(on(imgSty).Render(padCenter(imgTxt, imgW)))
 		b.WriteString(on(plain).Render(" "))
-		b.WriteString(on(boxSty).Render(padLeft(boxTxt, boxW)))
+		b.WriteString(on(boxSty).Render(padCenter(boxTxt, boxW)))
 		b.WriteString(on(plain).Render(strings.Repeat(" ", trail)))
 		b.WriteString("\n")
 	}
@@ -531,6 +536,17 @@ func (m *model) tableView(width int) string {
 		b.WriteString(styDesc.Render(fmt.Sprintf("  %d-%d of %d", m.top+1, end, len(v))))
 	}
 	return b.String()
+}
+
+// padCenter centres text in w cells, so a one-cell glyph sits under the middle
+// of its header.
+func padCenter(s string, w int) string {
+	n := len([]rune(s))
+	if n >= w {
+		return s
+	}
+	left := (w - n) / 2
+	return strings.Repeat(" ", left) + s + strings.Repeat(" ", w-n-left)
 }
 
 // padLeft left-pads to w cells, right-aligning the text.
@@ -634,6 +650,19 @@ func (m *model) helpView() string {
 		{"q / esc", "quit"},
 	}
 	for _, r := range rows {
+		b.WriteString(fmt.Sprintf("  %s  %s\n",
+			styKey.Render(fmt.Sprintf("%-16s", r[0])), styDesc.Render(r[1])))
+	}
+	b.WriteString("\n" + styTitle.Render("  columns") + "\n\n")
+	legend := [][2]string{
+		{"IMAGE  ✓", "image built"},
+		{"IMAGE  ✗", "not built"},
+		{"BOX    ●", "box exists and is running"},
+		{"BOX    ○", "box exists, stopped"},
+		{"BOX    ✗", "no box"},
+		{"(blank)", "host-only app — no image or box"},
+	}
+	for _, r := range legend {
 		b.WriteString(fmt.Sprintf("  %s  %s\n",
 			styKey.Render(fmt.Sprintf("%-16s", r[0])), styDesc.Render(r[1])))
 	}

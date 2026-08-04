@@ -107,12 +107,23 @@ Each app carries a one-cell glyph beside its name saying where it runs:
 | containerised (20 of 23) | Docker (`--ascii`: `◆`) |
 | host-only (`shell-toolbox`, `nvidia-acs-service`, `nvidia-cdi-service`) | the host distro's logo, e.g. Mint (`--ascii`: `⌂`) |
 
-Host-only apps leave IMAGE and BOX blank — they have neither, and the glyph
-beside the name already says why. That is distinct from a bare `✗`, which means
-"could be built, is not".
+## State columns
 
-The state columns are right-aligned, header and values alike, so the header
-lines up with the text beneath it despite the values varying in length.
+IMAGE and BOX are glyph-only — two states and three respectively, few enough
+that a word adds nothing:
+
+| Column | Glyph | Meaning |
+|---|---|---|
+| IMAGE | `✓` | image built |
+| IMAGE | `✗` | not built |
+| BOX | `●` | box exists and is running |
+| BOX | `○` | box exists, stopped |
+| BOX | `✗` | no box |
+| either | *(blank)* | host-only app — it has neither |
+
+`?` shows this legend in the app. Every value is one cell, so the glyphs align
+down the column by construction; the footer names the image reference in full
+for the selected row.
 
 It sits with the name rather than in its own column because it is a fixed
 property of the app, not live state like IMAGE and BOX.

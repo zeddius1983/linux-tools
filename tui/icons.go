@@ -47,7 +47,7 @@ func (i iconSet) image(a App) (string, lipgloss.Style) {
 		return "", styDesc
 	}
 	if a.HasImage {
-		return i.check() + " built", styStatusOK
+		return i.check(), styStatusOK
 	}
 	return i.cross(), styStatusNo
 }
@@ -59,9 +59,9 @@ func (i iconSet) box(a App) (string, lipgloss.Style) {
 	}
 	switch {
 	case a.BoxRunning:
-		return i.dotFilled() + " running", styStatusOK
+		return i.dotFilled(), styStatusOK
 	case a.HasBox:
-		return i.dotHollow() + " stopped", styWarn
+		return i.dotHollow(), styWarn
 	default:
 		return i.cross(), styStatusNo
 	}
