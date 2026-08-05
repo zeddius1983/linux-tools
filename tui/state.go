@@ -67,19 +67,57 @@ func (s State) Render() string {
 	return b.String()
 }
 
-// Write persists the state file, creating its directory if needed.
+// Write persists the state file at an exact path, creating its directory if
+// needed. WriteNew is what the dashboard uses; this exists for callers that
+// have already chosen a path, and for tests.
 func (s State) Write(path string) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
 	return os.WriteFile(path, []byte(s.Render()), 0o600)
 }
 
-// DefaultStatePath mirrors the location documented in docs/tui-migration.md.
-func DefaultStatePath(app string) string {
-	base := os.Getenv("XDG_RUNTIME_DIR")
-	if base == "" {
-		base = os.TempDir()
+// WriteNew creates a fresh state file and returns its path.
+//
+// bash *sources* this file, so a path another local user can influence is a
+// way to run commands as whoever is using the dashboard. The file is therefore
+// created inside a 0700 directory, with a random name, and with O_EXCL — never
+// at a name that can be predicted and pre-created.
+func (s State) WriteNew() (string, error) {
+	dir, err := stateDir()
+	if err != nil {
+		return "", err
 	}
-	return filepath.Join(base, "linux-tools", "wizard-"+app+".state")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	// os.CreateTemp opens with O_CREATE|O_EXCL|0600 and a random suffix.
+	f, err := os.CreateTemp(dir, "wizard-"+s.App+"-*.state")
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	if _, err := f.WriteString(s.Render()); err != nil {
+		os.Remove(f.Name())
+		return "", err
+	}
+	return f.Name(), nil
+}
+
+// stateDir is under $HOME on purpose.
+//
+// Distrobox shares $HOME between the container and the host, so a file written
+// here is visible to the bash backend even when the dashboard runs inside a
+// container. Neither /tmp nor $XDG_RUNTIME_DIR is guaranteed to be the same
+// filesystem across that boundary — and a state file the backend cannot read
+// means a setup that rebuilds the app while silently discarding every answer.
+func stateDir() (string, error) {
+	if base := os.Getenv("XDG_CACHE_HOME"); base != "" {
+		return filepath.Join(base, "linux-tools", "wizard"), nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".cache", "linux-tools", "wizard"), nil
 }

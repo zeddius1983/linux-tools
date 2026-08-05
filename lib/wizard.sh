@@ -44,6 +44,23 @@ _wizard_var_suffix() {
     printf '%s' "${s//[^a-zA-Z0-9]/_}"
 }
 
+# Load the state file, refusing to continue when one was promised but cannot be
+# read. LT_SKIP_WIZARD says a front-end has already asked every question, so a
+# missing or unreadable file is not "no answers" — it is answers that were lost.
+# Carrying on would remove and rebuild the app while discarding the build args,
+# runtime variant and package selections the user just chose.
+wizard_require_state() {
+    local app="$1"
+    wizard_load_state "$app"
+    if [[ -n "${LT_SKIP_WIZARD:-}" && $_WIZARD_STATE_LOADED -ne 1 ]]; then
+        echo "Error: LT_SKIP_WIZARD is set but no wizard state could be loaded from" >&2
+        echo "       '${LT_WIZARD_STATE:-<unset>}'. Refusing to continue: the run would" >&2
+        echo "       silently ignore every selection made in the front-end." >&2
+        return 1
+    fi
+    return 0
+}
+
 wizard_load_state() {
     local app="$1"
     [[ -n "${LT_WIZARD_STATE:-}" && -f "${LT_WIZARD_STATE}" ]] || return 0

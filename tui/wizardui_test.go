@@ -254,6 +254,53 @@ func TestWheelBurstIsOneRow(t *testing.T) {
 	}
 }
 
+// items-cmd takes seconds. Cancelling one wizard and opening another before it
+// returns must not put the first app's releases into the second app's page.
+func TestStaleItemsAreIgnored(t *testing.T) {
+	m := newModel([]App{}, appsDir, "tools", true)
+
+	m.wiz, _ = newWizardSession(testApp(t, "fastflowlm"), "setup", t.TempDir())
+	stale := m.wiz.id
+	m.wizardKey("q") // cancel while its items-cmd is still in flight
+
+	m.wiz, _ = newWizardSession(testApp(t, "llama-cpp-rocm"), "setup", t.TempDir())
+	m.wizardUpdate(wizItemsMsg{session: stale, page: 0, values: []string{"v0.9.12"}})
+
+	if p := m.wiz.page(); len(p.items) != 0 || !p.loading {
+		t.Errorf("the cancelled wizard's items landed in the new one: %v", p.items)
+	}
+
+	// Its own result is still accepted.
+	m.wizardUpdate(wizItemsMsg{session: m.wiz.id, page: 0, values: []string{"b1234"}})
+	if got := m.wiz.page().items; len(got) != 1 || got[0].Name != "b1234" {
+		t.Errorf("items = %v, want the session's own result", got)
+	}
+}
+
+// A wizard page must never draw more rows than the screen has: shell-toolbox
+// ships 18 items, which would push the footer off a 24-line terminal.
+func TestWizardPageFitsTheScreen(t *testing.T) {
+	m := newModel([]App{}, appsDir, "tools", true)
+	m.w, m.h = 100, 24
+	m.wiz, _ = newWizardSession(testApp(t, "shell-toolbox"), "setup", t.TempDir())
+	if len(m.wiz.page().items) < 18 {
+		t.Fatalf("expected the long page, got %d items", len(m.wiz.page().items))
+	}
+
+	for _, cursor := range []int{0, 9, 17} {
+		m.wiz.cursor = cursor
+		lines := strings.Count(m.wizardView(), "\n") + 1
+		if lines > m.h {
+			t.Errorf("cursor %d: %d lines, want at most %d", cursor, lines, m.h)
+		}
+		// The cursor has to be one of the drawn rows, or it is invisible.
+		top, end := m.wiz.window(m.wizardRows())
+		if cursor < top || cursor >= end {
+			t.Errorf("cursor %d outside the drawn window %d-%d", cursor, top, end)
+		}
+	}
+}
+
 // A status message shares the footer with the selected app's context, so the
 // next keypress has to clear it rather than leaving it there for good.
 func TestStatusClearsOnNextKey(t *testing.T) {
@@ -386,7 +433,7 @@ func TestWizardWaitsForLoadingPage(t *testing.T) {
 	if m.wiz.stage == stageConfirm {
 		t.Error("enter advanced past a page that is still loading")
 	}
-	m.wizardUpdate(wizItemsMsg{page: 0, values: []string{"v1", "v0"}})
+	m.wizardUpdate(wizItemsMsg{session: m.wiz.id, page: 0, values: []string{"v1", "v0"}})
 	if m.wiz.page().loading {
 		t.Fatal("page still loading after its items arrived")
 	}

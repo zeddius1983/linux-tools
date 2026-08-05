@@ -149,12 +149,22 @@ func readTrimmed(path string) string {
 
 // podmanImages returns the set of local image refs. A failure here is not
 // fatal: status degrades to "not built" rather than blocking the menu, which
-// keeps the binary usable when podman is unreachable (e.g. when it is run from
-// inside a container during development).
+// keeps the binary usable when the runtime is unreachable (e.g. when it is run
+// from inside a container during development).
+//
+// Both runtimes are tried, in the order tools.sh picks them: a host with only
+// Docker installed builds fine through the backend, and querying podman alone
+// would report every one of its images as not built.
 func podmanImages() map[string]bool {
 	out := map[string]bool{}
-	cmd := hostCommand("podman", "images", "--format", "{{.Repository}}:{{.Tag}}")
-	b, err := cmd.Output()
+	var b []byte
+	var err error
+	for _, runtime := range []string{"podman", "docker"} {
+		b, err = hostCommand(runtime, "images", "--format", "{{.Repository}}:{{.Tag}}").Output()
+		if err == nil {
+			break
+		}
+	}
 	if err != nil {
 		return out
 	}

@@ -88,7 +88,17 @@ a valid shell identifier; the sanitisation is not reversible, so bash re-derives
 it by walking the page files rather than decoding the variable name.
 
 A missing state file is a no-op, preserving the non-interactive path where
-`tools setup <app>` from a script takes build defaults.
+`tools setup <app>` from a script takes build defaults — **unless
+`LT_SKIP_WIZARD` is set**, which is a front-end saying it has already asked
+everything. Then a missing or unreadable file is not "no answers", it is
+answers that were lost, and `wizard_require_state` aborts rather than removing
+and rebuilding the app with every selection discarded.
+
+The file lives under `~/.cache/linux-tools/wizard/`, `0700`, with a random name
+created `O_EXCL`. `$HOME` is the one path Distrobox shares with the host, so a
+file written there is readable by the backend even when the dashboard runs
+inside a container; `/tmp` is not, and a world-writable predictable path is a
+way for another local user to have bash source their file instead.
 
 ---
 
@@ -238,6 +248,18 @@ the existing `command -v whiptail` check (`tools.sh:71`):
   empty string and the apply handler then removes what is installed. It now
   tests for the variable being *defined*, and the Go side always writes a line
   for every page it asked.
+- **An async result outlives the wizard that asked for it.** `items-cmd` takes
+  seconds; cancelling one wizard and opening another within that window landed
+  the first app's releases in the second app's page, because the reply was
+  matched on page index alone and every session has a page 0. Results carry a
+  session id.
+- **A long page runs off the screen.** `shell-toolbox` ships 18 items, more than
+  a 24-line terminal holds, and the overflow pushed the key legend — the part
+  that says how to get out — past the bottom. Item lists need a viewport that
+  follows the cursor, not just a loop.
+- **`podman` is not the only runtime.** `tools.sh` falls back to Docker, so the
+  dashboard has to as well; querying podman alone on a Docker host reports every
+  built image as missing.
 - **`.buildarg` items come from the network.** The page's `items-cmd` is a
   GitHub API call or a `git ls-remote`; running it inline would freeze the first
   frame of the wizard. It runs as a `tea.Cmd` with a timeout, and a failure is

@@ -120,6 +120,23 @@ installed. `wizard_load_state` therefore tests each `PAGE_` variable for being
 A review screen with no pages behind it hands bash nothing — no state file — so
 that run is an ordinary `tools setup <app>`.
 
+### The state file
+
+Written under `$XDG_CACHE_HOME`/`~/.cache/linux-tools/wizard/`, in a `0700`
+directory, with a random name created `O_EXCL` and mode `0600`, and deleted once
+the run finishes. Two reasons it lives there rather than in `/tmp` or
+`$XDG_RUNTIME_DIR`:
+
+- **bash sources it.** A predictable path in a world-writable directory is a way
+  for another local user to run commands as whoever is using the dashboard.
+- **`$HOME` is the one thing Distrobox shares.** `/tmp` inside a container is not
+  the host's `/tmp`, so a state file written there is invisible to the backend —
+  which would mean a setup that rebuilds the app while discarding every answer.
+
+That last failure is also guarded on the bash side: `wizard_require_state`
+aborts when `LT_SKIP_WIZARD` is set and no state can be loaded, rather than
+falling through to a default build.
+
 Keys: `space` toggle/select, `a`/`n` all/none, `↑`/`↓` move, `⏎` next page or
 review, `esc` back a page (and out of the wizard from the first), `q` cancel.
 

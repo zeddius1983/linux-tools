@@ -41,6 +41,7 @@ type wizPage struct {
 func (p wizPage) multi() bool { return p.Type == "packages" || p.Type == "mcp" }
 
 type wizardSession struct {
+	id     int
 	app    App
 	action string
 	pages  []wizPage
@@ -51,11 +52,20 @@ type wizardSession struct {
 }
 
 // wizItemsMsg carries the result of a .buildarg page's items-cmd.
+//
+// session identifies the wizard that asked. items-cmd takes seconds, and a
+// user who cancels one wizard and opens another before it returns would
+// otherwise have the first app's releases land in the second app's page —
+// matched on page index alone, which every session has.
 type wizItemsMsg struct {
-	page   int
-	values []string
-	err    error
+	session int
+	page    int
+	values  []string
+	err     error
 }
+
+// wizSessions numbers wizard sessions so their async results can be told apart.
+var wizSessions int
 
 // newWizardSession builds a session for the pages that apply to this action,
 // returning nil when the app has none — the caller then runs the action
@@ -69,7 +79,8 @@ func newWizardSession(a App, action, home string) (*wizardSession, tea.Cmd) {
 		return nil, nil
 	}
 
-	w := &wizardSession{app: a, action: action, home: home}
+	wizSessions++
+	w := &wizardSession{id: wizSessions, app: a, action: action, home: home}
 	var cmds []tea.Cmd
 	for _, p := range pages {
 		if !p.AppliesTo(action) {
@@ -82,7 +93,7 @@ func newWizardSession(a App, action, home string) (*wizardSession, tea.Cmd) {
 				continue
 			}
 			wp.loading = true
-			cmds = append(cmds, loadBuildArgItems(len(w.pages), p.ItemsCmd))
+			cmds = append(cmds, loadBuildArgItems(w.id, len(w.pages), p.ItemsCmd))
 		default:
 			// A page whose body has no items is skipped, mirroring the empty
 			// item-list guard in _wizard_run_page.
@@ -106,14 +117,14 @@ func newWizardSession(a App, action, home string) (*wizardSession, tea.Cmd) {
 // loadBuildArgItems runs a page's items-cmd. The command is the app's own — it
 // reaches the network (a GitHub API call, a git ls-remote), so it is run off
 // the update loop and bounded by a timeout rather than left to hang the UI.
-func loadBuildArgItems(page int, cmdline string) tea.Cmd {
+func loadBuildArgItems(session, page int, cmdline string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
 		out, err := hostCommandContext(ctx, "bash", "-c", cmdline).Output()
 		if err != nil {
-			return wizItemsMsg{page: page, err: err}
+			return wizItemsMsg{session: session, page: page, err: err}
 		}
 		var vals []string
 		for _, l := range strings.Split(string(out), "\n") {
@@ -121,7 +132,7 @@ func loadBuildArgItems(page int, cmdline string) tea.Cmd {
 				vals = append(vals, l)
 			}
 		}
-		return wizItemsMsg{page: page, values: vals}
+		return wizItemsMsg{session: session, page: page, values: vals}
 	}
 }
 
@@ -130,6 +141,44 @@ func (w *wizardSession) page() *wizPage {
 		return nil
 	}
 	return &w.pages[w.idx]
+}
+
+// window is the slice of the current page's items to draw for a viewport of
+// rows lines, keeping the cursor inside it.
+func (w *wizardSession) window(rows int) (top, end int) {
+	p := w.page()
+	if p == nil {
+		return 0, 0
+	}
+	n := len(p.items)
+	if rows >= n {
+		return 0, n
+	}
+	// Centre the cursor once the list is longer than the viewport, so there is
+	// context on both sides of it rather than only above.
+	top = w.cursor - rows/2
+	if top < 0 {
+		top = 0
+	}
+	if top > n-rows {
+		top = n - rows
+	}
+	return top, top + rows
+}
+
+// wizardRows is how many item rows fit on screen: the terminal less the app
+// header and its rule (3), the page title, prompt and the blank after it (3),
+// the row counter (1), the packages footnote and its blank (2), and the rule
+// above the key legend plus the legend itself (2).
+//
+// It is the same budget for a page that has no footnote, which just leaves a
+// blank line — better than a page that runs one line past the bottom.
+func (m *model) wizardRows() int {
+	rows := m.h - 11
+	if rows < 3 {
+		rows = 3
+	}
+	return rows
 }
 
 // focus puts the cursor where the page's answer already is, so arriving at a
@@ -239,12 +288,15 @@ func (m *model) wizardUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case wizItemsMsg:
-		if msg.page < 0 || msg.page >= len(w.pages) {
+		// A result from a wizard that has since been cancelled and replaced
+		// belongs to a different app; page index alone does not say that.
+		if msg.session != w.id || msg.page < 0 || msg.page >= len(w.pages) {
 			return m, nil
 		}
 		p := &w.pages[msg.page]
 		p.loading = false
 		p.loadErr = msg.err
+		p.items = nil
 		for _, v := range msg.values {
 			p.items = append(p.items, Item{Name: v})
 		}
@@ -377,8 +429,8 @@ func (m *model) runWizardAction() tea.Cmd {
 	// that only tells bash to skip a wizard that does not exist.
 	var env []string
 	if len(w.pages) > 0 {
-		path := DefaultStatePath(w.app.Name)
-		if err := w.state().Write(path); err != nil {
+		path, err := w.state().WriteNew()
+		if err != nil {
 			m.status, m.statusErr = "could not write wizard state: "+err.Error(), true
 			return nil
 		}
@@ -443,7 +495,14 @@ func (m *model) wizardPageBody() string {
 	}
 	nameW = minInt(nameW, 28)
 
-	for i, it := range p.items {
+	// Only as many rows as the screen has room for, following the cursor. The
+	// shipped shell-toolbox page has 18 items, which runs off a 24-line
+	// terminal and takes the footer — the keys telling you how to get out —
+	// with it.
+	top, end := w.window(m.wizardRows())
+
+	for i := top; i < end; i++ {
+		it := p.items[i]
 		marker := m.icons.wizMarker(p.multi(), p.multi() && p.checked[i] || !p.multi() && p.radio == i)
 
 		nameSty, descSty := styRow, styDesc
@@ -464,6 +523,10 @@ func (m *model) wizardPageBody() string {
 			b.WriteString("  " + descSty.Render(trunc(it.Desc, room)))
 		}
 		b.WriteString("\n")
+	}
+
+	if end-top < len(p.items) {
+		b.WriteString(styDesc.Render(fmt.Sprintf("    %d-%d of %d", top+1, end, len(p.items))) + "\n")
 	}
 
 	// Detect-driven pages start with what is already on disk ticked, which is
