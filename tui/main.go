@@ -20,18 +20,20 @@ import (
 
 func main() {
 	var appsDir, toolsBin string
-	var render, asciiIcons bool
+	var render, asciiIcons, noMouse bool
 	var renderApp, renderWizard string
 	var renderW, renderH int
 	flag.StringVar(&appsDir, "apps-dir", "apps", "path to the apps/ directory")
 	flag.StringVar(&toolsBin, "tools", "tools", "bash entrypoint to run for actions")
 	flag.BoolVar(&asciiIcons, "ascii", false, "plain ASCII/Unicode markers instead of Nerd Font glyphs")
+	flag.BoolVar(&noMouse, "no-mouse", false, "disable mouse reporting, so the terminal keeps the wheel and text selection")
 	flag.BoolVar(&render, "render", false, "print one frame and exit (no tty needed)")
 	flag.StringVar(&renderApp, "render-app", "", "select this app for --render")
 	flag.StringVar(&renderWizard, "render-wizard", "", "open the wizard for this action (setup|build|create) in --render")
 	flag.IntVar(&renderW, "render-width", 100, "frame width for --render")
 	flag.IntVar(&renderH, "render-height", 28, "frame height for --render")
 	flag.Parse()
+	mouseEnabled = !noMouse
 
 	apps, err := LoadApps(appsDir)
 	if err != nil {
@@ -276,9 +278,45 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyPressMsg:
 		return m.onKey(msg)
+
+	case tea.MouseWheelMsg:
+		return m.onWheel(msg)
 	}
 	return m, nil
 }
+
+// onWheel scrolls whichever pane the pointer is over: the README on the right,
+// the app list on the left. Anchoring it to the pointer is what makes it feel
+// like two panes rather than one screen with a scrollbar somewhere.
+func (m *model) onWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
+	up := msg.Button == tea.MouseWheelUp
+	if !up && msg.Button != tea.MouseWheelDown {
+		return m, nil // horizontal wheel: nothing to scroll sideways
+	}
+
+	if msg.X >= m.tableWidth()+dividerWidth {
+		if up {
+			m.info.scroll(-3)
+		} else {
+			m.info.scroll(3)
+		}
+		return m, nil
+	}
+
+	if up {
+		m.rowIdx--
+	} else {
+		m.rowIdx++
+	}
+	m.clampRow()
+	m.info.resetScroll()
+	return m, nil
+}
+
+// tableWidth is the left pane's width. View derives the same number; keeping it
+// here means the wheel and the renderer cannot disagree about where the panel
+// starts.
+func (m *model) tableWidth() int { return m.w - m.infoWidth() - dividerWidth }
 
 func (m *model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	k := msg.String()
@@ -448,7 +486,7 @@ func (m *model) View() tea.View {
 
 	// Table on the left, README info panel on the right.
 	infoW := m.infoWidth()
-	tableW := m.w - infoW - dividerWidth
+	tableW := m.tableWidth()
 	// The divider must be built as a column of its own. JoinHorizontal pads a
 	// single-line element with blanks on every following line rather than
 	// repeating it, so " │ " on its own drew the separator only on row one.
@@ -730,6 +768,7 @@ func (m *model) helpView() string {
 		{"tab / shift+tab", "previous / next category"},
 		{"g / end", "first / last row"},
 		{"PgDn / PgUp", "scroll the README panel"},
+		{"wheel", "scroll the pane under the pointer"},
 		{"/", "filter within category"},
 		{"⏎ / s", "setup — install (removes existing box+image)"},
 		{"b", "build — image only"},
@@ -763,13 +802,22 @@ func (m *model) helpView() string {
 	return b.String()
 }
 
-// altView renders full-screen. In bubbletea v2 the alt screen is a property of
-// the View rather than a program option, so it is set on every render.
+// altView renders full-screen. In bubbletea v2 the alt screen and mouse
+// reporting are properties of the View rather than program options, so both are
+// set on every render.
 func altView(content string) tea.View {
 	v := tea.NewView(content)
 	v.AltScreen = true
+	if mouseEnabled {
+		v.MouseMode = tea.MouseModeCellMotion
+	}
 	return v
 }
+
+// mouseEnabled gates mouse reporting. It is on by default, but the terminal
+// then owns the wheel and drag, so selecting text with the mouse needs Shift in
+// most terminals — --no-mouse gives that back.
+var mouseEnabled = true
 
 func trunc(s string, w int) string {
 	if w <= 1 || len([]rune(s)) <= w {

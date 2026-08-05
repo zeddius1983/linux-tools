@@ -189,6 +189,38 @@ func TestSessionDiff(t *testing.T) {
 	}
 }
 
+// The wheel scrolls whichever pane the pointer is over: the README on the
+// right, the app list on the left.
+func TestWheelScrollsPaneUnderPointer(t *testing.T) {
+	apps, err := LoadApps(appsDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := newModel(apps, appsDir, "tools", true)
+	m.w, m.h = 120, 30
+	// A README long enough to have somewhere to scroll to.
+	m.selectApp("dev-toolbox")
+
+	row := m.rowIdx
+	panelX := m.tableWidth() + dividerWidth
+	m.onWheel(tea.MouseWheelMsg{X: panelX + 2, Button: tea.MouseWheelDown})
+	if m.info.top == 0 {
+		t.Error("wheel over the panel did not scroll the README")
+	}
+	if m.rowIdx != row {
+		t.Errorf("wheel over the panel moved the selection from %d to %d", row, m.rowIdx)
+	}
+
+	before := m.rowIdx
+	m.onWheel(tea.MouseWheelMsg{X: 2, Button: tea.MouseWheelDown})
+	if m.rowIdx == before {
+		t.Error("wheel over the table did not move the selection")
+	}
+	if m.info.top != 0 {
+		t.Error("moving the selection did not reset the README scroll")
+	}
+}
+
 // A status message shares the footer with the selected app's context, so the
 // next keypress has to clear it rather than leaving it there for good.
 func TestStatusClearsOnNextKey(t *testing.T) {

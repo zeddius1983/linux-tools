@@ -65,6 +65,7 @@ would be cut short by its own resets.
 | `←`/`h` `→`/`l`, `tab`/`shift+tab` | previous / next category |
 | `g` / `end` | first / last row |
 | `PgDn` / `PgUp` | scroll the README panel |
+| wheel | scroll the pane under the pointer — README on the right, app list on the left |
 | `/` | filter within the category |
 | `⏎` / `s` | setup — the primary action: wizard, then the review screen |
 | `b` `c` | build · create (wizard first when the app has pages for them) |
@@ -121,6 +122,18 @@ that run is an ordinary `tools setup <app>`.
 
 Keys: `space` toggle/select, `a`/`n` all/none, `↑`/`↓` move, `⏎` next page or
 review, `esc` back a page (and out of the wizard from the first), `q` cancel.
+
+## Mouse
+
+The wheel scrolls whichever pane the pointer is over: the README on the right,
+the app list on the left. In a wizard it moves the cursor; toggling still takes
+a keypress, since a wheel click is too easy to fire by accident on a screen
+where every row changes what gets installed.
+
+Mouse reporting is a `View` property in Bubble Tea v2 (`MouseMode`), set
+alongside `AltScreen` in `altView()`. It is on by default, and the cost is that
+the terminal no longer owns the wheel or drag — selecting text needs Shift in
+most terminals. `--no-mouse` gives that back.
 
 ## Info panel
 

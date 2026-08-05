@@ -254,6 +254,17 @@ func (m *model) wizardUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyPressMsg:
 		return m.wizardKey(msg.String())
+
+	case tea.MouseWheelMsg:
+		// The wheel moves the cursor, the same as j/k. Toggling still takes a
+		// deliberate keypress: a wheel click is too easy to fire by accident on
+		// a screen where every row changes what gets installed.
+		switch msg.Button {
+		case tea.MouseWheelUp:
+			return m.wizardKey("k")
+		case tea.MouseWheelDown:
+			return m.wizardKey("j")
+		}
 	}
 	return m, nil
 }
