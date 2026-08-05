@@ -85,4 +85,15 @@ COPY comfyui-tray /usr/bin/comfyui-tray
 RUN chmod +x /usr/bin/comfyui /usr/bin/comfyui-app /usr/bin/comfyui-open \
         /usr/bin/comfyui-stop /usr/bin/comfyui-tray
 
+# Both repos are cloned by root at build time but used by the non-root Distrobox
+# user, so git refuses to touch them ("detected dubious ownership"). That breaks
+# ComfyUI-Manager, which drives ComfyUI updates and custom-node installs through
+# git — the very path this app's README points at after every rebuild. Marking
+# just these two safe is consistent with /opt/ComfyUI already being deliberately
+# world-writable. Nodes the Manager installs later are created by the user and
+# need no entry; safe.directory has no partial globbing, so they could not get
+# one anyway.
+RUN git config --system --add safe.directory /opt/ComfyUI && \
+    git config --system --add safe.directory /opt/ComfyUI/custom_nodes/ComfyUI-Manager
+
 CMD ["/bin/bash"]

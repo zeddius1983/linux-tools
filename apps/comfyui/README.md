@@ -189,16 +189,23 @@ shared between the AMD and NVIDIA variants:
 | `~/.comfyui/models/` | `checkpoints/`, `vae/`, `loras/`, `controlnet/`, `upscale_models/`, `clip/`, `unet/`, `diffusion_models/` |
 | `~/.comfyui/output/` | Generated images and video |
 | `~/.comfyui/input/` | Images you upload to a workflow |
-| `~/.comfyui/user/` | **Saved workflows** and UI settings |
+| `~/.comfyui/user/` | **Saved workflows**, UI settings, and the asset database (`comfyui.db`) |
 | `~/.comfyui/server.log` | Log from a desktop-launched server |
 | `~/.cache/miopen` | MIOpen kernel cache (AMD only) |
 
 Drop `.safetensors` files straight into the matching `~/.comfyui/models/`
 sub-directory; ComfyUI picks them up on refresh.
 
-Models come from `extra_model_paths.yaml`; the other three are `--output-directory`,
-`--input-directory` and `--user-directory` passed by the launcher. ComfyUI's own
-defaults for all of them are inside `/opt/ComfyUI`, which `tools setup` destroys.
+Models come from `extra_model_paths.yaml`; the others are `--output-directory`,
+`--input-directory`, `--user-directory` and `--database-url` passed by the
+launcher. ComfyUI's own defaults for all of them are inside `/opt/ComfyUI`,
+which `tools setup` destroys.
+
+`--database-url` needs setting separately because it does **not** follow
+`--user-directory` — its default is computed from the install directory at
+import time. Left alone once the user dir is redirected, it points at
+`/opt/ComfyUI/user/comfyui.db` in a directory nothing creates any more, and
+startup logs `Failed to initialize database … unable to open database file`.
 
 Custom nodes are the exception — they live at
 `/opt/ComfyUI/custom_nodes` **inside the image** and are lost on rebuild.

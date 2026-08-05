@@ -25,6 +25,13 @@ declare -a base=(
     --output-directory "${HOME}/.comfyui/output"
     --input-directory "${HOME}/.comfyui/input"
     --user-directory "${HOME}/.comfyui/user"
+    # --database-url does NOT follow --user-directory: its default is computed
+    # from the install dir at import time (/opt/ComfyUI/user/comfyui.db). Left
+    # alone it points into a directory that no longer gets created once the user
+    # dir is redirected, and ComfyUI fails startup with "unable to open database
+    # file". Pointing it at the real user dir also keeps the asset DB with the
+    # rest of the user data, where a rebuild cannot delete it.
+    --database-url "sqlite:///${HOME}/.comfyui/user/comfyui.db"
 )
 
 declare -a tuning=()
