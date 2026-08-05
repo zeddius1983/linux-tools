@@ -85,9 +85,8 @@ The CUDA wheels are built for **CUDA 12.8**, which needs host driver **≥ 570**
 | `comfyui` | Runs the server in the foreground on `http://localhost:8188` |
 | `comfyui --help` | ComfyUI's own flags (extra flags are appended to the defaults) |
 | `comfyui-stop` | Stops a running server, however it was started |
-| `comfyui-tray` | Tray icon with a Start/Stop menu |
+| `comfyui-tray` | Tray icon with a Start/Stop menu (the launcher starts this for you) |
 | ComfyUI (desktop launcher) | Starts the server, brings up the tray, opens a browser app window |
-| ComfyUI Tray (desktop launcher) | Just the tray icon |
 
 ```bash
 comfyui                      # foreground, Ctrl-C to stop
@@ -112,12 +111,21 @@ area, so a detached server is not something you have to hunt for afterwards:
 
 Stop asks before discarding queued prompts, offering **Stop anyway**.
 
-Start it on its own with `comfyui-tray` or the "ComfyUI Tray" desktop entry; it
-holds a lock and exits quietly if one is already running. To have it come up
-with your session:
+There is deliberately **no separate menu entry** for it — the ComfyUI launcher
+starts it, so a second icon would only be clutter. If you quit the tray and want
+it back without restarting the server, run `comfyui-tray`; it holds a lock and
+exits quietly if one is already running.
+
+To have it come up with your session, point autostart at that command:
 
 ```bash
-cp ~/.local/share/applications/comfyui-box-comfyui-tray.desktop ~/.config/autostart/
+cat > ~/.config/autostart/comfyui-tray.desktop <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=ComfyUI Tray
+Exec=comfyui-tray
+Terminal=false
+EOF
 ```
 
 It needs a StatusNotifier host on the session bus — standard on KDE, Cinnamon and

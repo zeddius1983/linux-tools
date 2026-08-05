@@ -15,9 +15,21 @@ SERVER_URL="http://localhost:8188"
 # main browser, which for a localhost UI is no loss.
 CHROME_PROFILE="${HOME}/.comfyui/chrome-profile"
 
+has_chrome_box() {
+    distrobox-host-exec distrobox list 2>/dev/null | grep -q "chrome-box"
+}
+
+# The FIRST distrobox-host-exec call in a freshly created box returns nothing at
+# all while it bootstraps its host-spawn helper (see "distrobox-host-exec
+# pattern" in CLAUDE.md). A probe run as that first call therefore reports "no
+# chrome-box" on every brand-new install and silently downgrades to xdg-open --
+# which is why the first launch after `tools setup` opened the default browser
+# instead of an app window. Burn a throwaway call, then probe with one retry.
+distrobox-host-exec true >/dev/null 2>&1 || true
+
 # An app-mode Chrome window if the chrome box is around, otherwise whatever the
 # host uses for http://.
-if distrobox-host-exec distrobox list 2>/dev/null | grep -q "chrome-box"; then
+if has_chrome_box || has_chrome_box; then
     mkdir -p "${CHROME_PROFILE}"
     # setsid, because this script exits immediately afterwards: the launch is
     # several processes deep (host-spawn -> distrobox enter -> podman exec) and
