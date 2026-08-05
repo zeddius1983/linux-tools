@@ -249,10 +249,20 @@ class Tray:
         live the way `tail -f` would; Ctrl-C drops into normal less navigation
         (and F resumes following), which an editor's static snapshot cannot do.
 
-        -R is not optional. ComfyUI colours its log with ANSI escapes, and
-        without -R less calls the file binary, prompts "See it anyway?", and
-        dies against +F -- the terminal flashes open and shuts. With it the
-        colours render as intended.
+        A control-char flag is not optional. ComfyUI colours its log with ANSI
+        escapes, and with neither -r nor -R less calls the file binary, prompts
+        "See it anyway?", and dies against +F -- the terminal flashes open and
+        shuts.
+
+        -r rather than -R, because tqdm draws its progress bars by rewriting one
+        line with carriage returns. -R forwards only colour escapes and renders
+        everything else literally, so every intermediate redraw shows up as
+        "^M 5%|... ^M 30%|..." strung along one line. -r forwards CR too, so the
+        terminal overwrites in place and a finished bar reads as a single
+        "100%|####|" -- the way `tail -f` shows it. The documented cost of -r is
+        that less can misjudge the width of lines containing control characters,
+        which can smear horizontal scrolling; for a log this is the better
+        trade.
 
         Falls back to xdg-open if the host has no terminal we recognise.
         """
@@ -260,7 +270,7 @@ class Tray:
         if term:
             run_detached(
                 ["distrobox-host-exec", term, TERMINALS[term],
-                 "less", "-R", "+F", LOG_FILE]
+                 "less", "-r", "+F", LOG_FILE]
             )
         else:
             run_detached(["distrobox-host-exec", "xdg-open", LOG_FILE])
