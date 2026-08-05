@@ -274,13 +274,13 @@ cmd_setup_finish() {
     echo "Done. '$app' is ready. Log out and back in if it doesn't appear in your app menu."
     local hint="$APPS_DIR/$app/post-install"
     [[ -f "$hint" ]] && echo "" && cat "$hint"
+    # The README is deliberately not dumped here any more. The dashboard renders
+    # it in a panel beside the app table, so printing the whole thing only buried
+    # the "Done" line and any post-install hint above it under a screenful of
+    # scrollback. A pointer keeps it discoverable for a plain CLI `tools setup`.
     local readme="$APPS_DIR/$app/README.md"
-    if [[ -f "$readme" ]]; then
-        echo ""
-        echo "==> README for '$app':"
-        echo ""
-        if command -v glow &>/dev/null; then glow "$readme"; else cat "$readme"; fi
-    fi
+    [[ -f "$readme" ]] && echo "" && echo "Docs: $readme"
+    return 0
 }
 
 # ── Dashboard binary ─────────────────────────────────────────────────────────
