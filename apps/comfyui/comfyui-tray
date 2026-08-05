@@ -40,7 +40,12 @@ except (ValueError, ImportError):
 from gi.repository import GLib, Gtk  # noqa: E402
 
 SERVER_URL = "http://localhost:8188"
+# Looked up as ICON_NAME + an extension inside ICON_DIR, so the file is
+# /usr/share/comfyui/comfyui-tray.png. Deliberately a different name from the
+# app icon (comfyui.svg) in the same directory: two files answering to one name
+# is an ambiguity GTK resolves however it likes.
 ICON_DIR = "/usr/share/comfyui"
+ICON_NAME = "comfyui-tray"
 LOG_FILE = os.path.expanduser("~/.comfyui/server.log")
 LOCK_FILE = os.path.expanduser("~/.comfyui/tray.lock")
 POLL_SECONDS = 3
@@ -85,7 +90,7 @@ class Tray:
     def __init__(self):
         self.indicator = AppIndicator.Indicator.new_with_path(
             "comfyui",
-            "comfyui",
+            ICON_NAME,
             AppIndicator.IndicatorCategory.APPLICATION_STATUS,
             ICON_DIR,
         )

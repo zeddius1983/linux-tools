@@ -71,6 +71,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         gir1.2-ayatanaappindicator3-0.1 libayatana-appindicator3-1 \
     && rm -rf /var/lib/apt/lists/*
 COPY icon.svg /usr/share/comfyui/comfyui.svg
+# Tray icon. The 250px source is downscaled at build time rather than handed to
+# GTK as-is: a panel renders this at roughly 22-32px, and one LANCZOS step from
+# 250px is visibly softer than going via 64px. Pillow is already present (it is
+# a ComfyUI dependency), so this costs nothing extra.
+COPY tray-icon.png /usr/share/comfyui/tray-icon-src.png
+RUN /opt/venv/bin/python -c "from PIL import Image; Image.open('/usr/share/comfyui/tray-icon-src.png').convert('RGBA').resize((64, 64), Image.LANCZOS).save('/usr/share/comfyui/comfyui-tray.png')" \
+    && rm /usr/share/comfyui/tray-icon-src.png
 
 # ComfyUI writes user/, output/ and temp/ under its install dir at runtime, as
 # the (non-root) Distrobox user — without this it dies with PermissionError.
