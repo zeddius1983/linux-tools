@@ -13,6 +13,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -160,7 +161,17 @@ type model struct {
 	// currently in flight, removed once that run finishes.
 	wiz       *wizardSession
 	stateFile string
+
+	// Last wheel event over the app list, for collapsing a terminal's burst of
+	// events back into one notch.
+	lastWheelAt time.Time
+	lastWheelUp bool
 }
+
+// wheelNotch is how close together wheel events have to be to count as one
+// notch. Wide enough to swallow a burst, short enough that a fast scroll still
+// registers every notch.
+const wheelNotch = 60 * time.Millisecond
 
 func newModel(apps []App, appsDir, toolsBin string, useNerdFonts bool) *model {
 	return &model{
@@ -302,6 +313,16 @@ func (m *model) onWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+
+	// One physical notch arrives as a burst of events in most terminals, which
+	// moved the selection several apps at a time. Events that close together in
+	// the same direction are one notch, so a notch is one row. The panel above
+	// is left alone: there a burst just scrolls the page at a natural speed.
+	now := time.Now()
+	if up == m.lastWheelUp && now.Sub(m.lastWheelAt) < wheelNotch {
+		return m, nil
+	}
+	m.lastWheelAt, m.lastWheelUp = now, up
 
 	if up {
 		m.rowIdx--

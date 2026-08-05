@@ -221,6 +221,39 @@ func TestWheelScrollsPaneUnderPointer(t *testing.T) {
 	}
 }
 
+// Terminals report one physical notch as a burst of wheel events. Over the app
+// list that moved the selection several apps at a time, so a burst has to
+// collapse into a single row.
+func TestWheelBurstIsOneRow(t *testing.T) {
+	apps, err := LoadApps(appsDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := newModel(apps, appsDir, "tools", true)
+	m.w, m.h = 120, 30
+
+	down := tea.MouseWheelMsg{X: 2, Button: tea.MouseWheelDown}
+	for i := 0; i < 3; i++ {
+		m.onWheel(down)
+	}
+	if m.rowIdx != 1 {
+		t.Errorf("a 3-event burst moved %d rows, want 1", m.rowIdx)
+	}
+
+	// A notch far enough apart in time is a separate notch.
+	m.lastWheelAt = m.lastWheelAt.Add(-wheelNotch * 2)
+	m.onWheel(down)
+	if m.rowIdx != 2 {
+		t.Errorf("the next notch moved to row %d, want 2", m.rowIdx)
+	}
+
+	// Reversing direction is deliberate, never part of a burst.
+	m.onWheel(tea.MouseWheelMsg{X: 2, Button: tea.MouseWheelUp})
+	if m.rowIdx != 1 {
+		t.Errorf("reversing direction moved to row %d, want 1", m.rowIdx)
+	}
+}
+
 // A status message shares the footer with the selected app's context, so the
 // next keypress has to clear it rather than leaving it there for good.
 func TestStatusClearsOnNextKey(t *testing.T) {

@@ -130,6 +130,13 @@ the app list on the left. In a wizard it moves the cursor; toggling still takes
 a keypress, since a wheel click is too easy to fire by accident on a screen
 where every row changes what gets installed.
 
+Over the app list one notch is one row. Terminals report a physical notch as a
+burst of events — usually three — which moved the selection several apps at a
+time, so events closer together than `wheelNotch` (60ms, `main.go`) in the same
+direction count as one. Reversing direction is never part of a burst. The
+README panel is deliberately left un-coalesced: there a burst just scrolls the
+page at a natural speed.
+
 Mouse reporting is a `View` property in Bubble Tea v2 (`MouseMode`), set
 alongside `AltScreen` in `altView()`. It is on by default, and the cost is that
 the terminal no longer owns the wheel or drag — selecting text needs Shift in
