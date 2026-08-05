@@ -6,12 +6,26 @@
 set -euo pipefail
 
 SERVER_URL="http://localhost:8188"
+# A profile of its own is what makes app mode actually work. With the default
+# profile, a Chrome that is already running answers the launch with "Opening in
+# existing browser session" and hands the URL to that instance as an ordinary
+# tab -- --app is dropped on the floor. A separate --user-data-dir forces its
+# own instance, so the app window appears whether or not Chrome is up.
+# The cost is a profile that shares no cookies, logins or extensions with the
+# main browser, which for a localhost UI is no loss.
+CHROME_PROFILE="${HOME}/.comfyui/chrome-profile"
 
 # An app-mode Chrome window if the chrome box is around, otherwise whatever the
 # host uses for http://.
 if distrobox-host-exec distrobox list 2>/dev/null | grep -q "chrome-box"; then
-    distrobox-host-exec distrobox enter chrome-box -- \
-        google-chrome --app="${SERVER_URL}" --new-window 2>/dev/null &
+    mkdir -p "${CHROME_PROFILE}"
+    # setsid, because this script exits immediately afterwards: the launch is
+    # several processes deep (host-spawn -> distrobox enter -> podman exec) and
+    # a plain background job can be torn down with the exec session before
+    # Chrome is up.
+    setsid distrobox-host-exec distrobox enter chrome-box -- \
+        google-chrome --app="${SERVER_URL}" \
+        --user-data-dir="${CHROME_PROFILE}" >/dev/null 2>&1 &
 else
     distrobox-host-exec xdg-open "${SERVER_URL}"
 fi
