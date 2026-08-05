@@ -11,8 +11,17 @@ LOG_FILE="${HOME}/.comfyui/server.log"
 
 if ! curl -sf "${SERVER_URL}" >/dev/null 2>&1; then
     mkdir -p "${HOME}/.comfyui"
+    # `set -m` is load-bearing, not cosmetic. Without job control, POSIX has the
+    # shell start background children with SIGINT and SIGQUIT set to SIG_IGN --
+    # and CPython, seeing SIGINT already ignored at startup, deliberately skips
+    # installing its KeyboardInterrupt handler. The server then ignores SIGINT
+    # forever, so a graceful "same as Ctrl-C" stop is impossible. Job control
+    # leaves the child's SIGINT at its default, and Python handles it normally.
+    # (nohup still covers SIGHUP, which is all it was ever doing here.)
+    set -m
     nohup /usr/bin/comfyui >"${LOG_FILE}" 2>&1 &
     disown
+    set +m
     timeout=120
     while ! curl -sf "${SERVER_URL}" >/dev/null 2>&1; do
         sleep 2

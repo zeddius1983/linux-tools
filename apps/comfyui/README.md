@@ -105,9 +105,16 @@ comfyui-stop            # interrupt current prompt, then stop
 comfyui-stop --force    # stop even with prompts still queued
 ```
 
-It sends **SIGINT**, which is what Ctrl-C sends, so Python unwinds normally and
-ComfyUI's cleanup runs; a plain `kill` (SIGTERM) terminates the interpreter
-outright. If the process ignores SIGINT for 30s it escalates to SIGKILL.
+It prefers **SIGINT**, which is what Ctrl-C sends, so Python unwinds normally and
+ComfyUI's cleanup runs. Before signalling it reads `/proc/<pid>/status` and falls
+back to SIGTERM if that process ignores SIGINT — servers started by a launcher
+from before this fix do, and would otherwise sit there while the signal is
+silently discarded. SIGKILL after 30s is the last resort.
+
+> If `pkill -INT` appears to do nothing on an old box, this is why: the launcher
+> backgrounded the server without job control, so the shell set SIGINT to
+> `SIG_IGN`, and CPython then skips installing its `KeyboardInterrupt` handler.
+> Use `pkill -TERM` there, or rebuild to get `comfyui-stop`.
 
 Queued prompts live in memory and die with the process, so `comfyui-stop`
 refuses while any are pending and tells you to wait or pass `--force`.
