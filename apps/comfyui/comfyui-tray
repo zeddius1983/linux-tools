@@ -108,6 +108,54 @@ def server_state():
         return False, None
 
 
+# Same preference order as pick_terminal() in lib/helpers.sh, with the flag each
+# one needs before a command (matching terminal_exec_prefix there).
+TERMINALS = {
+    "ghostty": "-e",
+    "kitty": "-e",
+    "alacritty": "-e",
+    "gnome-terminal": "--",
+    "xfce4-terminal": "--",
+    "mate-terminal": "--",
+    "konsole": "--",
+    "xterm": "-e",
+}
+
+_host_terminal = None
+
+
+def host_terminal():
+    """Name of the first terminal available *on the host*, or "" if none.
+
+    The terminal has to be the host's: this container ships none, and the log
+    lives in the shared $HOME where the host can read it directly. Result is
+    cached — the probe costs two round trips through host-spawn.
+    """
+    global _host_terminal
+    if _host_terminal is not None:
+        return _host_terminal
+    # Absorb the host-spawn bootstrap first. The very first distrobox-host-exec
+    # call in a freshly created box returns nothing while it installs its
+    # helper, and an empty answer here is indistinguishable from "no terminal
+    # installed" -- the same trap that made comfyui-open fall back to xdg-open.
+    subprocess.run(["distrobox-host-exec", "true"], capture_output=True)
+    script = (
+        "for t in " + " ".join(TERMINALS) + "; do "
+        'command -v "$t" >/dev/null 2>&1 && { echo "$t"; exit 0; }; done'
+    )
+    try:
+        out = subprocess.run(
+            ["distrobox-host-exec", "bash", "-c", script],
+            capture_output=True,
+            text=True,
+            timeout=20,
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        out = ""
+    _host_terminal = out if out in TERMINALS else ""
+    return _host_terminal
+
+
 def run_detached(argv):
     subprocess.Popen(
         argv,
@@ -195,7 +243,27 @@ class Tray:
         run_detached(["/usr/bin/comfyui-open"])
 
     def on_log(self, *_):
-        run_detached(["distrobox-host-exec", "xdg-open", LOG_FILE])
+        """Tail the log in a terminal pager, not a text editor.
+
+        `less +F` starts in follow mode, so a running server's output scrolls
+        live the way `tail -f` would; Ctrl-C drops into normal less navigation
+        (and F resumes following), which an editor's static snapshot cannot do.
+
+        -R is not optional. ComfyUI colours its log with ANSI escapes, and
+        without -R less calls the file binary, prompts "See it anyway?", and
+        dies against +F -- the terminal flashes open and shuts. With it the
+        colours render as intended.
+
+        Falls back to xdg-open if the host has no terminal we recognise.
+        """
+        term = host_terminal()
+        if term:
+            run_detached(
+                ["distrobox-host-exec", term, TERMINALS[term],
+                 "less", "-R", "+F", LOG_FILE]
+            )
+        else:
+            run_detached(["distrobox-host-exec", "xdg-open", LOG_FILE])
 
     def on_close(self, *_):
         """Stop the server, then close the tray.
@@ -315,6 +383,10 @@ def main():
     # Let Ctrl-C work when the tray is run from a terminal; GTK would otherwise
     # swallow it.
     signal.signal(signal.SIGINT, signal.SIG_DFL)
+    # Probe for the host's terminal off the main loop. It costs two host-spawn
+    # round trips, and doing it on the first "Show log" click would freeze the
+    # menu for a second; by the time anyone clicks, the answer is cached.
+    threading.Thread(target=host_terminal, daemon=True).start()
     Tray()
     Gtk.main()
 

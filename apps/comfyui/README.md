@@ -106,7 +106,7 @@ area, so a detached server is not something you have to hunt for afterwards:
 | `Server: running (2 queued)` | Live status, refreshed every 3s |
 | Open in browser | Same window the launcher opens |
 | Start / Stop server | Toggles with the current state |
-| Show log | Opens `~/.comfyui/server.log` |
+| Show log | Opens `~/.comfyui/server.log` in `less -R +F` in a terminal |
 | Close | Stops the server, then hides the tray |
 
 Stop asks before discarding queued prompts, offering **Stop anyway**.
@@ -116,6 +116,14 @@ leave the server with no icon, no window and no terminal, which is the exact
 state the tray exists to prevent. If prompts are queued you still get the
 **Stop anyway** prompt, and declining it cancels the close too, leaving both the
 queue and the tray intact.
+
+**Show log** opens the server log in `less -R +F` in a host terminal, so a
+running server's output scrolls live and keeps its colours. `Ctrl-C` stops
+following and leaves you in normal `less` navigation; `F` resumes. It picks the first of ghostty, kitty, alacritty,
+gnome-terminal, xfce4-terminal, mate-terminal, konsole or xterm found **on the
+host** — this container ships none, and the log is in the shared `$HOME` where
+the host can read it directly. With none of those installed it falls back to
+`xdg-open`.
 
 To hide the icon but keep generating, close it from your panel's own applet
 settings, or just leave it — it costs nothing.
