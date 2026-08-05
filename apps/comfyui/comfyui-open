@@ -15,8 +15,16 @@ SERVER_URL="http://localhost:8188"
 # main browser, which for a localhost UI is no loss.
 CHROME_PROFILE="${HOME}/.comfyui/chrome-profile"
 
+# Deliberately not `... | grep -q chrome-box`: grep -q exits at the first match
+# and closes the pipe, so the producer dies of SIGPIPE (141), and `set -o
+# pipefail` then hands that 141 to the caller as the pipeline's status. The
+# probe would report "no chrome-box" precisely when chrome-box IS present --
+# which is what made the launcher fall through to xdg-open and open the default
+# browser. Capture first, match second, no pipe to break.
 has_chrome_box() {
-    distrobox-host-exec distrobox list 2>/dev/null | grep -q "chrome-box"
+    local list
+    list="$(distrobox-host-exec distrobox list 2>/dev/null || true)"
+    [[ "$list" == *chrome-box* ]]
 }
 
 # The FIRST distrobox-host-exec call in a freshly created box returns nothing at
