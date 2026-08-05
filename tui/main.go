@@ -448,7 +448,7 @@ func (m *model) View() tea.View {
 
 	// Table on the left, README info panel on the right.
 	infoW := m.infoWidth()
-	tableW := m.w - infoW - 3
+	tableW := m.w - infoW - dividerWidth
 	// The divider must be built as a column of its own. JoinHorizontal pads a
 	// single-line element with blanks on every following line rather than
 	// repeating it, so " │ " on its own drew the separator only on row one.
@@ -473,25 +473,33 @@ func (m *model) View() tea.View {
 	return altView(b.String())
 }
 
-// infoWidth is the README panel width: roughly 60% of the terminal, bounded so
-// it neither starves the table nor becomes unreadably narrow.
+// infoWidth is the README panel width: 60% of the terminal.
+//
+// The only thing that overrides that is the table's own minimum — the glyph, a
+// 12-cell name and both state columns — which matters on a narrow terminal
+// where 40% is not enough to render a row at all.
 func (m *model) infoWidth() int {
 	w := m.w * 60 / 100
-	if w < 40 {
-		w = 40
-	}
-	if w > 96 {
-		w = 96
-	}
-	// The table still needs room for the app label plus both state columns.
-	if w > m.w-48 {
-		w = m.w - 48
+	// dividerWidth comes off the top as well: the table is what is left after
+	// both, so leaving it out here is what makes the header wrap on a narrow
+	// terminal.
+	if maxW := m.w - minTableWidth - dividerWidth; w > maxW {
+		w = maxW
 	}
 	if w < 20 {
 		w = 20
 	}
 	return w
 }
+
+const (
+	// minTableWidth is the narrowest usable table: a 2-cell gutter, the
+	// platform glyph, the 12-cell floor on the name column, both state columns
+	// and the gap between them.
+	minTableWidth = 30
+	// dividerWidth is the " │ " column between the table and the panel.
+	dividerWidth = 3
+)
 
 func (m *model) infoView(width int) string {
 	a, ok := m.current()
