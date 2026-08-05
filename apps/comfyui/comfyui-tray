@@ -16,8 +16,10 @@ Every action shells out to the scripts that already own that behaviour
 """
 
 import fcntl
+import glob
 import json
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -40,15 +42,41 @@ except (ValueError, ImportError):
 from gi.repository import GLib, Gtk  # noqa: E402
 
 SERVER_URL = "http://localhost:8188"
-# Looked up as ICON_NAME + an extension inside ICON_DIR, so the file is
-# /usr/share/comfyui/comfyui-tray.png. Deliberately a different name from the
-# app icon (comfyui.svg) in the same directory: two files answering to one name
-# is an ambiguity GTK resolves however it likes.
-ICON_DIR = "/usr/share/comfyui"
 ICON_NAME = "comfyui-tray"
+ICON_SRC = "/usr/share/comfyui/comfyui-tray.svg"
+# NOT /usr/share/comfyui. StatusNotifierItem hands the panel only an icon *name*
+# and a *theme path* -- the panel then opens the file itself, and the panel
+# (xapp-sn-watcher, plasmashell, …) runs on the HOST, where nothing this
+# container installs under /usr exists. A container-only theme path therefore
+# always resolves for us and never for the consumer: the item registers, the
+# menu works, and no icon is drawn. $HOME is shared with the host by Distrobox,
+# so an icon staged here is readable from both sides.
+ICON_DIR = os.path.expanduser("~/.comfyui/icons")
 LOG_FILE = os.path.expanduser("~/.comfyui/server.log")
 LOCK_FILE = os.path.expanduser("~/.comfyui/tray.lock")
 POLL_SECONDS = 3
+
+
+def install_icon():
+    """Stage the icon in shared $HOME, where the host's panel can read it.
+
+    Copied on every start rather than only when missing, so a rebuilt image
+    with a new icon takes effect without the user having to clear anything.
+    Failure is not fatal: a tray with a missing icon is still a working menu.
+    """
+    try:
+        os.makedirs(ICON_DIR, exist_ok=True)
+        # Clear any other extension left by an earlier image (this used to stage
+        # a .png). Two files answering to one icon name is an ambiguity GTK
+        # resolves however it likes, and the stale one could win.
+        for stale in glob.glob(os.path.join(ICON_DIR, ICON_NAME + ".*")):
+            os.remove(stale)
+        shutil.copyfile(
+            ICON_SRC,
+            os.path.join(ICON_DIR, ICON_NAME + os.path.splitext(ICON_SRC)[1]),
+        )
+    except OSError as e:
+        print(f"comfyui-tray: could not stage icon: {e}", file=sys.stderr)
 
 
 def single_instance():
@@ -227,6 +255,7 @@ class Tray:
 
 def main():
     single_instance()
+    install_icon()
     # Let Ctrl-C work when the tray is run from a terminal; GTK would otherwise
     # swallow it.
     signal.signal(signal.SIGINT, signal.SIG_DFL)

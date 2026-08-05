@@ -70,18 +70,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         python3-gi gir1.2-gtk-3.0 \
         gir1.2-ayatanaappindicator3-0.1 libayatana-appindicator3-1 \
     && rm -rf /var/lib/apt/lists/*
-# icon.png is the single icon source for this app. tools.sh resolves it straight
-# from the app directory for the desktop entry (preferring .png over .svg), and
-# the tray icon below is generated from the same file, so the menu and the panel
-# cannot drift apart.
-#
-# The 250px source is downscaled at build time rather than handed to GTK as-is:
-# a panel renders this at roughly 22-32px, and one LANCZOS step from 250px is
-# visibly softer than going via 64px. Pillow is already present (it is a ComfyUI
-# dependency), so this costs nothing extra.
-COPY icon.png /usr/share/comfyui/icon-src.png
-RUN /opt/venv/bin/python -c "from PIL import Image; Image.open('/usr/share/comfyui/icon-src.png').convert('RGBA').resize((64, 64), Image.LANCZOS).save('/usr/share/comfyui/comfyui-tray.png')" \
-    && rm /usr/share/comfyui/icon-src.png
+# The tray uses the same icon.svg that tools.sh gives the desktop entry, so the
+# menu and the panel always match. It is staged into the shared $HOME at runtime
+# by comfyui-tray rather than read from here — the panel that draws it runs on
+# the host and cannot see this path. Vector, so it needs no size-specific
+# rendering the way a downscaled bitmap would.
+COPY icon.svg /usr/share/comfyui/comfyui-tray.svg
 
 # ComfyUI writes user/, output/ and temp/ under its install dir at runtime, as
 # the (non-root) Distrobox user — without this it dies with PermissionError.
