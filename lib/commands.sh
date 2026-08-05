@@ -361,6 +361,32 @@ cmd_build_tui() {
     echo "==> Built: $TUI_BIN"
 }
 
+# ── Front-end selection ──────────────────────────────────────────────────────
+# The Go dashboard when it is built and not disabled, the whiptail menu
+# otherwise. Both are kept working: a host that never builds the binary, or one
+# where it misbehaves, keeps exactly the menu it has always had.
+#
+#   LT_NO_GO_TUI=1     force the whiptail menu
+#   LT_TUI_ASCII=1     plain Unicode markers instead of Nerd Font glyphs
+#   LT_TUI_NO_MOUSE=1  no mouse reporting, so the terminal keeps text selection
+cmd_menu() {
+    if [[ ! -x "$TUI_BIN" || -n "${LT_NO_GO_TUI:-}" ]]; then
+        interactive
+        return
+    fi
+
+    # --tools is the absolute script rather than the exported `tools`, so the
+    # dashboard works from a clone that has never been installed.
+    local -a args=(--apps-dir "$APPS_DIR" --tools "$SCRIPT_DIR/tools.sh")
+    if [[ -n "${LT_TUI_ASCII:-}" ]]; then
+        args+=(--ascii)
+    fi
+    if [[ -n "${LT_TUI_NO_MOUSE:-}" ]]; then
+        args+=(--no-mouse)
+    fi
+    "$TUI_BIN" "${args[@]}"
+}
+
 cmd_install() {
     local bin_dir="$HOME/.local/bin"
     local target="$bin_dir/tools"

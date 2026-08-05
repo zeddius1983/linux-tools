@@ -201,9 +201,9 @@ Distrobox mounts the host's `$HOME` inside the container. This means:
 
 ### Interactive TUI
 
-`./tools.sh` with no arguments opens a `whiptail` menu. Each row shows `description | image ref | box name` with fixed column widths (26 / 34) — keep `description` under ~26 chars or it gets truncated with `…`.
+`./tools.sh` with no arguments opens the **Go dashboard** in `tui/` (Bubble Tea v2, modelled on `gh-dash`): category tabs, an app table, a rendered-README panel, native wizard pages and a keybinding footer. `tools install` builds the binary — host Go if present, otherwise a throwaway `golang:1.25-alpine` container — and never fails the install if it cannot. See [`tui/README.md`](tui/README.md) and [`docs/tui-migration.md`](docs/tui-migration.md).
 
-A replacement dashboard front-end lives in `tui/` (Go, Bubble Tea v2) — category tabs, an app table, a detail pane and a keybinding footer, modelled on `gh-dash`. It is **not** wired in yet: `tools` still opens whiptail, and the Go binary must be run directly. See [`tui/README.md`](tui/README.md) and [`docs/tui-migration.md`](docs/tui-migration.md). Once it lands, the 26-char `description` limit above goes away — the dashboard sizes its columns to the terminal.
+The old `whiptail` menu (`lib/tui.sh`) is the fallback, used when the binary is missing or `LT_NO_GO_TUI=1` is set. It renders each row as `description | image ref | box name` with fixed column widths (26 / 34), so **keep `description` under ~26 chars** while that fallback exists — the dashboard itself sizes columns to the terminal and does not need the limit.
 
 ## Working practices
 

@@ -1,7 +1,7 @@
 # Design: replacing the whiptail TUI with a Go dashboard
 
-**Status:** prototype built — see [`tui/`](../tui). Not wired in: `tools` still
-opens whiptail.
+**Status:** wired in — `tools` opens the dashboard when the binary is built and
+`LT_NO_GO_TUI` is unset, and the whiptail menu otherwise. See [`tui/`](../tui).
 **Scope:** `lib/tui.sh`, `lib/wizard.sh`, `tools.sh` dispatch, `cmd_install`
 **Non-goals:** changing `lib/commands.sh` behaviour, changing what any app installs
 
@@ -204,13 +204,23 @@ container-built binary runs unmodified inside the Fedora-based
 
 ## 7. Fallback and incremental migration
 
-The whiptail path stays intact and working. `tools.sh` gains a gate alongside
-the existing `command -v whiptail` check (`tools.sh:71`):
+The whiptail path stays intact and working. `cmd_menu` (`lib/commands.sh`) is
+the gate:
 
-1. `tools-tui` present and `LT_NO_GO_TUI` unset → dashboard
-2. otherwise → current whiptail path, unchanged
+1. `tools-tui` executable and `LT_NO_GO_TUI` unset → dashboard
+2. otherwise → the whiptail path, unchanged
 
-`lib/tui.sh` is retired only once native wizard pages land.
+Two environment variables reach the dashboard through the gate rather than
+requiring the binary to be invoked by hand: `LT_TUI_ASCII` for terminals with
+no patched font, and `LT_TUI_NO_MOUSE` for people who would rather keep the
+terminal's own wheel and text selection.
+
+`--tools` is passed as the absolute path to `tools.sh`, not the exported
+`tools`, so the dashboard works from a clone that has never been installed.
+
+`lib/tui.sh` stays until the dashboard has enough mileage to drop the fallback.
+It is no longer reached from the dashboard for wizards — only as a whole
+alternative front-end.
 
 ---
 
@@ -225,13 +235,10 @@ the existing `command -v whiptail` check (`tools.sh:71`):
   from the dashboard
 - `apps/<name>/category` for all 23 apps
 - Go toolchain in dev-toolbox (merged)
-
 - `cmd_install` building the binary, through the ladder in §6
+- `tools` launching it, behind the `LT_NO_GO_TUI` gate
 
 **Next**
-- wiring `tools` to launch it, behind the fallback gate
-
-**Then**
 - retire `lib/tui.sh`, drop the gate
 - drop the 26-char `description` rule from `CLAUDE.md`
 - multi-app select (`cmd_setup` is strictly single-app today)

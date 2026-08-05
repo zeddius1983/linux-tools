@@ -29,7 +29,7 @@ usage() {
     cat <<EOF
 Usage: $0 [command] [app]
 
-  (no args)        Launch interactive TUI manager
+  (no args)        Launch the dashboard (LT_NO_GO_TUI=1 for the whiptail menu)
 
 Commands:
   install          Symlink as 'tools' in ~/.local/bin + set up completion
@@ -49,7 +49,7 @@ EOF
 # ── Entrypoint ───────────────────────────────────────────────────────────────
 
 if [[ $# -eq 0 ]]; then
-    interactive
+    cmd_menu
     exit 0
 fi
 

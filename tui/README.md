@@ -10,8 +10,15 @@ is what the footer and every action refer to.
 
 See [`docs/tui-migration.md`](../docs/tui-migration.md) for the design.
 
-**Not wired in.** `tools` still opens the whiptail menu; this binary must be run
-directly.
+**This is what `tools` opens.** With the binary built and `LT_NO_GO_TUI` unset,
+`tools` (no arguments) launches the dashboard; otherwise it falls back to the
+whiptail menu, which is still there and still works.
+
+| Variable | Effect |
+|---|---|
+| `LT_NO_GO_TUI=1` | force the whiptail menu |
+| `LT_TUI_ASCII=1` | plain Unicode markers instead of Nerd Font glyphs |
+| `LT_TUI_NO_MOUSE=1` | no mouse reporting, so the terminal keeps text selection |
 
 ## Build
 
@@ -47,6 +54,9 @@ lets an alpine/musl container build run on a glibc host.
 ## Run
 
 ```bash
+tools                     # the normal way in
+
+# or directly, which is what the gate does
 ./tui/tools-tui --apps-dir apps
 
 # print one frame and exit; no tty needed, useful for layout checks
@@ -287,8 +297,9 @@ appended alphabetically.
 | actions via `ExecProcess` + state refresh | done |
 | native wizard pages (checklist, single choice, review) | done — whiptail is no longer reached from here |
 | state-file bridge to bash | done, and now used by the wizard |
-| `cmd_install` building the binary | not started |
-| wiring `tools` to launch it | not started |
+| `cmd_install` building the binary | done — ladder, never fatal |
+| wiring `tools` to launch it | done — behind `LT_NO_GO_TUI` |
+| retiring `lib/tui.sh` | not yet: it is the fallback |
 
 ## Files
 
