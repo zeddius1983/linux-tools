@@ -473,13 +473,13 @@ func (m *model) View() tea.View {
 	return altView(b.String())
 }
 
-// infoWidth is the README panel width: 60% of the terminal.
+// infoWidth is the README panel width: half the terminal.
 //
 // The only thing that overrides that is the table's own minimum — the glyph, a
 // 12-cell name and both state columns — which matters on a narrow terminal
-// where 40% is not enough to render a row at all.
+// where half is not enough to render a row at all.
 func (m *model) infoWidth() int {
-	w := m.w * 60 / 100
+	w := m.w * 50 / 100
 	// dividerWidth comes off the top as well: the table is what is left after
 	// both, so leaving it out here is what makes the header wrap on a narrow
 	// terminal.

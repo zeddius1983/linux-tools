@@ -124,9 +124,9 @@ review, `esc` back a page (and out of the wizard from the first), `q` cancel.
 
 ## Info panel
 
-Takes 60% of the terminal width. The only thing that overrides that is the
+Takes half the terminal width. The only thing that overrides that is the
 table's own 30-column minimum (`minTableWidth` in `main.go`), which bites below
-about 84 columns — the panel gives width back rather than let the table header
+about 66 columns — the panel gives width back rather than let the table header
 wrap.
 
 Shows only the rendered `apps/<name>/README.md` — image and box state live in
