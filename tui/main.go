@@ -303,6 +303,12 @@ func (m *model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Any keypress dismisses the last status. It shares the footer's first line
+	// with the selected app's context, so a one-off message that is never
+	// cleared does not fade into the background — it permanently replaces
+	// something useful.
+	m.status, m.statusErr = "", false
+
 	switch k {
 	case "q", "esc", "ctrl+c":
 		return m, tea.Quit

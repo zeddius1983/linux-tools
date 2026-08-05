@@ -290,13 +290,13 @@ func (m *model) wizardKey(k string) (tea.Model, tea.Cmd) {
 
 	switch k {
 	case "ctrl+c", "q":
+		// No status message: the dashboard reappearing is the acknowledgement,
+		// and nothing happened that the footer needs to report.
 		m.wiz = nil
-		m.status, m.statusErr = "wizard cancelled", false
 	case "esc":
 		// Back a page, or out of the wizard from the first one.
 		if w.idx == 0 {
 			m.wiz = nil
-			m.status, m.statusErr = "wizard cancelled", false
 			return m, nil
 		}
 		w.idx--

@@ -46,8 +46,9 @@ without linking the container's glibc.
 
 Two lines. The first is context for the selected app — its image reference
 (or "installs to the host") and the commands it exports — and is taken over by
-the filter prompt while filtering, or by the result of the last action. The
-second is the key legend.
+the filter prompt while filtering, or by the result of the last action. A status
+message is cleared by the next keypress; it occupies a line that is otherwise
+useful, so it must not become permanent. The second line is the key legend.
 
 ## Selection
 

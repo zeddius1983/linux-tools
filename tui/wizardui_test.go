@@ -189,6 +189,22 @@ func TestSessionDiff(t *testing.T) {
 	}
 }
 
+// A status message shares the footer with the selected app's context, so the
+// next keypress has to clear it rather than leaving it there for good.
+func TestStatusClearsOnNextKey(t *testing.T) {
+	apps, err := LoadApps(appsDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := newModel(apps, appsDir, "tools", true)
+	m.status, m.statusErr = "setup comfyui finished", false
+
+	m.onKey(keyPress("j"))
+	if m.status != "" {
+		t.Errorf("status survived a keypress: %q", m.status)
+	}
+}
+
 // Enter on the dashboard is setup: the wizard for an app with pages, the review
 // screen for one without. It must never run anything unprompted.
 func TestEnterOpensSetup(t *testing.T) {
