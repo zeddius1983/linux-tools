@@ -275,9 +275,16 @@ class Tray:
         """
         term = host_terminal()
         if term:
+            # Routed through `bash -c` rather than handed to the terminal as a
+            # bare argv, because ghostty's CLI parser eats "+"-prefixed
+            # arguments before passing the command on: `ghostty -e less -r -f
+            # +F FILE` starts `less -r -f FILE`, silently dropping follow mode
+            # (confirmed by reading the child's /proc/<pid>/cmdline). Inside a
+            # quoted -c string the +F is invisible to that parser, and this is
+            # safe for every other terminal too.
             run_detached(
                 ["distrobox-host-exec", term, TERMINALS[term],
-                 "less", "-r", "-f", "+F", LOG_FILE]
+                 "bash", "-c", 'exec less -r -f +F "$1"', "_", LOG_FILE]
             )
         else:
             run_detached(["distrobox-host-exec", "xdg-open", LOG_FILE])
