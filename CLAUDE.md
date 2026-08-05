@@ -25,6 +25,7 @@ Plain shell commands (file edits, `git`, `grep`, etc.) run fine inside the conta
 
 ```bash
 ./tools.sh install        # symlink as 'tools' in ~/.local/bin + set up completion
+tools build-tui           # build the Go dashboard (host Go, else a container)
 tools setup <app>         # full install: remove existing box+image, build, create, export
 tools export <app>        # re-export after editing an exports file
 tools list                # show all apps with image/box status

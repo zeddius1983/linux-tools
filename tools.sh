@@ -33,6 +33,7 @@ Usage: $0 [command] [app]
 
 Commands:
   install          Symlink as 'tools' in ~/.local/bin + set up completion
+  build-tui        Build the Go dashboard binary (host Go, else a container)
   setup  <app>     Install app (removes existing box+image first)
   build  <app>     Build container image only
   create <app>     Create distrobox from built image
@@ -55,8 +56,9 @@ fi
 command_="$1"
 
 case "$command_" in
-    list)    cmd_list;    exit 0 ;;
-    install) cmd_install; exit 0 ;;
+    list)      cmd_list;      exit 0 ;;
+    install)   cmd_install;   exit 0 ;;
+    build-tui) cmd_build_tui; exit 0 ;;
 esac
 
 [[ $# -ge 2 ]] || { usage; exit 1; }

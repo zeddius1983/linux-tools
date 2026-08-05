@@ -15,8 +15,25 @@ directly.
 
 ## Build
 
-Needs the Go toolchain from `dev-toolbox` (`tools setup dev-toolbox`, select
-`go`):
+`tools install` builds the binary, and `tools build-tui` rebuilds it on demand.
+Neither needs a Go toolchain on the host — the build walks a ladder so that Go
+never becomes a dependency of using linux-tools:
+
+| Rung | Condition | Cost |
+|---|---|---|
+| reuse | binary newer than every `*.go`, `go.mod`, `go.sum` | 0 |
+| host Go | `go` on PATH (e.g. exported from `dev-toolbox`) | ~0.5s |
+| container | a container runtime | 13s first ever, ~1s after |
+| skip | neither | whiptail menu, unchanged |
+
+The container rung runs `golang:1.25-alpine` (228 MB, pulled once) with
+`/go` on a named volume — `linux-tools-go-cache` — so the 58 MB of module
+downloads and the build cache survive between runs. Failures are never fatal:
+every one of them leaves the whiptail menu working.
+
+To force a rebuild, delete the binary: `rm tui/tools-tui && tools build-tui`.
+
+Building by hand is still just:
 
 ```bash
 cd tui
@@ -24,8 +41,8 @@ CGO_ENABLED=0 go build -o tools-tui .
 go test ./...
 ```
 
-`CGO_ENABLED=0` matters — it produces a static binary that runs on the host
-without linking the container's glibc.
+`CGO_ENABLED=0` is not optional — it produces a static binary, which is what
+lets an alpine/musl container build run on a glibc host.
 
 ## Run
 

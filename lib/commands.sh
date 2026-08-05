@@ -283,6 +283,84 @@ cmd_setup_finish() {
     fi
 }
 
+# ── Dashboard binary ─────────────────────────────────────────────────────────
+# tools-tui (see tui/) is Go, and most hosts have no Go toolchain. It is built
+# through a ladder so it never becomes a hard dependency: an existing binary is
+# reused, a host toolchain is used if there is one, otherwise a throwaway
+# container does the build, and a host with none of those simply keeps the
+# whiptail menu.
+#
+# The Go module and build caches live in a named volume, so only the first
+# container build pays for the 58 MB of module downloads.
+
+TUI_DIR="$SCRIPT_DIR/tui"
+TUI_BIN="$TUI_DIR/tools-tui"
+TUI_GO_IMAGE="docker.io/library/golang:1.25-alpine"
+TUI_GO_VOLUME="linux-tools-go-cache"
+
+# Is the built binary newer than every source it was built from?
+tui_bin_is_current() {
+    [[ -x "$TUI_BIN" ]] || return 1
+    local f
+    for f in "$TUI_DIR"/*.go "$TUI_DIR/go.mod" "$TUI_DIR/go.sum"; do
+        [[ -f "$f" ]] || continue
+        [[ "$f" -nt "$TUI_BIN" ]] && return 1
+    done
+    return 0
+}
+
+# CGO_ENABLED=0 is not optional: it produces a static binary, which is what
+# lets a container-built (musl) binary run on a glibc host, and lets the
+# dashboard run on the host at all.
+tui_build_with_host_go() {
+    echo "==> Building the dashboard with the host Go toolchain..."
+    ( cd "$TUI_DIR" && CGO_ENABLED=0 go build -o "$TUI_BIN" . )
+}
+
+tui_build_with_container() {
+    echo "==> Building the dashboard in a $TUI_GO_IMAGE container..."
+    # /go holds both caches (GOPATH/pkg/mod and the build cache), so one volume
+    # covers both. :z is a no-op where SELinux is not enabled.
+    $RUNTIME run --rm \
+        -v "$TUI_DIR":/src:z \
+        -v "$TUI_GO_VOLUME":/go \
+        -w /src \
+        -e CGO_ENABLED=0 \
+        -e GOCACHE=/go/build-cache \
+        "$TUI_GO_IMAGE" \
+        go build -o /src/tools-tui .
+}
+
+# Build the dashboard binary. Never fatal: every failure mode here leaves the
+# whiptail menu working, which is the whole point of the ladder.
+cmd_build_tui() {
+    [[ -d "$TUI_DIR" ]] || return 0
+
+    if tui_bin_is_current; then
+        echo "==> Dashboard binary is up to date: $TUI_BIN"
+        return 0
+    fi
+
+    if command -v go &>/dev/null; then
+        tui_build_with_host_go || {
+            echo "Warning: host Go build failed; the whiptail menu still works." >&2
+            return 0
+        }
+    elif command -v "$RUNTIME" &>/dev/null; then
+        tui_build_with_container || {
+            echo "Warning: container build failed (no network on first run?);" >&2
+            echo "         the whiptail menu still works." >&2
+            return 0
+        }
+    else
+        echo "==> No Go toolchain and no container runtime; skipping the dashboard."
+        echo "    The whiptail menu is used instead."
+        return 0
+    fi
+
+    echo "==> Built: $TUI_BIN"
+}
+
 cmd_install() {
     local bin_dir="$HOME/.local/bin"
     local target="$bin_dir/tools"
@@ -311,6 +389,8 @@ cmd_install() {
             echo "==> Wrote completion to $zsh_fragment"
         fi
     fi
+
+    cmd_build_tui
 
     echo ""
     echo "Done. Open a new shell or run: source ~/.bashrc / source ~/.zshrc"

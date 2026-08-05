@@ -175,15 +175,30 @@ Resolved for development: **Go is a selectable `dev-toolbox` tool** (PR #47),
 installing the latest stable release as a self-contained GOROOT under
 `~/.local/share/dev-toolbox/go`.
 
-This replaces the original recommendation of a throwaway `golang:*-alpine`
-build container. That recommendation conflated two questions — where a
-*developer* gets a toolchain, and how the *shipped* binary is produced.
-dev-toolbox answers the first cleanly. **The second is still open:** end users
-must not need dev-toolbox installed to get `tools-tui`, so `cmd_install` will
-still want a container build or a released artifact.
+Resolved for shipping: **`cmd_install` builds the binary through a ladder**
+(`cmd_build_tui`, `lib/commands.sh`) — reuse a current binary, else host Go,
+else a throwaway `golang:1.25-alpine` container, else skip and keep whiptail.
+Go never becomes a dependency of *using* linux-tools, and no rung is fatal.
 
-`CGO_ENABLED=0` is required either way — it produces a static binary that runs
-on the host without linking the container's glibc.
+Measured on an x86_64 host: 13s for the very first container build including
+the 228 MB image pull, ~1s afterwards. `/go` lives on a named volume
+(`linux-tools-go-cache`), so the 58 MB of module downloads happen once.
+
+Rejected alternatives:
+
+- **Committing the binary.** The repo's entire pack is 1.41 MiB; one build adds
+  6.8 MiB compressed, permanently, per rebuild. Also amd64-only, in a repo that
+  supports mixed-arch hosts.
+- **A release artifact.** The right answer if this is ever distributed to people
+  who do not clone the repo, but there is no CI in the project at all, so it
+  means building a release pipeline to replace something that takes 1s.
+- **Vendoring.** Would make builds offline-capable, at 23 MB and 787 files in a
+  1.41 MiB repo. The named volume gets the same result after one build.
+
+`CGO_ENABLED=0` is required either way — it produces a static binary, which is
+what lets the alpine/musl container build run on a glibc host. Verified: a
+container-built binary runs unmodified inside the Fedora-based
+`claude-code-box`.
 
 ---
 
@@ -211,8 +226,9 @@ the existing `command -v whiptail` check (`tools.sh:71`):
 - `apps/<name>/category` for all 23 apps
 - Go toolchain in dev-toolbox (merged)
 
+- `cmd_install` building the binary, through the ladder in §6
+
 **Next**
-- `cmd_install` building or fetching the binary
 - wiring `tools` to launch it, behind the fallback gate
 
 **Then**
@@ -270,9 +286,9 @@ the existing `command -v whiptail` check (`tools.sh:71`):
 
 ## 10. Open questions
 
-- **How end users get the binary** — see §6.
-- **Go version pin** for any build container, and whether to vendor modules so
-  builds work without network access.
+- **Bumping the pinned builder image.** `TUI_GO_IMAGE` in `lib/commands.sh` is
+  `golang:1.25-alpine`, matching the `go` directive in `tui/go.mod`. Nothing
+  checks that the two stay in step.
 - **Non-interactive parity.** `tools setup <app>` from a script must keep taking
   build defaults; the state-file loader treats "no file" as "no selections",
   which holds today and must not regress.
