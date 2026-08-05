@@ -134,8 +134,8 @@ class Tray:
         self.item_toggle.connect("activate", self.on_toggle)
         self.item_log = Gtk.MenuItem(label="Show log")
         self.item_log.connect("activate", self.on_log)
-        self.item_quit = Gtk.MenuItem(label="Quit tray")
-        self.item_quit.connect("activate", lambda *_: Gtk.main_quit())
+        self.item_close = Gtk.MenuItem(label="Close")
+        self.item_close.connect("activate", self.on_close)
 
         for item in (
             self.item_status,
@@ -144,7 +144,7 @@ class Tray:
             self.item_toggle,
             self.item_log,
             Gtk.SeparatorMenuItem(),
-            self.item_quit,
+            self.item_close,
         ):
             self.menu.append(item)
         self.menu.show_all()
@@ -152,6 +152,10 @@ class Tray:
 
         self.running = False
         self.busy = False
+        # Set when Close is chosen with the server up: the stop runs on a worker
+        # thread, so the close has to wait for its result rather than happening
+        # inline.
+        self.close_after_stop = False
         self.refresh()
         GLib.timeout_add_seconds(POLL_SECONDS, self.refresh)
 
@@ -187,6 +191,23 @@ class Tray:
 
     def on_log(self, *_):
         run_detached(["distrobox-host-exec", "xdg-open", LOG_FILE])
+
+    def on_close(self, *_):
+        """Stop the server, then close the tray.
+
+        Closing without stopping left the server with no icon, no window and no
+        terminal — the exact state this tray exists to prevent — so Close takes
+        the server with it. The one thing that can still interrupt the sequence
+        is comfyui-stop refusing while prompts are queued; that prompt is a
+        data-loss guard, and declining it cancels the close as well (see
+        _stopped), because keeping the queue and stranding the server would be
+        the worst of both.
+        """
+        if not self.running:
+            Gtk.main_quit()
+            return
+        self.close_after_stop = True
+        self.stop(force=False)
 
     def on_toggle(self, *_):
         if self.running:
@@ -247,9 +268,16 @@ class Tray:
             response = dialog.run()
             dialog.destroy()
             if response == Gtk.ResponseType.OK:
-                self.stop(force=True)
+                self.stop(force=True)  # close_after_stop carries through
+            else:
+                # Backing out here cancels the close too — the user chose to
+                # keep the queue, so stranding the server would be worse.
+                self.close_after_stop = False
         elif rc != 0:
             print(f"comfyui-tray: stop failed: {stderr}", file=sys.stderr)
+            self.close_after_stop = False
+        elif self.close_after_stop:
+            Gtk.main_quit()
         return False
 
 

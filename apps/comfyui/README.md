@@ -107,14 +107,23 @@ area, so a detached server is not something you have to hunt for afterwards:
 | Open in browser | Same window the launcher opens |
 | Start / Stop server | Toggles with the current state |
 | Show log | Opens `~/.comfyui/server.log` |
-| Quit tray | Leaves the server running |
+| Close | Stops the server, then hides the tray |
 
 Stop asks before discarding queued prompts, offering **Stop anyway**.
 
-There is deliberately **no separate menu entry** for it — the ComfyUI launcher
-starts it, so a second icon would only be clutter. If you quit the tray and want
-it back without restarting the server, run `comfyui-tray`; it holds a lock and
-exits quietly if one is already running.
+**Close** stops the server first, then hides the tray — closing without it would
+leave the server with no icon, no window and no terminal, which is the exact
+state the tray exists to prevent. If prompts are queued you still get the
+**Stop anyway** prompt, and declining it cancels the close too, leaving both the
+queue and the tray intact.
+
+To hide the icon but keep generating, close it from your panel's own applet
+settings, or just leave it — it costs nothing.
+
+There is deliberately **no separate menu entry** for the tray — the ComfyUI
+launcher starts it, so a second icon would only be clutter. If you close it and
+want it back without restarting the server, run `comfyui-tray`; it holds a lock
+and exits quietly if one is already running.
 
 To have it come up with your session, point autostart at that command:
 
