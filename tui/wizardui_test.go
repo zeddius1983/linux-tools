@@ -5,7 +5,20 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	tea "charm.land/bubbletea/v2"
 )
+
+// keyPress builds the message the dashboard's key handler expects, so tests can
+// exercise the real binding rather than a stringly-typed shortcut into it.
+func keyPress(name string) tea.KeyPressMsg {
+	switch name {
+	case "enter":
+		return tea.KeyPressMsg{Code: tea.KeyEnter}
+	default:
+		return tea.KeyPressMsg{Code: rune(name[0]), Text: name}
+	}
+}
 
 // testApp builds an App pointing at a real app directory in the repo, so the
 // session tests run against the shipped wizard pages rather than fixtures.
@@ -173,6 +186,51 @@ func TestSessionDiff(t *testing.T) {
 	}
 	if len(remove) != 1 || !strings.HasPrefix(remove[0], "uv") {
 		t.Errorf("remove = %v, want just uv", remove)
+	}
+}
+
+// Enter on the dashboard is setup: the wizard for an app with pages, the review
+// screen for one without. It must never run anything unprompted.
+func TestEnterOpensSetup(t *testing.T) {
+	apps, err := LoadApps(appsDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := newModel(apps, appsDir, "tools", true)
+
+	m.selectApp("dev-toolbox")
+	m.onKey(keyPress("enter"))
+	if m.wiz == nil || m.wiz.stage != stagePages {
+		t.Fatal("enter did not open the wizard for an app with pages")
+	}
+	m.wizardKey("q")
+
+	// comfyui has no wizard, and must still stop at the review screen rather
+	// than launching a rebuild on one keypress.
+	m.selectApp("comfyui")
+	m.onKey(keyPress("enter"))
+	if m.wiz == nil || m.wiz.stage != stageConfirm {
+		t.Fatal("enter did not open the review screen for an app without pages")
+	}
+	if len(m.wiz.pages) != 0 {
+		t.Errorf("expected no pages, got %d", len(m.wiz.pages))
+	}
+	// Esc is the only way back from a review screen with nothing behind it.
+	m.wizardKey("esc")
+	if m.wiz != nil {
+		t.Error("esc did not close a review screen with no pages")
+	}
+}
+
+// A confirmation with no answers behind it hands bash nothing: no state file,
+// so the run is an ordinary `tools setup <app>`.
+func TestConfirmOnlyRunNeedsNoStateFile(t *testing.T) {
+	m := newModel([]App{}, appsDir, "tools", true)
+	m.wiz = &wizardSession{app: App{Name: "comfyui"}, action: "setup", stage: stageConfirm}
+
+	m.runWizardAction()
+	if m.stateFile != "" {
+		t.Errorf("wrote a state file for a wizard with no pages: %q", m.stateFile)
 	}
 }
 

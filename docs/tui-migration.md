@@ -154,7 +154,7 @@ field.
 | README info panel | glamour, cached per app and width |
 | full-width selection highlight | per-segment background, no arrow |
 | platform / image / box indicators | Nerd Font glyphs, `--ascii` fallback |
-| actions | `tea.ExecProcess` |
+| actions | `tea.ExecProcess`; `⏎` is setup, the primary one |
 | wizard pages | hand-rolled checklist / single choice + a review screen (`tui/wizardui.go`) |
 
 ---

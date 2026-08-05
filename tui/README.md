@@ -65,8 +65,10 @@ would be cut short by its own resets.
 | `g` / `end` | first / last row |
 | `PgDn` / `PgUp` | scroll the README panel |
 | `/` | filter within the category |
-| `s` `b` `c` `e` `r` | setup · build · create · export · rm (`s`/`b`/`c` open the wizard first when the app has pages) |
-| `⏎` | open a shell in the box |
+| `⏎` / `s` | setup — the primary action: wizard, then the review screen |
+| `b` `c` | build · create (wizard first when the app has pages for them) |
+| `e` `r` | export · rm — run immediately |
+| `o` | open a shell in the box |
 | `R` | reload app and container state |
 | `?` | toggle help |
 | `q` / `esc` | quit |
@@ -79,8 +81,11 @@ refreshes container state when the command exits. It does not exec away.
 
 ## Wizard
 
-`s`, `b` and `c` open the app's wizard pages natively (`wizardui.go`) when it
-has any that declare that action; apps without pages run the action straight
+`⏎`/`s`, `b` and `c` open the app's wizard pages natively (`wizardui.go`) when
+it has any that declare that action. Every one of them ends at a review screen,
+and setup shows that screen even for an app with no pages at all — it removes
+the existing image and box before rebuilding, which is worth one keypress
+rather than none. `b` and `c` are additive, so without pages they run straight
 away. Answers are written to a state file and handed to bash as
 `LT_SKIP_WIZARD=1 LT_WIZARD_STATE=<path>`, which `wizard_load_state`
 (`lib/wizard.sh`) re-hydrates into `_WIZARD_SELECTIONS` so every existing
@@ -109,6 +114,9 @@ Deselecting everything on a page is an answer, not an absence — the page is
 still written, with an empty value, so the apply handler removes what is
 installed. `wizard_load_state` therefore tests each `PAGE_` variable for being
 *defined* rather than non-empty.
+
+A review screen with no pages behind it hands bash nothing — no state file — so
+that run is an ordinary `tools setup <app>`.
 
 Keys: `space` toggle/select, `a`/`n` all/none, `↑`/`↓` move, `⏎` next page or
 review, `esc` back a page (and out of the wizard from the first), `q` cancel.

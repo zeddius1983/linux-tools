@@ -210,13 +210,20 @@ func (w *wizardSession) state() State {
 
 // --- model integration -------------------------------------------------------
 
-// startWizard opens the wizard for an action, or runs the action straight away
-// when the app has no pages for it.
+// startWizard opens the wizard for an action. An app with no pages for it
+// still gets the review screen when the action asks for one; otherwise the
+// action runs straight away.
 func (m *model) startWizard(act action, a App) tea.Cmd {
 	home, _ := os.UserHomeDir()
 	w, cmd := newWizardSession(a, act.name, home)
 	if w == nil {
-		return m.runCmd(act.name, a, nil, m.toolsBin, act.name, a.Name)
+		if !act.confirm {
+			return m.runCmd(act.name, a, nil, m.toolsBin, act.name, a.Name)
+		}
+		// Nothing to ask, but still something to confirm: open straight on the
+		// review screen. It carries no answers, so the run gets no state file
+		// and behaves exactly like a plain `tools <action> <app>`.
+		w = &wizardSession{app: a, action: act.name, home: home, stage: stageConfirm}
 	}
 	m.wiz = w
 	m.status = ""
@@ -259,6 +266,12 @@ func (m *model) wizardKey(k string) (tea.Model, tea.Cmd) {
 		case "enter", "y":
 			return m, m.runWizardAction()
 		case "esc", "backspace", "left", "h":
+			// With no pages behind it the review screen is the whole wizard, so
+			// going "back" is leaving.
+			if len(w.pages) == 0 {
+				m.wiz = nil
+				return m, nil
+			}
 			w.stage = stagePages
 			w.focus()
 			return m, nil
@@ -348,14 +361,19 @@ func (m *model) runWizardAction() tea.Cmd {
 	w := m.wiz
 	m.wiz = nil
 
-	path := DefaultStatePath(w.app.Name)
-	if err := w.state().Write(path); err != nil {
-		m.status, m.statusErr = "could not write wizard state: "+err.Error(), true
-		return nil
+	// A confirmation with no pages behind it has nothing to hand over: run it
+	// as a plain `tools <action> <app>` rather than writing an empty state file
+	// that only tells bash to skip a wizard that does not exist.
+	var env []string
+	if len(w.pages) > 0 {
+		path := DefaultStatePath(w.app.Name)
+		if err := w.state().Write(path); err != nil {
+			m.status, m.statusErr = "could not write wizard state: "+err.Error(), true
+			return nil
+		}
+		m.stateFile = path
+		env = []string{"LT_SKIP_WIZARD=1", "LT_WIZARD_STATE=" + path}
 	}
-	m.stateFile = path
-
-	env := []string{"LT_SKIP_WIZARD=1", "LT_WIZARD_STATE=" + path}
 	return m.runCmd(w.action, w.app, env, m.toolsBin, w.action, w.app.Name)
 }
 
@@ -452,7 +470,17 @@ func (m *model) wizardConfirmBody() string {
 	st := w.state()
 
 	var b strings.Builder
-	b.WriteString("  " + styTitle.Render("Confirm changes") + "\n\n")
+	b.WriteString("  " + styTitle.Render("Confirm") + "\n\n")
+
+	// What the action itself does, before any wizard answers. setup is the
+	// destructive one — it removes the existing image and box first — and that
+	// is the whole reason this screen appears for apps with no pages at all.
+	if note := w.actionNote(); note != "" {
+		b.WriteString("  " + note + "\n")
+		if len(install) > 0 || len(remove) > 0 {
+			b.WriteString("\n")
+		}
+	}
 
 	if len(install) > 0 {
 		b.WriteString("  " + styStatusOK.Render("Installing:") + "\n")
@@ -474,24 +502,57 @@ func (m *model) wizardConfirmBody() string {
 			styRow.Render(strings.Join(st.BuildArgs[1:], " ")) + "\n")
 	}
 	if st.Variant != "" {
-		b.WriteString("  " + styDesc.Render("Runtime:  ") + " " + styRow.Render(st.Variant) + "\n")
+		// The label is what was chosen; the value is what bash acts on, and
+		// seeing both is how you tell the two apart when they differ.
+		label := st.Variant
+		for _, p := range w.pages {
+			if p.Type == "runtime" && p.radio < len(p.items) {
+				label = p.items[p.radio].Name
+			}
+		}
+		b.WriteString("  " + styDesc.Render("Runtime:  ") + " " + styRow.Render(label) +
+			styDesc.Render(" ("+st.Variant+")") + "\n")
 	}
-	if len(install) == 0 && len(remove) == 0 && len(st.BuildArgs) == 0 && st.Variant == "" {
-		b.WriteString("  " + styDesc.Render("nothing to change — the run proceeds with current settings") + "\n")
-	}
-
-	b.WriteString("\n  " + styDesc.Render(fmt.Sprintf("then: tools %s %s", w.action, w.app.Name)) + "\n")
+	b.WriteString("\n  " + styDesc.Render(fmt.Sprintf("runs: tools %s %s", w.action, w.app.Name)) + "\n")
 	return b.String()
+}
+
+// actionNote describes the action's own effect on this app, which is the only
+// content the review screen has for an app with no wizard pages.
+func (w *wizardSession) actionNote() string {
+	switch w.action {
+	case "setup":
+		if w.app.HostOnly {
+			return styRow.Render("Installs to the host.")
+		}
+		if w.app.HasImage || w.app.HasBox {
+			return styWarn.Render("Removes the existing image and box") +
+				styRow.Render(", then rebuilds and re-exports.")
+		}
+		return styRow.Render("Builds the image, creates the box and exports it to the host.")
+	case "build":
+		return styRow.Render("Builds the image. The box is left as it is.")
+	case "create":
+		if w.app.HasBox {
+			return styWarn.Render("Replaces the existing box") + styRow.Render(" from the built image.")
+		}
+		return styRow.Render("Creates the box from the built image.")
+	}
+	return ""
 }
 
 func (m *model) wizardKeys() string {
 	w := m.wiz
 	var parts []string
 	if w.stage == stageConfirm {
-		parts = []string{
-			styKey.Render("⏎") + styDesc.Render(" proceed"),
-			styKey.Render("esc") + styDesc.Render(" back"),
-			styKey.Render("q") + styDesc.Render(" cancel"),
+		parts = []string{styKey.Render("⏎") + styDesc.Render(" proceed")}
+		if len(w.pages) > 0 {
+			parts = append(parts,
+				styKey.Render("esc")+styDesc.Render(" back"),
+				styKey.Render("q")+styDesc.Render(" cancel"))
+		} else {
+			// Nothing behind this screen, so esc leaves outright.
+			parts = append(parts, styKey.Render("q/esc")+styDesc.Render(" cancel"))
 		}
 	} else {
 		p := w.page()
@@ -508,9 +569,15 @@ func (m *model) wizardKeys() string {
 		}
 		parts = append(parts,
 			styKey.Render("↑/↓")+styDesc.Render(" move"),
-			styKey.Render("⏎")+styDesc.Render(next),
-			styKey.Render("esc")+styDesc.Render(" back"),
-			styKey.Render("q")+styDesc.Render(" cancel"))
+			styKey.Render("⏎")+styDesc.Render(next))
+		if w.idx == 0 {
+			// There is no page behind the first one, so esc leaves outright.
+			parts = append(parts, styKey.Render("q/esc")+styDesc.Render(" cancel"))
+		} else {
+			parts = append(parts,
+				styKey.Render("esc")+styDesc.Render(" back"),
+				styKey.Render("q")+styDesc.Render(" cancel"))
+		}
 	}
 	return strings.Join(parts, styDesc.Render(" · "))
 }

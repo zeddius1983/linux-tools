@@ -109,14 +109,29 @@ type action struct {
 	// to. It mirrors tools.sh: setup asks and applies, while build and create
 	// only consume what a state file already holds.
 	wizard bool
+	// confirm forces the review screen even when the app has no wizard pages.
+	// setup destroys the existing image and box before rebuilding, which is
+	// worth a keypress; build and create are additive and go straight through.
+	confirm bool
 }
 
 var actions = []action{
-	{"s", "setup", "Install (removes existing box+image first)", true},
-	{"b", "build", "Build image only", true},
-	{"c", "create", "Create box from image", true},
-	{"e", "export", "Re-export to host", false},
-	{"r", "rm", "Remove box (image kept)", false},
+	{key: "s", name: "setup", desc: "Install (removes existing box+image first)", wizard: true, confirm: true},
+	{key: "b", name: "build", desc: "Build image only", wizard: true},
+	{key: "c", name: "create", desc: "Create box from image", wizard: true},
+	{key: "e", name: "export", desc: "Re-export to host"},
+	{key: "r", name: "rm", desc: "Remove box (image kept)"},
+}
+
+// actionNamed looks up an action by name, for the keys that are bound to one
+// directly rather than by its own letter.
+func actionNamed(name string) action {
+	for _, a := range actions {
+		if a.name == name {
+			return a
+		}
+	}
+	return action{}
 }
 
 type model struct {
@@ -334,6 +349,13 @@ func (m *model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.status, m.statusErr = "reloaded", false
 		}
 	case "enter":
+		// Enter is the primary action: the wizard for apps that have pages, the
+		// review screen for those that do not. Opening a shell moved to "o" —
+		// it is the rarer thing to want from a row.
+		if a, ok := m.current(); ok {
+			return m, m.startWizard(actionNamed("setup"), a)
+		}
+	case "o":
 		if a, ok := m.current(); ok && a.HasBox {
 			return m, m.runCmd("enter", a, nil, "distrobox", "enter", a.BoxName())
 		}
@@ -667,10 +689,16 @@ func (m *model) contextLine() string {
 func (m *model) keysLine() string {
 	var parts []string
 	for _, a := range actions {
-		parts = append(parts, styKey.Render(a.key)+styDesc.Render(" "+a.name))
+		key := a.key
+		if a.name == "setup" {
+			// Enter is bound to setup as well; showing it twice in the legend
+			// reads as two different things.
+			key = "⏎/" + key
+		}
+		parts = append(parts, styKey.Render(key)+styDesc.Render(" "+a.name))
 	}
 	parts = append(parts,
-		styKey.Render("⏎")+styDesc.Render(" shell"),
+		styKey.Render("o")+styDesc.Render(" shell"),
 		styKey.Render("PgDn/PgUp")+styDesc.Render(" scroll readme"),
 		styKey.Render("/")+styDesc.Render(" filter"),
 		styKey.Render("?")+styDesc.Render(" help"),
@@ -689,13 +717,13 @@ func (m *model) helpView() string {
 		{"g / end", "first / last row"},
 		{"PgDn / PgUp", "scroll the README panel"},
 		{"/", "filter within category"},
-		{"s", "setup — install (removes existing box+image)"},
+		{"⏎ / s", "setup — install (removes existing box+image)"},
 		{"b", "build — image only"},
 		{"c", "create — box from image"},
-		{"", "s/b/c open the app's wizard first when it has pages"},
+		{"", "these open the app's wizard, then a review screen"},
 		{"e", "export — re-export to host"},
 		{"r", "rm — remove box, keep image"},
-		{"⏎", "open a shell in the box"},
+		{"o", "open a shell in the box"},
 		{"R", "reload app/container state"},
 		{"?", "toggle this help"},
 		{"q / esc", "quit"},
