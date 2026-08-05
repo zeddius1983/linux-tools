@@ -17,17 +17,44 @@ Setup asks two questions:
 tools setup comfyui
 ```
 
-Run non-interactively (scripted, no wizard), you get the defaults: AMD/ROCm at
-`master`. To pin either without the wizard:
+Re-running `tools setup comfyui` rebuilds from scratch, so it is also how you
+switch GPU backend or change release. Models, generated images, inputs and saved
+workflows all live under `~/.comfyui/` (see [Storage](#storage)) and survive the
+rebuild; custom nodes do not.
+
+### Non-interactive install
+
+Run with no wizard — a scripted `tools setup comfyui`, or a non-tty shell — and
+you get the defaults: **AMD/ROCm at `master`**. Pinning either means handing the
+answers to `tools` in a wizard state file:
 
 ```bash
-podman build --build-arg COMFY_GPU=nvidia --build-arg COMFY_REF=v0.30.0 \
-  -t linux-tools/comfyui:latest apps/comfyui
+cat > /tmp/comfyui.state <<'EOF'
+APP="comfyui"
+ACTION="setup"
+BUILD_ARGS="--build-arg COMFY_GPU=nvidia --build-arg COMFY_REF=v0.30.0"
+VARIANT="nvidia"
+EOF
+
+LT_SKIP_WIZARD=1 LT_WIZARD_STATE=/tmp/comfyui.state tools setup comfyui
 ```
 
-Re-running `tools setup comfyui` rebuilds from scratch, so it is also how you
-switch GPU backend or change release. Models and outputs live in `$HOME` and are
-untouched by the rebuild.
+`BUILD_ARGS` and `VARIANT` must agree. `VARIANT` is what makes `tools create`
+use `create_flags.nvidia`; a bare `podman build --build-arg COMFY_GPU=nvidia`
+followed by `tools create comfyui` builds an NVIDIA **image** and then creates
+the box with the **AMD** flags — `/dev/kfd` and no CDI device — which on an
+NVIDIA-only host fails to create or comes up with no usable GPU.
+
+The equivalent by hand, if you would rather not go through `tools`:
+
+```bash
+tools rm comfyui && podman rmi linux-tools/comfyui:latest
+podman build --build-arg COMFY_GPU=nvidia --build-arg COMFY_REF=v0.30.0 \
+  -t linux-tools/comfyui:latest apps/comfyui
+distrobox create --name comfyui-box --image linux-tools/comfyui:latest --yes --no-entry \
+  --additional-flags "$(cat apps/comfyui/create_flags.nvidia)"
+tools export comfyui
+```
 
 ### NVIDIA prerequisite — the CDI spec
 
@@ -76,31 +103,55 @@ The launcher applies a default flag set per backend:
   around a ROCm bug that makes mapping above 64 GB extremely slow.
 - **NVIDIA**: no extra flags; just `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`.
 
-Those AMD defaults are wrong for a small discrete card. Replace them wholesale
-with `COMFYUI_ARGS` (`--listen 0.0.0.0` is always kept):
+Those AMD defaults are wrong for a small discrete card. Replace the tuning set
+with `COMFYUI_ARGS`:
 
 ```bash
 COMFYUI_ARGS="--lowvram --preview-method auto" comfyui
 ```
 
+`--listen` and the three directory flags below are *not* replaceable this way —
+losing them would put your generated images back inside the image, where a
+rebuild deletes them.
+
 ## Storage
 
-Everything persistent is in the host `$HOME`, so it survives rebuilds and is
+Everything you create is under the host `$HOME`, so it survives rebuilds and is
 shared between the AMD and NVIDIA variants:
 
 | Path | Contents |
 |---|---|
 | `~/.comfyui/models/` | `checkpoints/`, `vae/`, `loras/`, `controlnet/`, `upscale_models/`, `clip/`, `unet/`, `diffusion_models/` |
+| `~/.comfyui/output/` | Generated images and video |
+| `~/.comfyui/input/` | Images you upload to a workflow |
+| `~/.comfyui/user/` | **Saved workflows** and UI settings |
 | `~/.comfyui/server.log` | Log from a desktop-launched server |
 | `~/.cache/miopen` | MIOpen kernel cache (AMD only) |
 
 Drop `.safetensors` files straight into the matching `~/.comfyui/models/`
 sub-directory; ComfyUI picks them up on refresh.
 
+Models come from `extra_model_paths.yaml`; the other three are `--output-directory`,
+`--input-directory` and `--user-directory` passed by the launcher. ComfyUI's own
+defaults for all of them are inside `/opt/ComfyUI`, which `tools setup` destroys.
+
 Custom nodes are the exception — they live at
 `/opt/ComfyUI/custom_nodes` **inside the image** and are lost on rebuild.
 ComfyUI-Manager is pre-installed, so reinstalling from the UI is the intended
 path.
+
+### Upgrading from a build before this redirect
+
+Earlier images wrote outputs and workflows to `/opt/ComfyUI/output` and
+`/opt/ComfyUI/user`, inside the container. **Rescue them before the next
+`tools setup comfyui`**, which deletes the image:
+
+```bash
+distrobox enter comfyui-box -- \
+  bash -c 'mkdir -p ~/.comfyui && cp -rn /opt/ComfyUI/output /opt/ComfyUI/user ~/.comfyui/ 2>/dev/null; true'
+```
+
+Then check `~/.comfyui/output` and `~/.comfyui/user` look right before rebuilding.
 
 ## Notes
 
