@@ -84,6 +84,7 @@ The CUDA wheels are built for **CUDA 12.8**, which needs host driver **≥ 570**
 |---|---|
 | `comfyui` | Runs the server in the foreground on `http://localhost:8188` |
 | `comfyui --help` | ComfyUI's own flags (extra flags are appended to the defaults) |
+| `comfyui-stop` | Stops a running server, however it was started |
 | ComfyUI (desktop launcher) | Starts the server if it isn't running, then opens it as a browser app window |
 
 ```bash
@@ -93,6 +94,32 @@ comfyui --port 9000          # extra flags pass straight through
 
 The desktop entry uses `chrome-box` for an app-mode window if that box exists,
 and falls back to `xdg-open`. Its server log goes to `~/.comfyui/server.log`.
+
+### Stopping it
+
+A foreground `comfyui` stops with Ctrl-C. The desktop launcher starts the server
+**detached**, so there is no terminal to Ctrl-C — use:
+
+```bash
+comfyui-stop            # interrupt current prompt, then stop
+comfyui-stop --force    # stop even with prompts still queued
+```
+
+It sends **SIGINT**, which is what Ctrl-C sends, so Python unwinds normally and
+ComfyUI's cleanup runs; a plain `kill` (SIGTERM) terminates the interpreter
+outright. If the process ignores SIGINT for 30s it escalates to SIGKILL.
+
+Queued prompts live in memory and die with the process, so `comfyui-stop`
+refuses while any are pending and tells you to wait or pass `--force`.
+
+To watch a detached server the way you would a foreground one:
+
+```bash
+tail -f ~/.comfyui/server.log
+```
+
+`podman stop comfyui-box` is not a substitute — it tears the container down
+around ComfyUI rather than letting it shut itself down. Stop the app first.
 
 ### Tuning flags
 

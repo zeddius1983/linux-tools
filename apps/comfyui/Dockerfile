@@ -69,6 +69,7 @@ RUN chmod -R a+rwX /opt/ComfyUI
 # Wrappers must live in /usr/bin/ — command -pv does not search /usr/local/bin.
 COPY comfyui-run /usr/bin/comfyui
 COPY comfyui-app /usr/bin/comfyui-app
-RUN chmod +x /usr/bin/comfyui /usr/bin/comfyui-app
+COPY comfyui-stop /usr/bin/comfyui-stop
+RUN chmod +x /usr/bin/comfyui /usr/bin/comfyui-app /usr/bin/comfyui-stop
 
 CMD ["/bin/bash"]

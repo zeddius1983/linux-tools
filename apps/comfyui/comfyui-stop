@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# Stop a running ComfyUI server (exported to the host as `comfyui-stop`).
+#
+# Exists because the desktop launcher starts the server detached — there is no
+# terminal to Ctrl-C, so without this the only way to stop it is to hunt down
+# the PID by hand.
+set -euo pipefail
+
+PATTERN="/opt/venv/bin/python main.py"
+SERVER_URL="http://localhost:8188"
+
+force=0
+case "${1:-}" in
+    -f|--force) force=1 ;;
+    -h|--help)
+        echo "usage: comfyui-stop [-f|--force]"
+        echo
+        echo "Interrupts the running prompt, then stops the server with SIGINT."
+        echo "Refuses to stop while work is queued unless --force is given."
+        exit 0
+        ;;
+    "") ;;
+    *)  echo "comfyui-stop: unknown option '$1'" >&2; exit 2 ;;
+esac
+
+if ! pgrep -f "$PATTERN" >/dev/null 2>&1; then
+    echo "ComfyUI is not running."
+    exit 0
+fi
+
+# Queued prompts are held in memory and are lost with the process, so a stop
+# with work pending destroys it. Say so rather than doing it silently.
+if curl -sf "$SERVER_URL/prompt" -o /tmp/.comfyui-queue.$$ 2>/dev/null; then
+    queued="$(grep -o '"queue_remaining": *[0-9]*' /tmp/.comfyui-queue.$$ \
+        | grep -o '[0-9]*$' || echo 0)"
+    rm -f /tmp/.comfyui-queue.$$
+    if [[ "${queued:-0}" -gt 0 && $force -eq 0 ]]; then
+        echo "ComfyUI has ${queued} prompt(s) queued; they will be lost." >&2
+        echo "Wait for them, or re-run: comfyui-stop --force" >&2
+        exit 1
+    fi
+fi
+
+# Interrupt whatever is mid-generation so the process is not signalled partway
+# through a sampling step. /interrupt only stops the *running* prompt.
+if curl -sf "$SERVER_URL" >/dev/null 2>&1; then
+    curl -sf -X POST "$SERVER_URL/interrupt" >/dev/null 2>&1 || true
+fi
+
+# SIGINT, not SIGTERM: SIGINT is what Ctrl-C sends, so Python raises
+# KeyboardInterrupt and unwinds normally. SIGTERM's default action terminates
+# the interpreter outright, skipping ComfyUI's cleanup.
+echo "Stopping ComfyUI..."
+pkill -INT -f "$PATTERN" || true
+
+for _ in $(seq 30); do
+    if ! pgrep -f "$PATTERN" >/dev/null 2>&1; then
+        echo "ComfyUI stopped."
+        exit 0
+    fi
+    sleep 1
+done
+
+echo "Still running after 30s — sending SIGKILL." >&2
+pkill -KILL -f "$PATTERN" || true
+sleep 2
+if pgrep -f "$PATTERN" >/dev/null 2>&1; then
+    echo "Error: could not stop ComfyUI." >&2
+    exit 1
+fi
+echo "ComfyUI stopped (forced)."
