@@ -127,7 +127,12 @@ the old path is still there for a scripted `tools setup`.
 | `.packages` | checklist, pre-ticked from each item's detect path | `PAGE_<name>` → the app's `-install --tools` run |
 | `.mcp` | checklist | `PAGE_<name>` → `claude mcp add/remove` |
 | `.buildarg` | single choice, items from the page's `items-cmd` | `BUILD_ARGS` → `--build-arg NAME=value` |
-| `.runtime` | single choice | `VARIANT` → `create_flags.<value>` |
+| `.runtime` | single choice | `VARIANT` → `create_flags.<value>`, plus `BUILD_ARGS` when the page has an `arg\|NAME` line |
+
+A `.runtime` page's optional `arg|NAME` line makes the same answer a build arg
+too, so one question can select both a base image and the container's GPU
+passthrough (`apps/comfyui` picks AMD/NVIDIA that way). The *value* is passed,
+not the shown label, so `NVIDIA (CUDA)|nvidia` yields `--build-arg NAME=nvidia`.
 
 A `.buildarg` page's `items-cmd` reaches the network (a GitHub API call, a
 `git ls-remote`), so it runs off the update loop with a 30s timeout, and Enter

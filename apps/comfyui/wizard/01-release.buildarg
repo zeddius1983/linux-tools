@@ -1,0 +1,5 @@
+Select ComfyUI release
+Choose which ComfyUI release to install:
+setup,build
+arg|COMFY_REF
+items-cmd|curl -fsSL 'https://api.github.com/repos/Comfy-Org/ComfyUI/releases?per_page=10' | grep -o '"tag_name": *"[^"]*"' | sed 's/.*"\([^"]*\)"$/\1/'; echo master

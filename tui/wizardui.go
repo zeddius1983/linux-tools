@@ -247,6 +247,11 @@ func (w *wizardSession) state() State {
 		case p.Type == "runtime":
 			it := p.items[p.radio]
 			st.Variant = it.Payload
+			// An `arg|NAME` line makes the same choice a build arg too, so the
+			// variant can select a base image as well as create flags.
+			if p.ArgName != "" {
+				st.BuildArgs = append(st.BuildArgs, "--build-arg", p.ArgName+"="+it.Payload)
+			}
 			st.Pages[p.Name] = []string{it.Name}
 		case p.Type == "buildarg":
 			v := p.items[p.radio].Name

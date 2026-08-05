@@ -93,6 +93,30 @@ func TestRuntimeLabelValueSplit(t *testing.T) {
 	}
 }
 
+// A .runtime page may carry an 'arg|NAME' line so one answer picks both a base
+// image and the create flags. That line is config, never a selectable option.
+func TestRuntimeArgIsConfigNotItem(t *testing.T) {
+	pages, err := LoadPages(filepath.Join(appsDir, "comfyui", "wizard"))
+	if err != nil || len(pages) == 0 {
+		t.Fatalf("load: %v", err)
+	}
+	p := pages[0]
+	if p.Type != "runtime" {
+		t.Fatalf("page 0 type = %q, want runtime", p.Type)
+	}
+	if p.ArgName != "COMFY_GPU" {
+		t.Errorf("ArgName = %q, want COMFY_GPU", p.ArgName)
+	}
+	for _, it := range p.Items {
+		if it.Name == "arg" {
+			t.Error("the arg config line was parsed as a selectable item")
+		}
+	}
+	if len(p.Items) != 2 {
+		t.Errorf("Items = %d, want 2 (amd, nvidia)", len(p.Items))
+	}
+}
+
 func TestAppliesTo(t *testing.T) {
 	p := Page{Applicable: []string{"setup", "build"}}
 	if !p.AppliesTo("setup") || !p.AppliesTo("build") || p.AppliesTo("create") {
@@ -147,10 +171,12 @@ func TestInfoPanelScrolls(t *testing.T) {
 	}
 }
 
-// An app with no README must render a placeholder rather than fail.
+// An app with no README must render a placeholder rather than fail. The name is
+// deliberately one no app dir can have, so adding a README to a real app cannot
+// quietly turn this into a test of nothing.
 func TestInfoPanelMissingReadme(t *testing.T) {
 	p := newInfoPanel(appsDir)
-	out := p.view(App{Name: "comfyui"}, 50, 6)
+	out := p.view(App{Name: "no-such-app"}, 50, 6)
 	if !strings.Contains(out, "No README.md") {
 		t.Errorf("expected placeholder, got:\n%s", out)
 	}

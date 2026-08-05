@@ -1,0 +1,16 @@
+# Route models to ~/.comfyui/models so they persist via Distrobox's shared $HOME.
+# custom_nodes intentionally stays at /opt/ComfyUI/custom_nodes, where
+# ComfyUI-Manager is baked in at image-build time.
+#
+# --base-directory is deliberately NOT used: it relocates custom_nodes too and
+# breaks the baked-in nodes.
+comfyui:
+  base_path: ~/.comfyui/models/
+  checkpoints: checkpoints/
+  vae: vae/
+  loras: loras/
+  controlnet: controlnet/
+  upscale_models: upscale_models/
+  clip: clip/
+  unet: unet/
+  diffusion_models: diffusion_models/

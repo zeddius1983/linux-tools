@@ -117,6 +117,15 @@ func parsePage(path string) (Page, error) {
 			continue
 		}
 
+		// A .runtime page may additionally name a build arg, so one choice can
+		// drive both the create-time variant and the image build (e.g. comfyui's
+		// AMD/NVIDIA pick, which selects a base image *and* GPU passthrough).
+		// "arg" is therefore reserved and cannot be an option label here.
+		if p.Type == "runtime" && len(fields) >= 2 && strings.TrimSpace(fields[0]) == "arg" {
+			p.ArgName = strings.TrimSpace(fields[1])
+			continue
+		}
+
 		it := Item{Name: fields[0]}
 		if len(fields) > 1 {
 			it.Payload = fields[1]

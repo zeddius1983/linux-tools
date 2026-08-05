@@ -10,7 +10,7 @@ Priority order within each section: highest first.
 - [ ] `open-webui` — web UI for local LLMs; works with Ollama and OpenAI-compatible APIs (https://docs.openwebui.com/)
 - [ ] `ollama` — local LLM runtime (GPU-accelerated)
 - [x] `lmstudio` — LM Studio local model runner (setup-time GPU runtime picker: AMD ROCm/Vulkan, or NVIDIA CUDA via CDI `--device nvidia.com/gpu=all`)
-- [x] `comfyui` — node-based UI for generative AI image workflows
+- [x] `comfyui` — node-based UI for generative AI image workflows (setup-time GPU picker selecting both the PyTorch base image and passthrough: AMD ROCm, or NVIDIA CUDA via CDI; plus a release picker over upstream ComfyUI tags)
 - [ ] `aider` — AI pair programmer CLI
 - [ ] `sgpt` — ShellGPT: AI shell assistant; OpenAI + Ollama backends (https://github.com/TheR1D/shell_gpt)
 - [x] `unsloth` — fast LLM fine-tuning (https://unsloth.ai/docs)

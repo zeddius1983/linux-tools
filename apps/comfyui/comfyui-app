@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Desktop entry point (exported as the "ComfyUI" launcher).
+#
+# Starts the server in the background if it isn't already up, waits for it to
+# answer, then opens it as a browser app window on the host.
+export VIRTUAL_ENV=/opt/venv
+export PATH="/opt/venv/bin:${PATH}"
+
+SERVER_URL="http://localhost:8188"
+LOG_FILE="${HOME}/.comfyui/server.log"
+
+if ! curl -sf "${SERVER_URL}" >/dev/null 2>&1; then
+    mkdir -p "${HOME}/.comfyui"
+    nohup /usr/bin/comfyui >"${LOG_FILE}" 2>&1 &
+    disown
+    timeout=120
+    while ! curl -sf "${SERVER_URL}" >/dev/null 2>&1; do
+        sleep 2
+        timeout=$((timeout - 2))
+        if [[ ${timeout} -le 0 ]]; then
+            distrobox-host-exec notify-send "ComfyUI" \
+                "Server failed to start. Check ${LOG_FILE}" 2>/dev/null || true
+            exit 1
+        fi
+    done
+fi
+
+if distrobox-host-exec distrobox list 2>/dev/null | grep -q "chrome-box"; then
+    distrobox-host-exec distrobox enter chrome-box -- \
+        google-chrome --app="${SERVER_URL}" --new-window 2>/dev/null &
+else
+    distrobox-host-exec xdg-open "${SERVER_URL}"
+fi
