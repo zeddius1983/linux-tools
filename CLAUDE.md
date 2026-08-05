@@ -25,6 +25,7 @@ Plain shell commands (file edits, `git`, `grep`, etc.) run fine inside the conta
 
 ```bash
 ./tools.sh install        # symlink as 'tools' in ~/.local/bin + set up completion
+tools build-tui           # build the Go dashboard (host Go, else a container)
 tools setup <app>         # full install: remove existing box+image, build, create, export
 tools export <app>        # re-export after editing an exports file
 tools list                # show all apps with image/box status
@@ -73,6 +74,7 @@ Create `apps/<name>/` with the files below — `Dockerfile`, `exports`, `descrip
 | `Dockerfile` | Container image definition. Can instead be a `Dockerfile.ubuntu` + `Dockerfile.arch` pair — see [Multi-base-image pattern](#multi-base-image-pattern). |
 | `exports` | What to expose to the host (see export types below) |
 | `description` | One-line label shown in the interactive TUI (keep it under ~26 chars — that's the TUI description column width) |
+| `category` | One line naming the dashboard tab the app appears under (e.g. `AI / LLM`, `Development`, `System`, `Browsers`, `Communication`, `Shell`). Missing or empty ⇒ the app lands in an `Other` tab. Preferred tab order lives in `Categories()` in `tui/apps.go`; unknown names are appended alphabetically. |
 | `README.md` | **Required.** App-specific usage docs (see below). Cat-ed by `tools setup` at the end of install, so it doubles as the post-install screen. |
 | `create_flags` | Optional. Extra flags passed to the container engine via `distrobox create --additional-flags`. Use for privileged mode, device passthrough, or volume mounts needed at container creation time (e.g. `--privileged -v /usr/src:/usr/src:ro`). |
 | `post-install` | Optional. Short text snippet `cat`-ed by `tools setup` **before** the README — use it for terse "next step" hints (e.g. `corefreq-setup`). Long-form docs belong in `README.md`. |
@@ -199,7 +201,9 @@ Distrobox mounts the host's `$HOME` inside the container. This means:
 
 ### Interactive TUI
 
-`./tools.sh` with no arguments opens a `whiptail` menu. Each row shows `description | image ref | box name` with fixed column widths (26 / 34) — keep `description` under ~26 chars or it gets truncated with `…`.
+`./tools.sh` with no arguments opens the **Go dashboard** in `tui/` (Bubble Tea v2, modelled on `gh-dash`): category tabs, an app table, a rendered-README panel, native wizard pages and a keybinding footer. `tools install` builds the binary — host Go if present, otherwise a throwaway `golang:1.25-alpine` container — and never fails the install if it cannot. See [`tui/README.md`](tui/README.md) and [`docs/tui-migration.md`](docs/tui-migration.md).
+
+The old `whiptail` menu (`lib/tui.sh`) is the fallback, used when the binary is missing or `LT_NO_GO_TUI=1` is set. It renders each row as `description | image ref | box name` with fixed column widths (26 / 34), so **keep `description` under ~26 chars** while that fallback exists — the dashboard itself sizes columns to the terminal and does not need the limit.
 
 ## Working practices
 

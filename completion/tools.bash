@@ -12,14 +12,14 @@ _tools_complete() {
     script_dir="$(dirname "$script_path")"
     apps_dir="${script_dir}/apps"
 
-    commands="install setup build create export enter rm list"
+    commands="install build-tui setup build create export enter rm list"
 
     case "$COMP_CWORD" in
         1)
             COMPREPLY=($(compgen -W "$commands" -- "$cur"))
             ;;
         2)
-            [[ "$prev" == "list" || "$prev" == "install" ]] && return
+            [[ "$prev" == "list" || "$prev" == "install" || "$prev" == "build-tui" ]] && return
             local app_dir
             apps=""
             for app_dir in "$apps_dir"/*/; do

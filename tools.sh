@@ -29,10 +29,11 @@ usage() {
     cat <<EOF
 Usage: $0 [command] [app]
 
-  (no args)        Launch interactive TUI manager
+  (no args)        Launch the dashboard (LT_NO_GO_TUI=1 for the whiptail menu)
 
 Commands:
   install          Symlink as 'tools' in ~/.local/bin + set up completion
+  build-tui        Build the Go dashboard binary (host Go, else a container)
   setup  <app>     Install app (removes existing box+image first)
   build  <app>     Build container image only
   create <app>     Create distrobox from built image
@@ -48,15 +49,16 @@ EOF
 # ── Entrypoint ───────────────────────────────────────────────────────────────
 
 if [[ $# -eq 0 ]]; then
-    interactive
+    cmd_menu
     exit 0
 fi
 
 command_="$1"
 
 case "$command_" in
-    list)    cmd_list;    exit 0 ;;
-    install) cmd_install; exit 0 ;;
+    list)      cmd_list;      exit 0 ;;
+    install)   cmd_install;   exit 0 ;;
+    build-tui) cmd_build_tui; exit 0 ;;
 esac
 
 [[ $# -ge 2 ]] || { usage; exit 1; }
@@ -68,7 +70,12 @@ case "$command_" in
         # pages can influence the image build; other page types are applied
         # after setup as before.
         wizard_active=0
-        if [[ -t 0 ]] && command -v whiptail &>/dev/null \
+        # LT_SKIP_WIZARD is set by the Go front-end, which has already asked
+        # everything and left its answers in LT_WIZARD_STATE.
+        if [[ -n "${LT_SKIP_WIZARD:-}" ]]; then
+            wizard_require_state "$app" || exit 1
+            wizard_active=1
+        elif [[ -t 0 ]] && command -v whiptail &>/dev/null \
                        && [[ -d "$APPS_DIR/$app/wizard" ]]; then
             wizard_active=1
             setup_tui_theme
@@ -81,8 +88,11 @@ case "$command_" in
         fi
         cmd_setup_finish "$app"
         ;;
-    build)  cmd_build  "$app" ;;
-    create) cmd_create "$app" ;;
+    # These are no-ops unless LT_WIZARD_STATE points at a real file, so they
+    # stay safe for plain scripted invocations — but a front-end that promised
+    # state via LT_SKIP_WIZARD and lost it is an error, not a default build.
+    build)  wizard_require_state "$app" || exit 1; cmd_build  "$app" ;;
+    create) wizard_require_state "$app" || exit 1; cmd_create "$app" ;;
     export) cmd_export "$app" ;;
     enter)  cmd_enter  "$app" ;;
     rm)     cmd_rm     "$app" ;;

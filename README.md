@@ -9,17 +9,19 @@ Manages Linux GUI and CLI applications inside [Distrobox](https://distrobox.it/)
 
 ## Usage
 
-### Interactive TUI (recommended)
+### Dashboard (recommended)
 
 ```bash
 ./tools.sh
 ```
 
-Select an app with the arrow keys and press **ENTER**. Each app shows its description, image ID, image ref, and box name. After selecting, choose an action (Setup / Build / Create / Export / Enter / Remove). Apps with optional configuration (e.g. MCP servers for Claude Code) show a wizard before the final confirmation.
+Opens a dashboard with category tabs, an app table showing image and box state, and the selected app's README rendered beside it. Move with the arrow keys, switch category with `tab`, and press **⏎** to set an app up — apps with optional configuration (tool selection, GPU runtime, upstream release) show their wizard first, then a review screen. `?` lists every key.
+
+See [`tui/README.md`](tui/README.md) for the full key reference. The older `whiptail` menu is still there as a fallback, and `LT_NO_GO_TUI=1 tools` selects it deliberately.
 
 ### Install (one-time)
 
-Symlinks `tools` into `~/.local/bin` and wires up shell completion in `~/.bashrc` (and `~/.zshrc` if present):
+Symlinks `tools` into `~/.local/bin`, wires up shell completion in `~/.bashrc` (and `~/.zshrc` if present), and builds the dashboard binary — using host Go if you have it, otherwise a throwaway container, and skipping it harmlessly if you have neither:
 
 ```bash
 ./tools.sh install

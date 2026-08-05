@@ -58,4 +58,8 @@ Priority order within each section: highest first.
 
 - [x] `shell-toolbox` — Zsh shell exported to the host, with optional utilities: fzf, bat, glow, ripgrep, eza, zoxide, fd, delta
 
+## Tooling / Infrastructure
+
+- [ ] Replace the host TUI (`whiptail`) with a **Go dashboard** modelled on [`gh-dash`](https://github.com/dlvhdr/gh-dash): category tabs, an app table, and a README info panel. Built on Bubble Tea v2 / Lip Gloss v2 / Glamour — *not* `huh`, which is a form library and cannot express tabs plus a table plus a sidebar (gh-dash uses no huh either, and huh still depends on Bubble Tea v1). The bash `cmd_*` backend (`lib/commands.sh`) is untouched: actions suspend the dashboard with `tea.ExecProcess` so podman output streams normally, then it resumes. Wizard pages are native too: answers are collected in Go and handed to bash through a state file, so `whiptail` is no longer reached from the dashboard. `tools install` builds the binary through a ladder — existing binary, else host Go, else a throwaway `golang:1.25-alpine` container with a named volume for the module cache, else skip and keep whiptail — so Go never becomes a dependency of using linux-tools. `tools` now opens the dashboard, with the whiptail menu as the fallback behind `LT_NO_GO_TUI=1`. Remaining: retiring `lib/tui.sh` once it has enough mileage, and multi-app select. Design doc: [`docs/tui-migration.md`](docs/tui-migration.md).
+
 ## Misc / Fun
