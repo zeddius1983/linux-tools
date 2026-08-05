@@ -62,6 +62,16 @@ RUN git clone --depth=1 https://github.com/ltdrdata/ComfyUI-Manager.git \
 
 COPY extra_model_paths.yaml /opt/ComfyUI/extra_model_paths.yaml
 
+# Tray icon dependencies. Installed in the common stage rather than in each base
+# because both bases are Ubuntu 24.04 and the package set is identical.
+# These land in the *system* python (/usr/lib/python3/dist-packages), not
+# /opt/venv -- comfyui-tray runs on /usr/bin/python3 for exactly that reason.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3-gi gir1.2-gtk-3.0 \
+        gir1.2-ayatanaappindicator3-0.1 libayatana-appindicator3-1 \
+    && rm -rf /var/lib/apt/lists/*
+COPY icon.svg /usr/share/comfyui/comfyui.svg
+
 # ComfyUI writes user/, output/ and temp/ under its install dir at runtime, as
 # the (non-root) Distrobox user — without this it dies with PermissionError.
 RUN chmod -R a+rwX /opt/ComfyUI
@@ -69,7 +79,10 @@ RUN chmod -R a+rwX /opt/ComfyUI
 # Wrappers must live in /usr/bin/ — command -pv does not search /usr/local/bin.
 COPY comfyui-run /usr/bin/comfyui
 COPY comfyui-app /usr/bin/comfyui-app
+COPY comfyui-open /usr/bin/comfyui-open
 COPY comfyui-stop /usr/bin/comfyui-stop
-RUN chmod +x /usr/bin/comfyui /usr/bin/comfyui-app /usr/bin/comfyui-stop
+COPY comfyui-tray /usr/bin/comfyui-tray
+RUN chmod +x /usr/bin/comfyui /usr/bin/comfyui-app /usr/bin/comfyui-open \
+        /usr/bin/comfyui-stop /usr/bin/comfyui-tray
 
 CMD ["/bin/bash"]

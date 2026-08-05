@@ -1,3 +1,5 @@
 gui:comfyui-app:ComfyUI
+gui:comfyui-tray:ComfyUI Tray
 bin:comfyui
 bin:comfyui-stop
+bin:comfyui-tray

@@ -34,9 +34,12 @@ if ! curl -sf "${SERVER_URL}" >/dev/null 2>&1; then
     done
 fi
 
-if distrobox-host-exec distrobox list 2>/dev/null | grep -q "chrome-box"; then
-    distrobox-host-exec distrobox enter chrome-box -- \
-        google-chrome --app="${SERVER_URL}" --new-window 2>/dev/null &
-else
-    distrobox-host-exec xdg-open "${SERVER_URL}"
-fi
+# Bring up the tray so there is something to stop the server with -- launched
+# this way there is no terminal to Ctrl-C. Best effort on purpose: a desktop
+# with no StatusNotifier host, or a missing indicator library, must not stop
+# ComfyUI from opening. comfyui-tray takes a lock and exits quietly if one is
+# already running.
+setsid /usr/bin/comfyui-tray >/dev/null 2>&1 &
+disown 2>/dev/null || true
+
+exec /usr/bin/comfyui-open

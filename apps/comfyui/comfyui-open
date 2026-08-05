@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Open the ComfyUI web UI on the host.
+#
+# Split out of comfyui-app so the tray can reuse it without re-entering the
+# launcher's start-the-server logic.
+set -euo pipefail
+
+SERVER_URL="http://localhost:8188"
+
+# An app-mode Chrome window if the chrome box is around, otherwise whatever the
+# host uses for http://.
+if distrobox-host-exec distrobox list 2>/dev/null | grep -q "chrome-box"; then
+    distrobox-host-exec distrobox enter chrome-box -- \
+        google-chrome --app="${SERVER_URL}" --new-window 2>/dev/null &
+else
+    distrobox-host-exec xdg-open "${SERVER_URL}"
+fi

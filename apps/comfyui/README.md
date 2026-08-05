@@ -85,7 +85,9 @@ The CUDA wheels are built for **CUDA 12.8**, which needs host driver **≥ 570**
 | `comfyui` | Runs the server in the foreground on `http://localhost:8188` |
 | `comfyui --help` | ComfyUI's own flags (extra flags are appended to the defaults) |
 | `comfyui-stop` | Stops a running server, however it was started |
-| ComfyUI (desktop launcher) | Starts the server if it isn't running, then opens it as a browser app window |
+| `comfyui-tray` | Tray icon with a Start/Stop menu |
+| ComfyUI (desktop launcher) | Starts the server, brings up the tray, opens a browser app window |
+| ComfyUI Tray (desktop launcher) | Just the tray icon |
 
 ```bash
 comfyui                      # foreground, Ctrl-C to stop
@@ -95,10 +97,39 @@ comfyui --port 9000          # extra flags pass straight through
 The desktop entry uses `chrome-box` for an app-mode window if that box exists,
 and falls back to `xdg-open`. Its server log goes to `~/.comfyui/server.log`.
 
+### Tray icon
+
+Launching ComfyUI from the desktop entry also puts an icon in the notification
+area, so a detached server is not something you have to hunt for afterwards:
+
+| Menu item | |
+|---|---|
+| `Server: running (2 queued)` | Live status, refreshed every 3s |
+| Open in browser | Same window the launcher opens |
+| Start / Stop server | Toggles with the current state |
+| Show log | Opens `~/.comfyui/server.log` |
+| Quit tray | Leaves the server running |
+
+Stop asks before discarding queued prompts, offering **Stop anyway**.
+
+Start it on its own with `comfyui-tray` or the "ComfyUI Tray" desktop entry; it
+holds a lock and exits quietly if one is already running. To have it come up
+with your session:
+
+```bash
+cp ~/.local/share/applications/comfyui-box-comfyui-tray.desktop ~/.config/autostart/
+```
+
+It needs a StatusNotifier host on the session bus — standard on KDE, Cinnamon and
+XFCE. GNOME needs the AppIndicator extension. If there is none, the tray simply
+does not appear and everything else still works; the launcher treats it as
+best-effort and never fails ComfyUI's start over it.
+
 ### Stopping it
 
 A foreground `comfyui` stops with Ctrl-C. The desktop launcher starts the server
-**detached**, so there is no terminal to Ctrl-C — use:
+**detached**, so there is no terminal to Ctrl-C — use the tray's **Stop server**,
+or:
 
 ```bash
 comfyui-stop            # interrupt current prompt, then stop
