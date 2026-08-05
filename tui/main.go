@@ -305,7 +305,7 @@ func (m *model) onWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 		return m, nil // horizontal wheel: nothing to scroll sideways
 	}
 
-	if msg.X >= m.tableWidth()+dividerWidth {
+	if m.showInfo() && msg.X >= m.tableWidth()+dividerWidth {
 		if up {
 			m.info.scroll(-3)
 		} else {
@@ -337,7 +337,12 @@ func (m *model) onWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 // tableWidth is the left pane's width. View derives the same number; keeping it
 // here means the wheel and the renderer cannot disagree about where the panel
 // starts.
-func (m *model) tableWidth() int { return m.w - m.infoWidth() - dividerWidth }
+func (m *model) tableWidth() int {
+	if !m.showInfo() {
+		return m.w
+	}
+	return m.w - m.infoWidth() - dividerWidth
+}
 
 func (m *model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	k := msg.String()
@@ -505,9 +510,19 @@ func (m *model) View() tea.View {
 	b.WriteString(m.tabsView())
 	b.WriteString("\n")
 
+	tableW := m.tableWidth()
+	if !m.showInfo() {
+		// Too narrow for both: the table gets everything.
+		b.WriteString(m.tableView(tableW))
+		b.WriteString("\n")
+		b.WriteString(styBorder.Render(strings.Repeat("─", m.w)))
+		b.WriteString("\n")
+		b.WriteString(m.footerView())
+		return altView(b.String())
+	}
+
 	// Table on the left, README info panel on the right.
 	infoW := m.infoWidth()
-	tableW := m.tableWidth()
 	// The divider must be built as a column of its own. JoinHorizontal pads a
 	// single-line element with blanks on every following line rather than
 	// repeating it, so " │ " on its own drew the separator only on row one.
@@ -558,7 +573,18 @@ const (
 	minTableWidth = 30
 	// dividerWidth is the " │ " column between the table and the panel.
 	dividerWidth = 3
+	// minPanelWidth is the narrowest README panel worth drawing. Below this,
+	// wrapped markdown is a column of fragments, and the space does more good
+	// as table.
+	minPanelWidth = 40
 )
+
+// showInfo reports whether there is room for both panes. On a narrow terminal
+// the panel is dropped entirely rather than squeezed: the table then spans the
+// full width, and the README is still one `less` away outside the dashboard.
+func (m *model) showInfo() bool {
+	return m.w >= minTableWidth+dividerWidth+minPanelWidth
+}
 
 func (m *model) infoView(width int) string {
 	a, ok := m.current()
@@ -770,9 +796,11 @@ func (m *model) keysLine() string {
 		}
 		parts = append(parts, styKey.Render(key)+styDesc.Render(" "+a.name))
 	}
+	parts = append(parts, styKey.Render("o")+styDesc.Render(" shell"))
+	if m.showInfo() {
+		parts = append(parts, styKey.Render("PgDn/PgUp")+styDesc.Render(" scroll readme"))
+	}
 	parts = append(parts,
-		styKey.Render("o")+styDesc.Render(" shell"),
-		styKey.Render("PgDn/PgUp")+styDesc.Render(" scroll readme"),
 		styKey.Render("/")+styDesc.Render(" filter"),
 		styKey.Render("?")+styDesc.Render(" help"),
 		styKey.Render("q")+styDesc.Render(" quit"),

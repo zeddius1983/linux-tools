@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // keyPress builds the message the dashboard's key handler expects, so tests can
@@ -297,6 +298,48 @@ func TestWizardPageFitsTheScreen(t *testing.T) {
 		top, end := m.wiz.window(m.wizardRows())
 		if cursor < top || cursor >= end {
 			t.Errorf("cursor %d outside the drawn window %d-%d", cursor, top, end)
+		}
+	}
+}
+
+// On a terminal too narrow for both panes the README is dropped and the table
+// takes the full width, rather than both being squeezed.
+func TestPanelHiddenWhenNarrow(t *testing.T) {
+	apps, err := LoadApps(appsDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := newModel(apps, appsDir, "tools", true)
+	m.h = 24
+
+	m.w = minTableWidth + dividerWidth + minPanelWidth
+	if !m.showInfo() {
+		t.Errorf("panel hidden at %d, the width it just fits in", m.w)
+	}
+	if !strings.Contains(m.View().Content, "│") {
+		t.Error("no divider drawn while the panel is shown")
+	}
+
+	m.w--
+	if m.showInfo() {
+		t.Errorf("panel still shown at %d", m.w)
+	}
+	if m.tableWidth() != m.w {
+		t.Errorf("table width = %d, want the full %d", m.tableWidth(), m.w)
+	}
+	view := m.View().Content
+	if strings.Contains(view, "│") {
+		t.Error("divider drawn with no panel beside it")
+	}
+	if strings.Contains(view, "scroll readme") {
+		t.Error("footer offers a scroll key for a panel that is not drawn")
+	}
+	// The table body only: the tab bar and the key legend are single long
+	// strings that overflow a narrow terminal whatever the panel does.
+	lines := strings.Split(view, "\n")
+	for _, line := range lines[2 : len(lines)-3] {
+		if w := lipgloss.Width(line); w > m.w {
+			t.Errorf("table line %d cells wide, want at most %d: %q", w, m.w, line)
 		}
 	}
 }

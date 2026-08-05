@@ -166,6 +166,11 @@ table's own 30-column minimum (`minTableWidth` in `main.go`), which bites below
 about 66 columns — the panel gives width back rather than let the table header
 wrap.
 
+Below 73 columns (`minTableWidth + dividerWidth + minPanelWidth`) the panel is
+dropped entirely and the table spans the full width. A README wrapped into 30-odd
+columns is a stack of fragments, and the space is worth more as table; the
+footer stops offering `PgDn`/`PgUp` when there is nothing to scroll.
+
 Shows only the rendered `apps/<name>/README.md` — image and box state live in
 the table columns, so repeating them here would just cost README rows. Rendered
 with Glamour, cached per app and width, scrollable. Apps without a README show a
