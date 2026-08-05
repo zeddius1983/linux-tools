@@ -106,7 +106,7 @@ area, so a detached server is not something you have to hunt for afterwards:
 | `Server: running (2 queued)` | Live status, refreshed every 3s |
 | Open in browser | Same window the launcher opens |
 | Start / Stop server | Toggles with the current state |
-| Show log | Opens `~/.comfyui/server.log` in `less -r +F` in a terminal |
+| Show log | Opens `~/.comfyui/server.log` in `less -rf +F` in a terminal |
 | Close | Stops the server, then hides the tray |
 
 Stop asks before discarding queued prompts, offering **Stop anyway**.
@@ -117,7 +117,7 @@ state the tray exists to prevent. If prompts are queued you still get the
 **Stop anyway** prompt, and declining it cancels the close too, leaving both the
 queue and the tray intact.
 
-**Show log** opens the server log in `less -r +F` in a host terminal, so a
+**Show log** opens the server log in `less -rf +F` in a host terminal, so a
 running server's output scrolls live, keeps its colours, and collapses tqdm
 progress bars to a single line the way `tail -f` does. `Ctrl-C` stops
 following and leaves you in normal `less` navigation; `F` resumes. It picks the first of ghostty, kitty, alacritty,

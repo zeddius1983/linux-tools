@@ -249,20 +249,27 @@ class Tray:
         live the way `tail -f` would; Ctrl-C drops into normal less navigation
         (and F resumes following), which an editor's static snapshot cannot do.
 
-        A control-char flag is not optional. ComfyUI colours its log with ANSI
-        escapes, and with neither -r nor -R less calls the file binary, prompts
-        "See it anyway?", and dies against +F -- the terminal flashes open and
-        shuts.
+        Both -r and -f are needed, for different reasons.
 
-        -r rather than -R, because tqdm draws its progress bars by rewriting one
-        line with carriage returns. -R forwards only colour escapes and renders
-        everything else literally, so every intermediate redraw shows up as
-        "^M 5%|... ^M 30%|..." strung along one line. -r forwards CR too, so the
-        terminal overwrites in place and a finished bar reads as a single
-        "100%|####|" -- the way `tail -f` shows it. The documented cost of -r is
-        that less can misjudge the width of lines containing control characters,
-        which can smear horizontal scrolling; for a log this is the better
-        trade.
+        -r, because tqdm draws its progress bars by rewriting one line with
+        carriage returns. -R forwards only colour escapes and renders every
+        other control character literally, so each intermediate redraw shows up
+        as "^M 5%|... ^M 30%|..." strung along one line. -r forwards CR too, so
+        the terminal overwrites in place and a finished bar reads as a single
+        "100%|####|" -- the way `tail -f` shows it.
+
+        -f, because -r does NOT stop less counting those control characters
+        toward its binary-file heuristic: it prompts "may be a binary file. See
+        it anyway?" and then dies against +F, so the terminal flashes open and
+        shuts. -R happens to suppress that prompt (it treats the escapes as
+        known-good), which is exactly why testing with -R hid the problem. -f is
+        the flag that actually suppresses the warning, and it is independent of
+        how control chars are rendered. Measured under a pty on a real log:
+        -r alone prompts, -r -f does not, and neither shows a literal ^M.
+
+        The documented cost of -r is that less can misjudge the width of lines
+        containing control characters, which can smear horizontal scrolling; for
+        a log this is the better trade.
 
         Falls back to xdg-open if the host has no terminal we recognise.
         """
@@ -270,7 +277,7 @@ class Tray:
         if term:
             run_detached(
                 ["distrobox-host-exec", term, TERMINALS[term],
-                 "less", "-r", "+F", LOG_FILE]
+                 "less", "-r", "-f", "+F", LOG_FILE]
             )
         else:
             run_detached(["distrobox-host-exec", "xdg-open", LOG_FILE])
