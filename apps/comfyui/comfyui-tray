@@ -24,6 +24,7 @@ import signal
 import subprocess
 import sys
 import threading
+import time
 import urllib.error
 import urllib.request
 
@@ -55,6 +56,8 @@ ICON_DIR = os.path.expanduser("~/.comfyui/icons")
 LOG_FILE = os.path.expanduser("~/.comfyui/server.log")
 LOCK_FILE = os.path.expanduser("~/.comfyui/tray.lock")
 POLL_SECONDS = 3
+# Generous: a cold start imports torch and every custom node before it listens.
+START_TIMEOUT = 300
 
 
 def install_icon():
@@ -156,6 +159,8 @@ class Tray:
         # thread, so the close has to wait for its result rather than happening
         # inline.
         self.close_after_stop = False
+        self.proc = None
+        self.start_deadline = 0.0
         self.refresh()
         GLib.timeout_add_seconds(POLL_SECONDS, self.refresh)
 
@@ -222,19 +227,42 @@ class Tray:
         # not take the server with it. Signal dispositions are left at their
         # defaults, which is what keeps the server killable with SIGINT -- see
         # the `set -m` note in comfyui-app.
-        subprocess.Popen(
+        self.proc = subprocess.Popen(
             ["/usr/bin/comfyui"],
             stdout=log,
             stderr=subprocess.STDOUT,
             start_new_session=True,
         )
         self.set_busy(True, "Server: starting…")
-        GLib.timeout_add_seconds(2, self._clear_busy)
+        self.start_deadline = time.monotonic() + START_TIMEOUT
+        GLib.timeout_add_seconds(2, self._await_start)
 
-    def _clear_busy(self):
-        self.set_busy(False)
-        self.refresh()
-        return False
+    def _await_start(self):
+        """Hold Start disabled until the server actually answers.
+
+        A fixed delay is wrong here: importing torch and the custom nodes takes
+        well over a couple of seconds on a cold start, and clearing busy early
+        makes refresh() report "stopped" (nothing is listening yet) and
+        re-enable Start — so a second click launches a second ComfyUI that then
+        fights the first for the port.
+        """
+        running, _ = server_state()
+        if running:
+            self.set_busy(False)
+            self.refresh()
+            return False
+        # Give up if the process is gone (it failed) or startup ran long enough
+        # that something is clearly wrong. Either way refresh() reports the real
+        # state and Start becomes usable again.
+        if self.proc.poll() is not None or time.monotonic() > self.start_deadline:
+            print(
+                f"comfyui-tray: server did not come up; see {LOG_FILE}",
+                file=sys.stderr,
+            )
+            self.set_busy(False)
+            self.refresh()
+            return False
+        return True  # keep waiting
 
     def stop(self, force):
         """Run comfyui-stop off the main loop so the menu never freezes."""

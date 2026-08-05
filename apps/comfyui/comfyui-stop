@@ -7,7 +7,7 @@
 set -euo pipefail
 
 PATTERN="/opt/venv/bin/python main.py"
-SERVER_URL="http://localhost:8188"
+DEFAULT_PORT=8188
 
 force=0
 case "${1:-}" in
@@ -23,29 +23,56 @@ case "${1:-}" in
     *)  echo "comfyui-stop: unknown option '$1'" >&2; exit 2 ;;
 esac
 
-if ! pgrep -f "$PATTERN" >/dev/null 2>&1; then
+mapfile -t pids < <(pgrep -f "$PATTERN" || true)
+if [[ ${#pids[@]} -eq 0 ]]; then
     echo "ComfyUI is not running."
     exit 0
 fi
 
+# The port is read back off each process rather than assumed. `comfyui --port
+# 9000` is documented, and pgrep matches it regardless of port — so a hardcoded
+# 8188 would query nothing (silently skipping the queued-prompt guard entirely,
+# since an unreachable server looks the same as an idle one) and could POST
+# /interrupt to whatever unrelated service happens to own 8188.
+# argparse accepts both "--port 9000" and "--port=9000".
+port_of() {
+    local cmd port
+    cmd="$(tr '\0' ' ' < "/proc/$1/cmdline" 2>/dev/null || true)"
+    port="$(grep -oE -- '--port[= ]+[0-9]+' <<< "$cmd" | grep -oE '[0-9]+$' || true)"
+    printf '%s' "${port:-$DEFAULT_PORT}"
+}
+
+# Prints the queue length, or nothing at all when the server did not answer.
+# Empty is deliberately distinct from 0: "cannot tell" must not be treated as
+# "nothing queued".
+queue_of() {
+    local body
+    body="$(curl -sf "http://localhost:$1/prompt" 2>/dev/null || true)"
+    [[ -n "$body" ]] || return 0
+    grep -oE '"queue_remaining": *[0-9]+' <<< "$body" | grep -oE '[0-9]+$' || true
+}
+
 # Queued prompts are held in memory and are lost with the process, so a stop
 # with work pending destroys it. Say so rather than doing it silently.
-if curl -sf "$SERVER_URL/prompt" -o /tmp/.comfyui-queue.$$ 2>/dev/null; then
-    queued="$(grep -o '"queue_remaining": *[0-9]*' /tmp/.comfyui-queue.$$ \
-        | grep -o '[0-9]*$' || echo 0)"
-    rm -f /tmp/.comfyui-queue.$$
-    if [[ "${queued:-0}" -gt 0 && $force -eq 0 ]]; then
-        echo "ComfyUI has ${queued} prompt(s) queued; they will be lost." >&2
-        echo "Wait for them, or re-run: comfyui-stop --force" >&2
-        exit 1
-    fi
+if [[ $force -eq 0 ]]; then
+    for pid in "${pids[@]}"; do
+        queued="$(queue_of "$(port_of "$pid")")"
+        if [[ -n "$queued" && "$queued" -gt 0 ]]; then
+            echo "ComfyUI (pid ${pid}, port $(port_of "$pid")) has ${queued} prompt(s) queued;" >&2
+            echo "they will be lost. Wait for them, or re-run: comfyui-stop --force" >&2
+            exit 1
+        fi
+    done
 fi
 
 # Interrupt whatever is mid-generation so the process is not signalled partway
 # through a sampling step. /interrupt only stops the *running* prompt.
-if curl -sf "$SERVER_URL" >/dev/null 2>&1; then
-    curl -sf -X POST "$SERVER_URL/interrupt" >/dev/null 2>&1 || true
-fi
+for pid in "${pids[@]}"; do
+    port="$(port_of "$pid")"
+    if curl -sf "http://localhost:${port}" >/dev/null 2>&1; then
+        curl -sf -X POST "http://localhost:${port}/interrupt" >/dev/null 2>&1 || true
+    fi
+done
 
 # SIGINT is preferred: it is what Ctrl-C sends, so Python raises
 # KeyboardInterrupt and unwinds normally, while SIGTERM's default action
@@ -65,8 +92,7 @@ sigint_ignored() {
 }
 
 echo "Stopping ComfyUI..."
-mapfile -t pids < <(pgrep -f "$PATTERN")
-for pid in ${pids[@]+"${pids[@]}"}; do
+for pid in "${pids[@]}"; do
     if sigint_ignored "$pid"; then
         echo "  pid ${pid}: ignores SIGINT (started detached by an older" \
              "launcher) — using SIGTERM"
