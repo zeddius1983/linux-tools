@@ -1,0 +1,430 @@
+#!/usr/bin/python3
+"""System tray icon for ComfyUI (exported to the host as `comfyui-tray`).
+
+Exists because the desktop launcher starts the server detached: there is no
+window and no terminal, so once it is running there is nothing to interact with
+and no obvious way to stop it. This puts a status indicator and a Stop item in
+the notification area.
+
+The shebang is /usr/bin/python3 on purpose and must stay that way. The image
+puts /opt/venv/bin first on PATH, so `#!/usr/bin/env python3` would resolve to
+the venv interpreter -- which has torch but no `gi`. This process needs the
+system interpreter's PyGObject and never needs torch.
+
+Every action shells out to the scripts that already own that behaviour
+(comfyui / comfyui-stop / comfyui-open) rather than reimplementing it.
+"""
+
+import fcntl
+import glob
+import json
+import os
+import shutil
+import signal
+import subprocess
+import sys
+import threading
+import time
+import urllib.error
+import urllib.request
+
+import gi
+
+gi.require_version("Gtk", "3.0")
+# Ayatana is the maintained fork and what Ubuntu 24.04 ships; the older
+# AppIndicator3 name is still what some desktops provide.
+try:
+    gi.require_version("AyatanaAppIndicator3", "0.1")
+    from gi.repository import AyatanaAppIndicator3 as AppIndicator
+except (ValueError, ImportError):
+    gi.require_version("AppIndicator3", "0.1")
+    from gi.repository import AppIndicator3 as AppIndicator
+
+from gi.repository import GLib, Gtk  # noqa: E402
+
+SERVER_URL = "http://localhost:8188"
+ICON_NAME = "comfyui-tray"
+ICON_SRC = "/usr/share/comfyui/comfyui-tray.svg"
+# NOT /usr/share/comfyui. StatusNotifierItem hands the panel only an icon *name*
+# and a *theme path* -- the panel then opens the file itself, and the panel
+# (xapp-sn-watcher, plasmashell, …) runs on the HOST, where nothing this
+# container installs under /usr exists. A container-only theme path therefore
+# always resolves for us and never for the consumer: the item registers, the
+# menu works, and no icon is drawn. $HOME is shared with the host by Distrobox,
+# so an icon staged here is readable from both sides.
+ICON_DIR = os.path.expanduser("~/.comfyui/icons")
+LOG_FILE = os.path.expanduser("~/.comfyui/server.log")
+LOCK_FILE = os.path.expanduser("~/.comfyui/tray.lock")
+POLL_SECONDS = 3
+# Generous: a cold start imports torch and every custom node before it listens.
+START_TIMEOUT = 300
+
+
+def install_icon():
+    """Stage the icon in shared $HOME, where the host's panel can read it.
+
+    Copied on every start rather than only when missing, so a rebuilt image
+    with a new icon takes effect without the user having to clear anything.
+    Failure is not fatal: a tray with a missing icon is still a working menu.
+    """
+    try:
+        os.makedirs(ICON_DIR, exist_ok=True)
+        # Clear any other extension left by an earlier image (this used to stage
+        # a .png). Two files answering to one icon name is an ambiguity GTK
+        # resolves however it likes, and the stale one could win.
+        for stale in glob.glob(os.path.join(ICON_DIR, ICON_NAME + ".*")):
+            os.remove(stale)
+        shutil.copyfile(
+            ICON_SRC,
+            os.path.join(ICON_DIR, ICON_NAME + os.path.splitext(ICON_SRC)[1]),
+        )
+    except OSError as e:
+        print(f"comfyui-tray: could not stage icon: {e}", file=sys.stderr)
+
+
+def single_instance():
+    """Hold a lock for the session, or exit if another tray already has it.
+
+    The lock fd is intentionally leaked: it must stay open for the process
+    lifetime, and the kernel drops it on exit however we die.
+    """
+    os.makedirs(os.path.dirname(LOCK_FILE), exist_ok=True)
+    fd = os.open(LOCK_FILE, os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        print("comfyui-tray: already running", file=sys.stderr)
+        sys.exit(0)
+    return fd
+
+
+def server_state():
+    """(running, queued). queued is None when the server did not answer."""
+    try:
+        with urllib.request.urlopen(f"{SERVER_URL}/prompt", timeout=2) as r:
+            info = json.load(r).get("exec_info", {})
+            return True, info.get("queue_remaining", 0)
+    except (urllib.error.URLError, OSError, ValueError):
+        return False, None
+
+
+# Same preference order as pick_terminal() in lib/helpers.sh, with the flag each
+# one needs before a command (matching terminal_exec_prefix there).
+TERMINALS = {
+    "ghostty": "-e",
+    "kitty": "-e",
+    "alacritty": "-e",
+    "gnome-terminal": "--",
+    "xfce4-terminal": "--",
+    "mate-terminal": "--",
+    "konsole": "--",
+    "xterm": "-e",
+}
+
+_host_terminal = None
+
+
+def host_terminal():
+    """Name of the first terminal available *on the host*, or "" if none.
+
+    The terminal has to be the host's: this container ships none, and the log
+    lives in the shared $HOME where the host can read it directly. Result is
+    cached — the probe costs two round trips through host-spawn.
+    """
+    global _host_terminal
+    if _host_terminal is not None:
+        return _host_terminal
+    # Absorb the host-spawn bootstrap first. The very first distrobox-host-exec
+    # call in a freshly created box returns nothing while it installs its
+    # helper, and an empty answer here is indistinguishable from "no terminal
+    # installed" -- the same trap that made comfyui-open fall back to xdg-open.
+    subprocess.run(["distrobox-host-exec", "true"], capture_output=True)
+    script = (
+        "for t in " + " ".join(TERMINALS) + "; do "
+        'command -v "$t" >/dev/null 2>&1 && { echo "$t"; exit 0; }; done'
+    )
+    try:
+        out = subprocess.run(
+            ["distrobox-host-exec", "bash", "-c", script],
+            capture_output=True,
+            text=True,
+            timeout=20,
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        out = ""
+    _host_terminal = out if out in TERMINALS else ""
+    return _host_terminal
+
+
+def run_detached(argv):
+    subprocess.Popen(
+        argv,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
+
+class Tray:
+    def __init__(self):
+        self.indicator = AppIndicator.Indicator.new_with_path(
+            "comfyui",
+            ICON_NAME,
+            AppIndicator.IndicatorCategory.APPLICATION_STATUS,
+            ICON_DIR,
+        )
+        self.indicator.set_status(AppIndicator.IndicatorStatus.ACTIVE)
+        self.indicator.set_title("ComfyUI")
+
+        self.menu = Gtk.Menu()
+        self.item_status = Gtk.MenuItem(label="Checking…")
+        self.item_status.set_sensitive(False)
+        self.item_open = Gtk.MenuItem(label="Open in browser")
+        self.item_open.connect("activate", self.on_open)
+        self.item_toggle = Gtk.MenuItem(label="Start server")
+        self.item_toggle.connect("activate", self.on_toggle)
+        self.item_log = Gtk.MenuItem(label="Show log")
+        self.item_log.connect("activate", self.on_log)
+        self.item_close = Gtk.MenuItem(label="Close")
+        self.item_close.connect("activate", self.on_close)
+
+        for item in (
+            self.item_status,
+            Gtk.SeparatorMenuItem(),
+            self.item_open,
+            self.item_toggle,
+            self.item_log,
+            Gtk.SeparatorMenuItem(),
+            self.item_close,
+        ):
+            self.menu.append(item)
+        self.menu.show_all()
+        self.indicator.set_menu(self.menu)
+
+        self.running = False
+        self.busy = False
+        # Set when Close is chosen with the server up: the stop runs on a worker
+        # thread, so the close has to wait for its result rather than happening
+        # inline.
+        self.close_after_stop = False
+        self.proc = None
+        self.start_deadline = 0.0
+        self.refresh()
+        GLib.timeout_add_seconds(POLL_SECONDS, self.refresh)
+
+    # --- state ---------------------------------------------------------------
+
+    def refresh(self):
+        if self.busy:
+            return True
+        running, queued = server_state()
+        self.running = running
+        if running:
+            label = "Server: running"
+            if queued:
+                label += f" ({queued} queued)"
+        else:
+            label = "Server: stopped"
+        self.item_status.set_label(label)
+        self.item_toggle.set_label("Stop server" if running else "Start server")
+        self.item_open.set_sensitive(running)
+        self.indicator.set_label("" if running else "", "ComfyUI")
+        return True  # keep the timeout armed
+
+    def set_busy(self, busy, label=None):
+        self.busy = busy
+        self.item_toggle.set_sensitive(not busy)
+        if label:
+            self.item_status.set_label(label)
+
+    # --- actions -------------------------------------------------------------
+
+    def on_open(self, *_):
+        run_detached(["/usr/bin/comfyui-open"])
+
+    def on_log(self, *_):
+        """Tail the log in a terminal pager, not a text editor.
+
+        `less +F` starts in follow mode, so a running server's output scrolls
+        live the way `tail -f` would; Ctrl-C drops into normal less navigation
+        (and F resumes following), which an editor's static snapshot cannot do.
+
+        less, specifically -- `ov` was tried and is worse for this log. tqdm
+        redraws its progress bar by rewriting one line with carriage returns,
+        and the only thing that renders that correctly is passing the CR
+        through so the terminal overwrites in place. ov swallows CR entirely
+        (measured on this log: raw_CR=0 for `ov -f` and for
+        `ov --converter raw -f`, versus 55 for `less -r -f +F`), so every
+        intermediate redraw ends up side by side on one very long line. Note
+        that counting literal "^M" does NOT distinguish these: ov scores zero
+        there while still rendering wrongly.
+
+        Both -r and -f are needed, for different reasons.
+
+        -r, because tqdm draws its progress bars by rewriting one line with
+        carriage returns. -R forwards only colour escapes and renders every
+        other control character literally, so each intermediate redraw shows up
+        as "^M 5%|... ^M 30%|..." strung along one line. -r forwards CR too, so
+        the terminal overwrites in place and a finished bar reads as a single
+        "100%|####|" -- the way `tail -f` shows it.
+
+        -f, because -r does NOT stop less counting those control characters
+        toward its binary-file heuristic: it prompts "may be a binary file. See
+        it anyway?" and then dies against +F, so the terminal flashes open and
+        shuts. -R happens to suppress that prompt (it treats the escapes as
+        known-good), which is exactly why testing with -R hid the problem. -f is
+        the flag that actually suppresses the warning, and it is independent of
+        how control chars are rendered. Measured under a pty on a real log:
+        -r alone prompts, -r -f does not, and neither shows a literal ^M.
+
+        The documented cost of -r is that less can misjudge the width of lines
+        containing control characters, which can smear horizontal scrolling; for
+        a log this is the better trade.
+
+        Falls back to xdg-open if the host has no terminal we recognise.
+        """
+        term = host_terminal()
+        if term:
+            # Routed through `bash -c` rather than handed to the terminal as a
+            # bare argv, because ghostty's CLI parser eats "+"-prefixed
+            # arguments before passing the command on: `ghostty -e less -r -f
+            # +F FILE` starts `less -r -f FILE`, silently dropping follow mode
+            # (confirmed by reading the child's /proc/<pid>/cmdline). Inside a
+            # quoted -c string the +F is invisible to that parser, and this is
+            # safe for every other terminal too. ov needs no such wrapper — its
+            # follow flag is a plain -f.
+            run_detached(
+                ["distrobox-host-exec", term, TERMINALS[term],
+                 "bash", "-c", 'exec less -r -f +F "$1"', "_", LOG_FILE]
+            )
+        else:
+            run_detached(["distrobox-host-exec", "xdg-open", LOG_FILE])
+
+    def on_close(self, *_):
+        """Stop the server, then close the tray.
+
+        Closing without stopping left the server with no icon, no window and no
+        terminal — the exact state this tray exists to prevent — so Close takes
+        the server with it. The one thing that can still interrupt the sequence
+        is comfyui-stop refusing while prompts are queued; that prompt is a
+        data-loss guard, and declining it cancels the close as well (see
+        _stopped), because keeping the queue and stranding the server would be
+        the worst of both.
+        """
+        if not self.running:
+            Gtk.main_quit()
+            return
+        self.close_after_stop = True
+        self.stop(force=False)
+
+    def on_toggle(self, *_):
+        if self.running:
+            self.stop(force=False)
+        else:
+            self.start()
+
+    def start(self):
+        os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
+        log = open(LOG_FILE, "ab")
+        # start_new_session detaches it from the tray, so quitting the tray does
+        # not take the server with it. Signal dispositions are left at their
+        # defaults, which is what keeps the server killable with SIGINT -- see
+        # the `set -m` note in comfyui-app.
+        self.proc = subprocess.Popen(
+            ["/usr/bin/comfyui"],
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+        self.set_busy(True, "Server: starting…")
+        self.start_deadline = time.monotonic() + START_TIMEOUT
+        GLib.timeout_add_seconds(2, self._await_start)
+
+    def _await_start(self):
+        """Hold Start disabled until the server actually answers.
+
+        A fixed delay is wrong here: importing torch and the custom nodes takes
+        well over a couple of seconds on a cold start, and clearing busy early
+        makes refresh() report "stopped" (nothing is listening yet) and
+        re-enable Start — so a second click launches a second ComfyUI that then
+        fights the first for the port.
+        """
+        running, _ = server_state()
+        if running:
+            self.set_busy(False)
+            self.refresh()
+            return False
+        # Give up if the process is gone (it failed) or startup ran long enough
+        # that something is clearly wrong. Either way refresh() reports the real
+        # state and Start becomes usable again.
+        if self.proc.poll() is not None or time.monotonic() > self.start_deadline:
+            print(
+                f"comfyui-tray: server did not come up; see {LOG_FILE}",
+                file=sys.stderr,
+            )
+            self.set_busy(False)
+            self.refresh()
+            return False
+        return True  # keep waiting
+
+    def stop(self, force):
+        """Run comfyui-stop off the main loop so the menu never freezes."""
+        self.set_busy(True, "Server: stopping…")
+        argv = ["/usr/bin/comfyui-stop"] + (["--force"] if force else [])
+
+        def worker():
+            proc = subprocess.run(argv, capture_output=True, text=True)
+            GLib.idle_add(self._stopped, proc.returncode, proc.stderr)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _stopped(self, rc, stderr):
+        self.set_busy(False)
+        self.refresh()
+        # comfyui-stop refuses while prompts are queued rather than destroying
+        # them silently. Surface that as a choice instead of a dead menu click.
+        if rc != 0 and "queued" in (stderr or ""):
+            dialog = Gtk.MessageDialog(
+                transient_for=None,
+                modal=True,
+                message_type=Gtk.MessageType.WARNING,
+                buttons=Gtk.ButtonsType.NONE,
+                text="ComfyUI still has queued prompts",
+            )
+            dialog.format_secondary_text(
+                stderr.strip() + "\n\nStopping now discards them."
+            )
+            dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+            dialog.add_button("Stop anyway", Gtk.ResponseType.OK)
+            response = dialog.run()
+            dialog.destroy()
+            if response == Gtk.ResponseType.OK:
+                self.stop(force=True)  # close_after_stop carries through
+            else:
+                # Backing out here cancels the close too — the user chose to
+                # keep the queue, so stranding the server would be worse.
+                self.close_after_stop = False
+        elif rc != 0:
+            print(f"comfyui-tray: stop failed: {stderr}", file=sys.stderr)
+            self.close_after_stop = False
+        elif self.close_after_stop:
+            Gtk.main_quit()
+        return False
+
+
+def main():
+    single_instance()
+    install_icon()
+    # Let Ctrl-C work when the tray is run from a terminal; GTK would otherwise
+    # swallow it.
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    # Probe for the host's terminal off the main loop. It costs two host-spawn
+    # round trips, and doing it on the first "Show log" click would freeze the
+    # menu for a second; by the time anyone clicks, the answer is cached.
+    threading.Thread(target=host_terminal, daemon=True).start()
+    Tray()
+    Gtk.main()
+
+
+if __name__ == "__main__":
+    main()

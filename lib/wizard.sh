@@ -17,6 +17,12 @@
 #               Label shows verbatim; the value selects create_flags.<value>
 #               (podman --additional-flags) and create_args.<value> (extra
 #               distrobox-level flags, e.g. --nvidia).
+#               An optional config line
+#                 arg|<BUILD_ARG_NAME>
+#               additionally passes the chosen *value* to the image build as
+#               --build-arg <NAME>=<value>, so a single question can drive both
+#               the base image and the GPU passthrough (see apps/comfyui).
+#               "arg" is reserved as a line key here and cannot be an item Label.
 #
 # To add a new type: add a handler function _wizard_apply_<type>() and register
 # it in the case statement inside tui_apply_wizards().
@@ -230,6 +236,8 @@ _wizard_run_runtime_page() {
     while IFS='|' read -r name value desc; do
         name="${name%$'\r'}"; value="${value%$'\r'}"; desc="${desc%$'\r'}"
         [[ -z "$name" || "$name" == \#* ]] && continue
+        # 'arg|<NAME>' is config, not an item — see wizard_build_args.
+        [[ "$name" == "arg" ]] && continue
         items+=("$name" "$desc" "$state")
         state="OFF"
     done < <(tail -n +4 "$page")
@@ -261,7 +269,7 @@ wizard_create_variant() {
         [[ -n "$selected" ]] || return 0
         while IFS='|' read -r name value _desc; do
             name="${name%$'\r'}"; value="${value%$'\r'}"
-            [[ -z "$name" || "$name" == \#* ]] && continue
+            [[ -z "$name" || "$name" == \#* || "$name" == "arg" ]] && continue
             if [[ "$name" == "$selected" ]]; then
                 printf '%s' "$value"
                 return 0
@@ -284,19 +292,37 @@ wizard_build_args() {
     fi
     declare -p _WIZARD_SELECTIONS &>/dev/null || return 0
     local wizard_dir="$APPS_DIR/$app/wizard"
-    local page
+    local page fname pagename selection arg_name key val
     for page in "$wizard_dir"/[0-9][0-9]-*.buildarg; do
         [[ -f "$page" ]] || continue
-        local fname="${page##*/}"
-        local pagename="${fname%.*}"
-        local selection="${_WIZARD_SELECTIONS[$pagename]:-}"
+        fname="${page##*/}"
+        pagename="${fname%.*}"
+        selection="${_WIZARD_SELECTIONS[$pagename]:-}"
         [[ -n "$selection" ]] || continue
-        local arg_name="" key val
+        arg_name=""
         while IFS='|' read -r key val; do
             [[ "${key%$'\r'}" == "arg" ]] && arg_name="${val%$'\r'}"
         done < <(tail -n +4 "$page")
         [[ -n "$arg_name" ]] || continue
         printf -- '--build-arg\n%s=%s\n' "$arg_name" "$selection"
+    done
+
+    # A .runtime page carrying an 'arg|<NAME>' line feeds its chosen value to the
+    # build as well, so one question can pick both the base image and the
+    # create-time flags. The value (not the shown Label) is what is passed, which
+    # is why this goes through wizard_create_variant rather than the raw
+    # selection.
+    local variant
+    for page in "$wizard_dir"/[0-9][0-9]-*.runtime; do
+        [[ -f "$page" ]] || continue
+        arg_name=""
+        while IFS='|' read -r key val; do
+            [[ "${key%$'\r'}" == "arg" ]] && arg_name="${val%$'\r'}"
+        done < <(tail -n +4 "$page")
+        [[ -n "$arg_name" ]] || continue
+        variant="$(wizard_create_variant "$app")"
+        [[ -n "$variant" ]] || continue
+        printf -- '--build-arg\n%s=%s\n' "$arg_name" "$variant"
     done
 }
 

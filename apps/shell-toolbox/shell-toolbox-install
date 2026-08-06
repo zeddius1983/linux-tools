@@ -80,6 +80,7 @@ rm -f "$CONF_DIR/22-zellij.zsh"
 has_tool zellij || rm -f "$COMP_DIR/_zellij" 2>/dev/null || true
 cleanup_absent starship   starship
 cleanup_absent lazygit    lazygit
+cleanup_absent ov         ov
 cleanup_absent dust       dust
 has_tool yazi || { rm -f "$BIN_DIR/ya"; } 2>/dev/null || true
 has_tool fzf  || rm -f \
@@ -300,6 +301,17 @@ if has_tool lazygit; then
     esac
     gh_download_latest "jesseduffield/lazygit" \
         "^lazygit_[^_]+_linux_${LG_ARCH}\\.tar\\.gz$" "lazygit"
+fi
+
+if has_tool ov; then
+    case "$ARCH" in
+        x86_64)  OV_ARCH="amd64" ;;
+        aarch64) OV_ARCH="arm64" ;;
+        *)       OV_ARCH="$ARCH" ;;
+    esac
+    # Zip, not tar.gz — ov publishes linux builds only as .zip.
+    gh_download_latest "noborus/ov" \
+        "^ov_[^_]+_linux_${OV_ARCH}\\.zip$" "ov"
 fi
 
 if has_tool dust; then

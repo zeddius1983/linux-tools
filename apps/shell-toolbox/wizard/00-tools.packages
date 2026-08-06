@@ -14,6 +14,7 @@ starship|starship|Cross-shell prompt with git info|on|starship
 delta|delta|Side-by-side git diff pager|on|delta
 glow|glow|Markdown renderer for terminal|on|glow
 lazygit|lazygit|Terminal UI for git|off|lazygit
+ov|ov|Pager with live follow mode|off|ov
 yazi|yazi|Terminal file manager|off|yazi
 tealdeer|tealdeer|tldr — simplified man pages|off|tldr
 dust|dust|du replacement (visual tree)|off|dust

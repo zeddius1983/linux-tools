@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Desktop entry point (exported as the "ComfyUI" launcher).
+#
+# Starts the server in the background if it isn't already up, waits for it to
+# answer, then opens it as a browser app window on the host.
+export VIRTUAL_ENV=/opt/venv
+export PATH="/opt/venv/bin:${PATH}"
+
+SERVER_URL="http://localhost:8188"
+LOG_FILE="${HOME}/.comfyui/server.log"
+
+if ! curl -sf "${SERVER_URL}" >/dev/null 2>&1; then
+    mkdir -p "${HOME}/.comfyui"
+    # `set -m` is load-bearing, not cosmetic. Without job control, POSIX has the
+    # shell start background children with SIGINT and SIGQUIT set to SIG_IGN --
+    # and CPython, seeing SIGINT already ignored at startup, deliberately skips
+    # installing its KeyboardInterrupt handler. The server then ignores SIGINT
+    # forever, so a graceful "same as Ctrl-C" stop is impossible. Job control
+    # leaves the child's SIGINT at its default, and Python handles it normally.
+    # (nohup still covers SIGHUP, which is all it was ever doing here.)
+    set -m
+    nohup /usr/bin/comfyui >"${LOG_FILE}" 2>&1 &
+    disown
+    set +m
+    timeout=120
+    while ! curl -sf "${SERVER_URL}" >/dev/null 2>&1; do
+        sleep 2
+        timeout=$((timeout - 2))
+        if [[ ${timeout} -le 0 ]]; then
+            distrobox-host-exec notify-send "ComfyUI" \
+                "Server failed to start. Check ${LOG_FILE}" 2>/dev/null || true
+            exit 1
+        fi
+    done
+fi
+
+# Bring up the tray so there is something to stop the server with -- launched
+# this way there is no terminal to Ctrl-C. Best effort on purpose: a desktop
+# with no StatusNotifier host, or a missing indicator library, must not stop
+# ComfyUI from opening. comfyui-tray takes a lock and exits quietly if one is
+# already running.
+setsid /usr/bin/comfyui-tray >/dev/null 2>&1 &
+disown 2>/dev/null || true
+
+exec /usr/bin/comfyui-open

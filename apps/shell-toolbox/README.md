@@ -56,7 +56,7 @@ If you already had a `~/.zshrc` that predates this layout, the installer backs i
 
 Shell plugins: `zsh-syntax-highlighting`, `zsh-autosuggestions`.
 
-Utilities: `fzf`, `bat`, `eza`, `ripgrep` (`rg`), `fd`, `delta`, `zoxide`, `atuin`, `starship`, `glow`, `tealdeer` (`tldr`), `yazi`, `lazygit`, `dust`, `zellij`, `direnv`.
+Utilities: `fzf`, `bat`, `eza`, `ripgrep` (`rg`), `fd`, `delta`, `zoxide`, `atuin`, `starship`, `glow`, `tealdeer` (`tldr`), `yazi`, `lazygit`, `ov`, `dust`, `zellij`, `direnv`.
 
 All utilities are downloaded as static musl binaries from their GitHub release pages, so they run on any Linux host regardless of glibc version.
 

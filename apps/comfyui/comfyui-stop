@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+# Stop a running ComfyUI server (exported to the host as `comfyui-stop`).
+#
+# Exists because the desktop launcher starts the server detached — there is no
+# terminal to Ctrl-C, so without this the only way to stop it is to hunt down
+# the PID by hand.
+set -euo pipefail
+
+PATTERN="/opt/venv/bin/python main.py"
+DEFAULT_PORT=8188
+
+force=0
+case "${1:-}" in
+    -f|--force) force=1 ;;
+    -h|--help)
+        echo "usage: comfyui-stop [-f|--force]"
+        echo
+        echo "Interrupts the running prompt, then stops the server with SIGINT."
+        echo "Refuses to stop while work is queued unless --force is given."
+        exit 0
+        ;;
+    "") ;;
+    *)  echo "comfyui-stop: unknown option '$1'" >&2; exit 2 ;;
+esac
+
+mapfile -t pids < <(pgrep -f "$PATTERN" || true)
+if [[ ${#pids[@]} -eq 0 ]]; then
+    echo "ComfyUI is not running."
+    exit 0
+fi
+
+# The port is read back off each process rather than assumed. `comfyui --port
+# 9000` is documented, and pgrep matches it regardless of port — so a hardcoded
+# 8188 would query nothing (silently skipping the queued-prompt guard entirely,
+# since an unreachable server looks the same as an idle one) and could POST
+# /interrupt to whatever unrelated service happens to own 8188.
+# argparse accepts both "--port 9000" and "--port=9000".
+port_of() {
+    local cmd port
+    cmd="$(tr '\0' ' ' < "/proc/$1/cmdline" 2>/dev/null || true)"
+    port="$(grep -oE -- '--port[= ]+[0-9]+' <<< "$cmd" | grep -oE '[0-9]+$' || true)"
+    printf '%s' "${port:-$DEFAULT_PORT}"
+}
+
+# Prints the queue length, or nothing at all when the server did not answer.
+# Empty is deliberately distinct from 0: "cannot tell" must not be treated as
+# "nothing queued".
+queue_of() {
+    local body
+    body="$(curl -sf "http://localhost:$1/prompt" 2>/dev/null || true)"
+    [[ -n "$body" ]] || return 0
+    grep -oE '"queue_remaining": *[0-9]+' <<< "$body" | grep -oE '[0-9]+$' || true
+}
+
+# Queued prompts are held in memory and are lost with the process, so a stop
+# with work pending destroys it. Say so rather than doing it silently.
+if [[ $force -eq 0 ]]; then
+    for pid in "${pids[@]}"; do
+        queued="$(queue_of "$(port_of "$pid")")"
+        if [[ -n "$queued" && "$queued" -gt 0 ]]; then
+            echo "ComfyUI (pid ${pid}, port $(port_of "$pid")) has ${queued} prompt(s) queued;" >&2
+            echo "they will be lost. Wait for them, or re-run: comfyui-stop --force" >&2
+            exit 1
+        fi
+    done
+fi
+
+# Interrupt whatever is mid-generation so the process is not signalled partway
+# through a sampling step. /interrupt only stops the *running* prompt.
+for pid in "${pids[@]}"; do
+    port="$(port_of "$pid")"
+    if curl -sf "http://localhost:${port}" >/dev/null 2>&1; then
+        curl -sf -X POST "http://localhost:${port}/interrupt" >/dev/null 2>&1 || true
+    fi
+done
+
+# SIGINT is preferred: it is what Ctrl-C sends, so Python raises
+# KeyboardInterrupt and unwinds normally, while SIGTERM's default action
+# terminates the interpreter outright with no cleanup.
+#
+# But SIGINT is not always deliverable. A server started detached by a
+# comfyui-app from before the `set -m` fix inherited SIGINT as SIG_IGN from the
+# shell's background-job handling, and CPython keeps that disposition rather
+# than installing its handler -- SIGINT is a permanent no-op for those
+# processes, silently. So ask the kernel what the process will actually do
+# (bit 1 of SigIgn in /proc/<pid>/status) and pick the signal that works.
+sigint_ignored() {
+    local ign
+    ign="$(awk '/^SigIgn:/{print $2}' "/proc/$1/status" 2>/dev/null)"
+    [[ -n "$ign" ]] || return 1
+    (( 0x${ign} & 0x2 ))
+}
+
+echo "Stopping ComfyUI..."
+for pid in "${pids[@]}"; do
+    if sigint_ignored "$pid"; then
+        echo "  pid ${pid}: ignores SIGINT (started detached by an older" \
+             "launcher) — using SIGTERM"
+        kill -TERM "$pid" 2>/dev/null || true
+    else
+        kill -INT "$pid" 2>/dev/null || true
+    fi
+done
+
+for _ in $(seq 30); do
+    if ! pgrep -f "$PATTERN" >/dev/null 2>&1; then
+        echo "ComfyUI stopped."
+        exit 0
+    fi
+    sleep 1
+done
+
+echo "Still running after 30s — sending SIGKILL." >&2
+pkill -KILL -f "$PATTERN" || true
+sleep 2
+if pgrep -f "$PATTERN" >/dev/null 2>&1; then
+    echo "Error: could not stop ComfyUI." >&2
+    exit 1
+fi
+echo "ComfyUI stopped (forced)."

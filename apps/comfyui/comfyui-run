@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# ComfyUI launcher (exported to the host as `comfyui`).
+#
+# The GPU backend is fixed at image-build time by wizard/00-gpu.runtime and
+# recorded in /etc/comfyui-gpu, so this script only has to branch on the tuning
+# that actually differs between ROCm and CUDA.
+set -euo pipefail
+
+export VIRTUAL_ENV=/opt/venv
+export PATH="/opt/venv/bin:${PATH}"
+
+gpu="$(cat /etc/comfyui-gpu 2>/dev/null || echo amd)"
+
+# Everything the user creates lives in the shared host $HOME so it survives an
+# image rebuild -- `tools setup comfyui` destroys the image, and ComfyUI's
+# defaults for all of these are *inside* /opt/ComfyUI. user/ in particular holds
+# saved workflows and settings, not just scratch state.
+mkdir -p "${HOME}/.comfyui/models"/{checkpoints,vae,loras,controlnet,upscale_models,clip,unet,diffusion_models}
+mkdir -p "${HOME}/.comfyui"/{output,input,user}
+
+# Not overridable: reachability from the host, and the paths that keep user data
+# out of the image. COMFYUI_ARGS must not be able to switch these off.
+declare -a base=(
+    --listen 0.0.0.0
+    --output-directory "${HOME}/.comfyui/output"
+    --input-directory "${HOME}/.comfyui/input"
+    --user-directory "${HOME}/.comfyui/user"
+    # --database-url does NOT follow --user-directory: its default is computed
+    # from the install dir at import time (/opt/ComfyUI/user/comfyui.db). Left
+    # alone it points into a directory that no longer gets created once the user
+    # dir is redirected, and ComfyUI fails startup with "unable to open database
+    # file". Pointing it at the real user dir also keeps the asset DB with the
+    # rest of the user data, where a rebuild cannot delete it.
+    --database-url "sqlite:///${HOME}/.comfyui/user/comfyui.db"
+)
+
+declare -a tuning=()
+if [[ "$gpu" == "nvidia" ]]; then
+    export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+else
+    # Strix Halo (gfx1151) tuning — see .memory.md for why each of these matters.
+    export PYTORCH_HIP_ALLOC_CONF=expandable_segments:True
+    export HSA_ENABLE_SDMA=0
+    export TORCH_ROCM_AOTRITON_ENABLE_EXPERIMENTAL=1
+    export TORCH_BLAS_PREFER_HIPBLASLT=1
+    export MIOPEN_USER_DB_PATH="${HOME}/.cache/miopen"
+    mkdir -p "${MIOPEN_USER_DB_PATH}"
+    tuning=(--reserve-vram 3 --bf16-vae --disable-mmap --cache-none)
+fi
+
+# Escape hatch: the AMD defaults are tuned for unified memory and are the wrong
+# answer on, say, a discrete 8 GB card. COMFYUI_ARGS replaces the *tuning* set
+# only — never the base flags above.
+if [[ -n "${COMFYUI_ARGS:-}" ]]; then
+    # Word-splitting is the point: COMFYUI_ARGS holds a flag string.
+    # shellcheck disable=SC2206
+    tuning=(${COMFYUI_ARGS})
+fi
+
+declare -a args=("${base[@]}" ${tuning[@]+"${tuning[@]}"})
+
+echo "ComfyUI (${gpu}) starting — open http://localhost:8188 in your browser"
+cd /opt/ComfyUI
+exec /opt/venv/bin/python main.py "${args[@]}" "$@"

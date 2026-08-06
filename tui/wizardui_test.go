@@ -97,6 +97,31 @@ func TestSessionRuntimeStateUsesValue(t *testing.T) {
 	}
 }
 
+// A .runtime page with an 'arg|NAME' line feeds the build as well as the
+// create: the variant's value must show up as a --build-arg, not its label.
+func TestSessionRuntimeArgEmitsBuildArg(t *testing.T) {
+	w, _ := newWizardSession(testApp(t, "comfyui"), "setup", t.TempDir())
+	w.page().radio = 1 // NVIDIA (CUDA)
+
+	st := w.state()
+	if st.Variant != "nvidia" {
+		t.Errorf("Variant = %q, want nvidia", st.Variant)
+	}
+	if len(st.BuildArgs) < 2 || st.BuildArgs[0] != "--build-arg" || st.BuildArgs[1] != "COMFY_GPU=nvidia" {
+		t.Fatalf("BuildArgs = %v, want the COMFY_GPU pair first", st.BuildArgs)
+	}
+}
+
+// A .runtime page without an arg line must not start emitting build args.
+func TestSessionRuntimeWithoutArgEmitsNoBuildArg(t *testing.T) {
+	w, _ := newWizardSession(testApp(t, "lmstudio"), "setup", t.TempDir())
+	w.page().radio = 1
+
+	if st := w.state(); len(st.BuildArgs) != 0 {
+		t.Errorf("BuildArgs = %v, want none", st.BuildArgs)
+	}
+}
+
 // Build args must render as the two tokens cmd_build reads with mapfile.
 func TestSessionBuildArgTokens(t *testing.T) {
 	w, _ := newWizardSession(testApp(t, "fastflowlm"), "setup", t.TempDir())
@@ -376,9 +401,20 @@ func TestEnterOpensSetup(t *testing.T) {
 	}
 	m.wizardKey("q")
 
-	// comfyui has no wizard, and must still stop at the review screen rather
-	// than launching a rebuild on one keypress.
-	m.selectApp("comfyui")
+	// An app with no wizard must still stop at the review screen rather than
+	// launching a rebuild on one keypress. Which app that is changes as apps
+	// gain wizards, so find one rather than naming it.
+	var noWizard string
+	for _, a := range apps {
+		if !a.HasWizard {
+			noWizard = a.Name
+			break
+		}
+	}
+	if noWizard == "" {
+		t.Fatal("no wizard-less app to test the review screen with")
+	}
+	m.selectApp(noWizard)
 	m.onKey(keyPress("enter"))
 	if m.wiz == nil || m.wiz.stage != stageConfirm {
 		t.Fatal("enter did not open the review screen for an app without pages")

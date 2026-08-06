@@ -1,0 +1,6 @@
+Select GPU backend
+Which GPU should ComfyUI use? This picks the PyTorch base image and passthrough.
+setup,build,create
+arg|COMFY_GPU
+AMD (ROCm)|amd|ROCm 7.2 PyTorch, /dev/kfd + /dev/dri (default)
+NVIDIA (CUDA)|nvidia|CUDA 12.8 PyTorch, CDI nvidia.com/gpu=all

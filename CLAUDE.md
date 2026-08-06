@@ -75,15 +75,15 @@ Create `apps/<name>/` with the files below — `Dockerfile`, `exports`, `descrip
 | `exports` | What to expose to the host (see export types below) |
 | `description` | One-line label shown in the interactive TUI (keep it under ~26 chars — that's the TUI description column width) |
 | `category` | One line naming the dashboard tab the app appears under (e.g. `AI / LLM`, `Development`, `System`, `Browsers`, `Communication`, `Shell`). Missing or empty ⇒ the app lands in an `Other` tab. Preferred tab order lives in `Categories()` in `tui/apps.go`; unknown names are appended alphabetically. |
-| `README.md` | **Required.** App-specific usage docs (see below). Cat-ed by `tools setup` at the end of install, so it doubles as the post-install screen. |
+| `README.md` | **Required.** App-specific usage docs (see below). Rendered in the dashboard's info panel beside the app table; `tools setup` prints only its path when it finishes. |
 | `create_flags` | Optional. Extra flags passed to the container engine via `distrobox create --additional-flags`. Use for privileged mode, device passthrough, or volume mounts needed at container creation time (e.g. `--privileged -v /usr/src:/usr/src:ro`). |
-| `post-install` | Optional. Short text snippet `cat`-ed by `tools setup` **before** the README — use it for terse "next step" hints (e.g. `corefreq-setup`). Long-form docs belong in `README.md`. |
+| `post-install` | Optional. Short text snippet `cat`-ed by `tools setup` when it finishes — use it for terse "next step" hints (e.g. `corefreq-setup`). This is now the *only* thing printed after an install, so keep it to a few lines; long-form docs belong in `README.md`. |
 | `host-only` | Optional. Marker file (contents ignored). Tells `tools setup` the app installs straight to the host instead of running in a container (see `apps/shell-toolbox`). |
 | `renamed-from` | Optional. Previous app name. During setup, removes that app's obsolete Distrobox and image before building the renamed app; shared-home data is preserved. |
 
 Optionally add `icon.png` or `icon.svg` — if present, it overrides whatever icon the container has. All export types share the same bundled icon.
 
-**Every new or touched app must include `apps/<name>/README.md`** covering: what the app does, install command, exported commands with usage examples, any persistent storage paths, and relevant notes (GPU setup, env vars, etc.). The main `README.md` app table row should link to it: `[`name`](apps/name/README.md)`. If you change an existing app that lacks a README, add one as part of the same change — `tools setup` displays it at the end of every install, so a missing README means no post-install reference.
+**Every new or touched app must include `apps/<name>/README.md`** covering: what the app does, install command, exported commands with usage examples, any persistent storage paths, and relevant notes (GPU setup, env vars, etc.). The main `README.md` app table row should link to it: `[`name`](apps/name/README.md)`. If you change an existing app that lacks a README, add one as part of the same change — the dashboard renders it in the info panel beside the app table, so a missing README means an empty panel and no reference for that app.
 
 `tools.sh` auto-discovers apps by listing `apps/`; no registration needed.
 
@@ -211,7 +211,7 @@ The old `whiptail` menu (`lib/tui.sh`) is the fallback, used when the binary is 
 - **Keep `.memory.md` current**: after any change to an app, update its `.memory.md` to reflect what changed and why. Add new pitfalls as they are discovered.
 - **Keep `ROADMAP.md` current**: if a task completes, unblocks, or adds a planned item, update `ROADMAP.md` to reflect the new state.
 - **Keep `README.md` current**: if a new app is added or an existing one changes significantly (new features, renamed exports, different usage), update `README.md`.
-- **Every new or touched app needs `apps/<name>/README.md`**: cover install, exported commands with examples, storage paths, and any GPU/env notes. Link to it from the main `README.md` table: `[`name`](apps/name/README.md)`. If you're modifying an existing app that doesn't have one, add it in the same change — `tools setup` `cat`s the README at the end of every install (`lib/commands.sh`), so this is the user's primary post-install reference.
+- **Every new or touched app needs `apps/<name>/README.md`**: cover install, exported commands with examples, storage paths, and any GPU/env notes. Link to it from the main `README.md` table: `[`name`](apps/name/README.md)`. If you're modifying an existing app that doesn't have one, add it in the same change — the dashboard renders it in the info panel beside the app table, which is the user's primary reference for the app. `tools setup` deliberately does not print it (it prints the path only); use `post-install` for anything that must be seen right after an install.
 
 ## Branching policy
 

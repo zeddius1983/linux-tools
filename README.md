@@ -62,7 +62,7 @@ distrobox enter <app>-box  # directly via distrobox
 | `chrome` | Google Chrome browser | `chrome-box` |
 | [`claude-code`](apps/claude-code/README.md) | Claude Code | `claude-code-box` |
 | `codex-cli` | OpenAI Codex CLI | `codex-cli-box` |
-| `comfyui` | ComfyUI | `comfyui-box` |
+| [`comfyui`](apps/comfyui/README.md) | ComfyUI (AMD/NVIDIA) | `comfyui-box` |
 | `copilot-cli` | GitHub Copilot CLI | `copilot-cli-box` |
 | [`corefreq`](apps/corefreq/README.md) | CoreFreq CPU monitor | `corefreq-box` |
 | [`dev-toolbox`](apps/dev-toolbox/README.md) | Dev Toolbox | `dev-toolbox-box` |

@@ -1,2 +1,4 @@
 gui:comfyui-app:ComfyUI
 bin:comfyui
+bin:comfyui-stop
+bin:comfyui-tray
