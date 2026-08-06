@@ -10,29 +10,43 @@ monitoring works through the `/dev/dri` + `/sys` access Distrobox exposes by
 default; NVIDIA monitoring uses NVML from the host driver, injected at runtime
 via [CDI](https://github.com/cncf-tags/container-device-interface).
 
-## Host prerequisite (one-time): NVIDIA CDI
+## Install
 
-The box is created with `--device nvidia.com/gpu=all`, which requires a CDI spec
-on the host. Generate it once (re-run after every driver update):
+```bash
+tools setup nvtop
+```
+
+Setup asks which GPU passthrough to use:
+
+| Choice | What it does | Host prerequisite |
+|---|---|---|
+| **AMD / Intel** (default) | No extra flags — the `/dev/dri` + `/sys` access Distrobox gives every box is enough | none |
+| **NVIDIA (CDI)** | Adds `--device nvidia.com/gpu=all` so the host driver's NVML is injected | `/etc/cdi/nvidia.yaml` (below) |
+
+Run non-interactively (scripts, `LT_SKIP_WIZARD`) and you get the **AMD / Intel**
+default, which works on every host.
+
+### NVIDIA only: generate the host CDI spec (one-time)
+
+Required before picking **NVIDIA (CDI)**; re-run after every driver update:
 
 ```bash
 sudo pacman -S nvidia-container-toolkit          # CachyOS / Arch
 sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
 ```
 
-Without `/etc/cdi/nvidia.yaml`, `tools setup` fails at container-create time with
-podman's `no such device nvidia.com/gpu=all`. Do **not** use
-`distrobox create --nvidia` on this host — it hangs in a driver-remount loop.
+Without it, the box is created fine but fails to **start**, and every export
+lookup then reports `cannot find 'nvtop' inside container`. The real error only
+shows on `distrobox enter nvtop-box`:
 
-> On an AMD/Intel-only machine (no NVIDIA driver) you don't need NVIDIA at all —
-> drop the `apps/nvtop/create_flags` file so no CDI device is requested; the
-> AMD/Intel backends still work via the default device passthrough.
-
-## Install
-
-```bash
-tools setup nvtop
 ```
+Error: unable to start container "…": setting up CDI devices:
+unresolvable CDI devices nvidia.com/gpu=all
+```
+
+Fix by generating the spec (no rebuild needed — podman re-reads it on every
+start), or re-run `tools setup nvtop` and choose **AMD / Intel**. Do **not** use
+`distrobox create --nvidia` on this host — it hangs in a driver-remount loop.
 
 ## Usage
 
@@ -70,7 +84,8 @@ Useful flags (`nvtop -h` for the full list):
   `nvbandwidth` remain useful for vendor-specific deep dives.
 - **NVIDIA support is via NVML dlopen.** nvtop loads `libnvidia-ml.so.1` at
   runtime; it comes from the host driver through CDI. If nvtop starts but shows
-  no NVIDIA GPU, confirm the CDI spec exists and matches the current driver
-  (regenerate with `nvidia-ctk cdi generate` after a driver update).
+  no NVIDIA GPU, confirm you chose **NVIDIA (CDI)** at setup and that the CDI
+  spec exists and matches the current driver (regenerate with `nvidia-ctk cdi
+  generate` after a driver update).
 - No persistent storage — nvtop is stateless; its config (if you save one from
   the Setup menu) lives under `~/.config/nvtop/` on the shared home.

@@ -1,0 +1,5 @@
+Select GPU passthrough
+nvtop reads AMD/Intel GPUs through the default passthrough. NVIDIA needs a host CDI spec.
+setup,create
+AMD / Intel|amd|Default /dev/dri passthrough, no host prerequisite (default)
+NVIDIA (CDI)|nvidia|Adds --device nvidia.com/gpu=all; needs /etc/cdi/nvidia.yaml
