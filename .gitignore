@@ -1,1 +1,6 @@
 .firecrawl/
+
+# Claude Code: per-machine settings and the temp files it writes them through.
+# Shared project config (.claude/settings.json, agents, skills) stays tracked.
+.claude/settings.local.json
+.claude/*.tmp.*
