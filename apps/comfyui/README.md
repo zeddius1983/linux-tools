@@ -106,7 +106,7 @@ area, so a detached server is not something you have to hunt for afterwards:
 | `Server: running (2 queued)` | Live status, refreshed every 3s |
 | Open in browser | Same window the launcher opens |
 | Start / Stop server | Toggles with the current state |
-| Show log | Opens `~/.comfyui/server.log` in `less -rf +F` in a terminal |
+| Show log | Opens `~/.comfyui/server.log` in a terminal pager, following live |
 | Close | Stops the server, then hides the tray |
 
 Stop asks before discarding queued prompts, offering **Stop anyway**.
@@ -117,10 +117,16 @@ state the tray exists to prevent. If prompts are queued you still get the
 **Stop anyway** prompt, and declining it cancels the close too, leaving both the
 queue and the tray intact.
 
-**Show log** opens the server log in `less -rf +F` in a host terminal, so a
-running server's output scrolls live, keeps its colours, and collapses tqdm
-progress bars to a single line the way `tail -f` does. `Ctrl-C` stops
-following and leaves you in normal `less` navigation; `F` resumes. It picks the first of ghostty, kitty, alacritty,
+**Show log** opens the server log in a host terminal, following it live.
+
+It uses [`ov`](https://github.com/noborus/ov) (`ov -f`) when the host has it —
+`shell-toolbox` offers it as an optional tool — because ov renders this log
+correctly with no flags at all: ANSI colour, tqdm progress bars collapsed to one
+line, and no binary-file complaint. Otherwise it falls back to `less -r -f +F`,
+which needs all three flags to achieve the same thing (`Ctrl-C` stops following,
+`F` resumes).
+
+It picks the first of ghostty, kitty, alacritty,
 gnome-terminal, xfce4-terminal, mate-terminal, konsole or xterm found **on the
 host** — this container ships none, and the log is in the shared `$HOME` where
 the host can read it directly. With none of those installed it falls back to
