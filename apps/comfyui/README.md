@@ -119,12 +119,16 @@ queue and the tray intact.
 
 **Show log** opens the server log in a host terminal, following it live.
 
-It uses [`ov`](https://github.com/noborus/ov) (`ov -f`) when the host has it —
-`shell-toolbox` offers it as an optional tool — because ov renders this log
-correctly with no flags at all: ANSI colour, tqdm progress bars collapsed to one
-line, and no binary-file complaint. Otherwise it falls back to `less -r -f +F`,
-which needs all three flags to achieve the same thing (`Ctrl-C` stops following,
-`F` resumes).
+It uses `less -r -f +F`: `-r` so the tqdm progress bars' carriage returns reach
+the terminal and overwrite in place (rather than every redraw landing side by
+side), `-f` to stop less calling the colour-coded log a binary file, and `+F` to
+follow. `Ctrl-C` stops following and leaves you in normal `less` navigation; `F`
+resumes.
+
+[`ov`](https://github.com/noborus/ov) was tried here and is worse for this log —
+it swallows carriage returns, so a finished progress bar reads as every
+intermediate percentage strung along one line. It remains available in
+`shell-toolbox` as a general-purpose pager.
 
 It picks the first of ghostty, kitty, alacritty,
 gnome-terminal, xfce4-terminal, mate-terminal, konsole or xterm found **on the

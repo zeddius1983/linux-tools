@@ -122,18 +122,16 @@ TERMINALS = {
 }
 
 _host_terminal = None
-_host_has_ov = False
 
 
 def host_terminal():
     """Name of the first terminal available *on the host*, or "" if none.
 
-    Also records whether the host has `ov`. The terminal and the pager both
-    have to be the host's: this container ships neither, and the log lives in
-    the shared $HOME where the host can read it directly. Result is cached —
-    the probe costs two round trips through host-spawn.
+    The terminal has to be the host's: this container ships none, and the log
+    lives in the shared $HOME where the host can read it directly. Result is
+    cached — the probe costs two round trips through host-spawn.
     """
-    global _host_terminal, _host_has_ov
+    global _host_terminal
     if _host_terminal is not None:
         return _host_terminal
     # Absorb the host-spawn bootstrap first. The very first distrobox-host-exec
@@ -141,13 +139,9 @@ def host_terminal():
     # helper, and an empty answer here is indistinguishable from "no terminal
     # installed" -- the same trap that made comfyui-open fall back to xdg-open.
     subprocess.run(["distrobox-host-exec", "true"], capture_output=True)
-    # One round trip for both answers: the terminal on line 1, "ov" on line 2 if
-    # the host has it.
     script = (
-        'command -v ov >/dev/null 2>&1 && found_ov=ov || found_ov=; '
         "for t in " + " ".join(TERMINALS) + "; do "
-        'command -v "$t" >/dev/null 2>&1 && { echo "$t"; echo "$found_ov"; '
-        "exit 0; }; done; echo; echo \"$found_ov\""
+        'command -v "$t" >/dev/null 2>&1 && { echo "$t"; exit 0; }; done'
     )
     try:
         out = subprocess.run(
@@ -155,12 +149,10 @@ def host_terminal():
             capture_output=True,
             text=True,
             timeout=20,
-        ).stdout.splitlines()
+        ).stdout.strip()
     except (OSError, subprocess.SubprocessError):
-        out = []
-    term = out[0].strip() if out else ""
-    _host_has_ov = len(out) > 1 and out[1].strip() == "ov"
-    _host_terminal = term if term in TERMINALS else ""
+        out = ""
+    _host_terminal = out if out in TERMINALS else ""
     return _host_terminal
 
 
@@ -257,14 +249,15 @@ class Tray:
         live the way `tail -f` would; Ctrl-C drops into normal less navigation
         (and F resumes following), which an editor's static snapshot cannot do.
 
-        `ov -f` is preferred when the host has it (shell-toolbox offers it). It
-        needs none of the flag gymnastics below: it renders the ANSI colour and
-        the tqdm carriage returns correctly out of the box, never raises the
-        binary-file prompt, and its follow flag has no "+" for ghostty to eat.
-        Measured against this log: binary_prompt=False, no literal ^M, colour
-        kept — for both `ov` and `ov -f`.
-
-        Everything from here down is the `less` fallback.
+        less, specifically -- `ov` was tried and is worse for this log. tqdm
+        redraws its progress bar by rewriting one line with carriage returns,
+        and the only thing that renders that correctly is passing the CR
+        through so the terminal overwrites in place. ov swallows CR entirely
+        (measured on this log: raw_CR=0 for `ov -f` and for
+        `ov --converter raw -f`, versus 55 for `less -r -f +F`), so every
+        intermediate redraw ends up side by side on one very long line. Note
+        that counting literal "^M" does NOT distinguish these: ov scores zero
+        there while still rendering wrongly.
 
         Both -r and -f are needed, for different reasons.
 
@@ -291,12 +284,7 @@ class Tray:
         Falls back to xdg-open if the host has no terminal we recognise.
         """
         term = host_terminal()
-        if term and _host_has_ov:
-            run_detached(
-                ["distrobox-host-exec", term, TERMINALS[term],
-                 "ov", "-f", LOG_FILE]
-            )
-        elif term:
+        if term:
             # Routed through `bash -c` rather than handed to the terminal as a
             # bare argv, because ghostty's CLI parser eats "+"-prefixed
             # arguments before passing the command on: `ghostty -e less -r -f
