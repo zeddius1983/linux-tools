@@ -61,7 +61,7 @@ distrobox enter <app>-box  # directly via distrobox
 | `antigravity` | Antigravity CLI (agy) | `antigravity-box` |
 | `chrome` | Google Chrome browser | `chrome-box` |
 | [`claude-code`](apps/claude-code/README.md) | Claude Code | `claude-code-box` |
-| `codex-cli` | OpenAI Codex CLI | `codex-cli-box` |
+| [`codex-cli`](apps/codex-cli/README.md) | OpenAI Codex CLI | `codex-cli-box` |
 | [`comfyui`](apps/comfyui/README.md) | ComfyUI (AMD/NVIDIA) | `comfyui-box` |
 | `copilot-cli` | GitHub Copilot CLI | `copilot-cli-box` |
 | [`corefreq`](apps/corefreq/README.md) | CoreFreq CPU monitor | `corefreq-box` |
