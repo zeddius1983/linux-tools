@@ -22,7 +22,7 @@ Priority order within each section: highest first.
 
 - [x] `dev-toolbox` — containerized development runtimes, CLI tools, and language servers
 - [x] `claude-code` — Anthropic Claude Code CLI
-- [x] `codex-cli` — OpenAI Codex CLI
+- [x] `codex-cli` — OpenAI Codex CLI (latest/recent stable release picker, cache-safe rebuilds)
 - [x] `copilot-cli` — GitHub Copilot CLI
 - [x] `antigravity` — Google Antigravity AI CLI (agy)
 - [x] `dev-toolbox` SDKMAN/Java support — project JDK management moved out of `jetbrains-toolbox`

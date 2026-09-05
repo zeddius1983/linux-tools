@@ -24,6 +24,7 @@ func TestParseRealPages(t *testing.T) {
 		{"shell-toolbox", "00-tools", "packages", 1},
 		{"lmstudio", "00-runtime", "runtime", 2},
 		{"fastflowlm", "00-release", "buildarg", 0},
+		{"codex-cli", "00-release", "buildarg", 0},
 	}
 
 	for _, c := range cases {
@@ -52,6 +53,27 @@ func TestParseRealPages(t *testing.T) {
 		if len(got.Items) < c.minItems {
 			t.Errorf("%s/%s: %d items, want at least %d", c.app, c.page, len(got.Items), c.minItems)
 		}
+	}
+}
+
+// Codex's release page must keep "latest" as the preferred choice while also
+// discovering stable rust-v tags and passing the answer to the installer arg.
+func TestCodexBuildargConfig(t *testing.T) {
+	pages, err := LoadPages(filepath.Join(appsDir, "codex-cli", "wizard"))
+	if err != nil || len(pages) == 0 {
+		t.Fatalf("load: %v", err)
+	}
+	p := pages[0]
+	if p.ArgName != "CODEX_RELEASE" {
+		t.Errorf("ArgName = %q, want CODEX_RELEASE", p.ArgName)
+	}
+	for _, want := range []string{"printf", "latest", "git ls-remote", "rust-v", "sort -V"} {
+		if !strings.Contains(p.ItemsCmd, want) {
+			t.Errorf("ItemsCmd missing %q: %q", want, p.ItemsCmd)
+		}
+	}
+	if len(p.Items) != 0 {
+		t.Errorf("buildarg body should yield no items, got %d", len(p.Items))
 	}
 }
 

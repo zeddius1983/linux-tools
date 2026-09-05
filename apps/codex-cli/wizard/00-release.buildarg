@@ -1,0 +1,5 @@
+Select Codex release
+Choose a stable Codex CLI release to install:
+setup,build
+arg|CODEX_RELEASE
+items-cmd|{ printf '%s\n' latest; git ls-remote --tags --refs https://github.com/openai/codex 'rust-v*' | sed 's@.*refs/tags/rust-v@@' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -10 | tac; }

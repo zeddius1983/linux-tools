@@ -1,4 +1,4 @@
-FROM ubuntu:24.04
+FROM docker.io/ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -18,7 +18,17 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     && apt-get install -y --no-install-recommends gh \
     && rm -rf /var/lib/apt/lists/*
 
-# Install script downloads the pre-built Rust binary to $HOME/.local/bin.
-# In the build context HOME=/root; copy to /usr/bin so command -pv can find it.
-RUN curl -fsSL https://chatgpt.com/codex/install.sh | sh && \
-    cp /root/.local/bin/codex /usr/bin/codex
+# Codex release selected by wizard/00-release.buildarg. "latest" follows the
+# standalone installer's stable channel for non-interactive builds too.
+# CACHE_BUST is fresh on every `tools build/setup`, so the network install is
+# never satisfied by a stale container-build layer.
+ARG CACHE_BUST=0
+ARG CODEX_RELEASE=latest
+RUN echo "==> Installing Codex ${CODEX_RELEASE} (cache-bust: ${CACHE_BUST})" \
+    && mkdir -p /opt/codex-install \
+    && curl -fsSL https://chatgpt.com/codex/install.sh -o /tmp/codex-install.sh \
+    && HOME=/opt/codex-install CODEX_HOME=/opt/codex \
+       CODEX_INSTALL_DIR=/usr/bin CODEX_RELEASE="${CODEX_RELEASE}" \
+       CODEX_NON_INTERACTIVE=true sh /tmp/codex-install.sh \
+    && /usr/bin/codex --version \
+    && rm -rf /opt/codex-install /tmp/codex-install.sh
