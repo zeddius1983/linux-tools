@@ -169,8 +169,26 @@ That last failure is also guarded on the bash side: `wizard_require_state`
 aborts when `LT_SKIP_WIZARD` is set and no state can be loaded, rather than
 falling through to a default build.
 
-Keys: `space` toggle/select, `a`/`n` all/none, `↑`/`↓` move, `⏎` next page or
-review, `esc` back a page (and out of the wizard from the first), `q` cancel.
+A wizard shows one tab per page plus a trailing **Review**, in the same style as
+the dashboard's category tabs. Unlike those, the tabs do not wrap: a wizard is a
+linear flow, so `←`/`→` clamp at the ends rather than jumping from the first page
+to the last. The tab bar replaced the old `step 1/2` counter — it carries the
+same information and names the pages as well.
+
+Tab labels come from the page's file name, not its `Title`: `01-statusline.packages`
+reads as **Statusline**, where the title ("Optional Codex CLI Integrations") is a
+sentence and too long for a tab. Words in `wizTabAcronyms` are spelled out in
+full caps, so `00-gpu.runtime` tabs as **GPU**, not "Gpu" — extend that set when
+a new page name needs it.
+
+The header reads `<app>  Wizard · <action>`. The review screen spells the action
+out in words via `actionNote()` before anything is committed, but on the pages
+this dim suffix is the only thing distinguishing a `b` (build) wizard from an
+`s` (setup) one.
+
+Keys: `space` toggle/select, `a`/`n` all/none, `↑`/`↓` move, `←`/`→` (or `h`/`l`,
+`tab`/`shift+tab`) change page, `⏎` next page or review, `esc` back a page (and out
+of the wizard from the first), `q` cancel.
 
 ## Mouse
 
