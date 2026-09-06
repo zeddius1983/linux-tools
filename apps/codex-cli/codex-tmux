@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Run Codex inside a private tmux session that renders the gruvbox powerline
+# status bar (see codex-statusline.sh).
+#
+# Codex has no status-line hook — `tui.status_line` takes a fixed list of
+# built-in item identifiers and nothing else — so the only way to get the same
+# bar as ~/.claude/statusline.sh is to draw it *around* Codex. tmux is that
+# chrome. Codex's own bar should be off (`tui.status_line = []`, which
+# codex-cli-install sets) or you get two status lines stacked.
+#
+# Usage: codex-tmux [codex args...]
+set -euo pipefail
+
+CODEX_DIR="${CODEX_HOME:-$HOME/.codex}"
+CONF="$CODEX_DIR/codex-tmux.conf"
+STATUSLINE="$CODEX_DIR/codex-statusline.sh"
+
+for f in "$CONF" "$STATUSLINE"; do
+    [[ -r "$f" ]] || {
+        echo "codex-tmux: missing $f" >&2
+        echo "Run: distrobox enter codex-cli-box -- codex-cli-install --tools tmux-statusline" >&2
+        exit 1
+    }
+done
+
+command -v tmux >/dev/null 2>&1 || { echo "codex-tmux: tmux not found" >&2; exit 1; }
+
+# A dedicated socket (-L codex) so this never joins, restyles, or is killed
+# alongside the user's own tmux server.
+#
+# CODEX_STATUSLINE_SINCE bounds the status line's search for the session's
+# rollout file to files written after this moment. Without it a brand-new
+# session would display the *previous* session's token counts until its own
+# first token_count record lands. Passed with `new-session -e` (tmux 3.2+)
+# because the status command runs under the tmux server, which does not inherit
+# this shell's environment.
+exec tmux -L codex -f "$CONF" \
+    new-session \
+    -e "CODEX_STATUSLINE_SINCE=$(date +%s)" \
+    -e "CODEX_STATUSLINE_CWD=$PWD" \
+    -c "$PWD" \
+    -- codex "$@"

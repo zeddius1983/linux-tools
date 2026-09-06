@@ -19,14 +19,17 @@ A non-interactive setup skips the wizard and installs `latest`. Every setup
 refreshes the installer layer, so rerunning the command picks up a newly
 published stable release instead of reusing an older cached binary.
 
-The wizard's second page offers the optional [status line](#status-line-optional);
-leave it unticked to keep `~/.codex/config.toml` untouched.
+The wizard's second page offers two optional status lines — Codex's
+[built-in bar](#status-line-optional) and the
+[gruvbox powerline bar](#gruvbox-powerline-status-line-optional) rendered by tmux.
+Leave both unticked to keep `~/.codex/` untouched.
 
 ## Commands
 
 | Export | Type | Description |
 |---|---|---|
 | `codex` | `bin` | Codex CLI on the host `PATH` |
+| `codex-tmux` | `bin` | Codex wrapped in tmux with the gruvbox status bar |
 | `Codex CLI` | `desktop` | Codex in a terminal from the app menu |
 
 Examples:
@@ -137,6 +140,79 @@ Untick it (or run `codex-cli-install --tools ""`) to remove it again. The
 you've customised the list since, it's left alone. Other `[tui]` keys always
 survive, and the `[tui]` table itself is removed only if emptying it left it bare.
 
+## Gruvbox powerline status line (optional)
+
+Codex cannot draw the powerline bar from
+[`~/.claude/statusline.sh`](../claude-code/README.md#status-line-optional) —
+see [No custom text, glyphs or separators](#no-custom-text-glyphs-or-separators).
+So this renders the same bar *around* Codex, using tmux as the frame:
+
+```
+┌─ codex (fullscreen TUI) ─────────────────────────────┐
+│  > explain this repository                           │
+└──────────────────────────────────────────────────────┘
+  ~/D/linux-tools   main ●2 ?4   #45 │ gpt-6-astra high   215.9k/258.4k 84%   5h 52% 4h10m   13:54
+  └── tmux status bar: same palette, glyphs and geometry as the Claude Code one
+```
+
+Enable it by ticking **tmux-statusline** in the wizard, or directly:
+
+```bash
+distrobox enter codex-cli-box -- codex-cli-install --tools tmux-statusline
+```
+
+Then run Codex through the wrapper instead of `codex`:
+
+```bash
+codex-tmux                       # takes the same arguments as codex
+codex-tmux resume
+```
+
+Detach with `C-\ d` (the prefix is `C-\`, not `C-b`, so it does not shadow
+Codex's own key bindings). The session uses a private tmux socket (`-L codex`),
+so it never touches your own tmux server, config or bindings.
+
+### What it shows
+
+Identical segments to the Claude Code bar, minus one and plus one:
+
+| Segment | Source |
+|---|---|
+| OS icon, dir, git branch + status | host `/run/host/etc/os-release`, `git status --porcelain=v2` |
+| PR number, coloured by review state | `gh pr view`, cached for 90s |
+| model **+ reasoning effort** | rollout `turn_context` (Claude's bar has no effort field) |
+| context window used | rollout `last_token_usage` / `model_context_window` |
+| cache read/write | rollout `cached_input_tokens` / `cache_write_input_tokens` |
+| 5h and 7d limits + reset countdown | rollout `rate_limits.primary` / `.secondary` |
+| user@host (ssh/root only), clock | same as the Claude Code bar |
+
+The `agent` segment is dropped — Codex has no equivalent.
+
+Live token and rate-limit numbers come from the session's rollout file under
+`~/.codex/sessions/`, which is the only machine-readable source Codex exposes.
+Two consequences worth knowing:
+
+- Numbers update when Codex writes a `token_count` record, i.e. per turn — not
+  continuously. A brand-new session shows dir/branch/PR only until its first
+  turn completes.
+- The active rollout file is identified as the newest one written since the
+  wrapper started. Running two `codex-tmux` sessions at once will point both
+  bars at whichever wrote most recently.
+
+### Narrow terminals
+
+The full bar is about 147 columns. Below that it drops whole segments rather
+than letting tmux clip mid-segment, in this order: cache → user@host → 7d
+limit → clock → 5h limit. Model and context window are never dropped, so the
+floor is roughly 84 columns.
+
+### Using it with the built-in bar
+
+The two are independent and you can enable both, but Codex draws its bar inside
+its own frame and tmux draws this one below it, so you get two. To use only this
+one, leave **statusline** unticked (or set `tui.status_line = []`). The installer
+prints a note if it sees both.
+
 ## Configuration and storage
 
 Distrobox shares the host home directory with the container. Codex therefore
@@ -152,6 +228,9 @@ the usual host path:
 | `~/.codex/config.toml` | Codex configuration, including `tui.status_line` |
 | `~/.codex/` | Auth, sessions, history |
 | `~/.codex/.linux-tools-statusline` | Marker recording the items we set (see notes) |
+| `~/.codex/codex-statusline.sh` | Gruvbox bar renderer, installed by the wizard |
+| `~/.codex/codex-tmux.conf` | tmux config used by `codex-tmux` |
+| `~/.codex/sessions/` | Per-session rollout files (the bar's data source) |
 
 The container can also see repositories and files under the host home
 directory. Its system packages and `/usr/bin/codex` remain isolated in

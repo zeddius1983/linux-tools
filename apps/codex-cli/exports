@@ -1,2 +1,3 @@
 bin:codex
+bin:codex-tmux
 desktop:codex:Codex CLI
