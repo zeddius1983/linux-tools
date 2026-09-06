@@ -162,6 +162,13 @@ Detach with `C-\ d`. The prefix is `C-\` rather than tmux's usual `C-b` so it
 does not shadow Codex's own keys, and the session is kept separate from any
 tmux server of your own.
 
+The mouse wheel scrolls, as it does when you run Codex directly. Codex has no
+scroll keys for the main view — `↑`/`↓` move through your input history,
+shell-style. Use `Ctrl`+`T` to open the transcript, which is scrollable.
+
+Every other key belongs to Codex; the wrapper only adds `C-\` as the tmux
+prefix.
+
 ### What it shows
 
 | Segment | Shows |
