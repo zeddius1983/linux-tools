@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install optional Codex CLI host integrations into Distrobox's shared home.
 # Runs inside codex-cli-box but writes to ~/.codex/, which is the host's home.
-# Usage: codex-cli-install --tools "statusline"
+# Usage: codex-cli-install --tools "statusline tmux-statusline"
 set -euo pipefail
 
 TOOLS=""
@@ -10,6 +10,17 @@ CONFIG="$CODEX_DIR/config.toml"
 # Records the item list we wrote, and doubles as the wizard's detect path
 # (wizard detection is file-existence only — it cannot inspect a TOML key).
 MARKER="$CODEX_DIR/.linux-tools-statusline"
+
+# tmux status line: bundled sources and where they land in the shared home.
+TMUX_SL_SRC="/usr/share/codex-cli/codex-statusline.sh"
+TMUX_CONF_SRC="/usr/share/codex-cli/codex-tmux.conf"
+TMUX_SL_DEST="$CODEX_DIR/codex-statusline.sh"
+TMUX_CONF_DEST="$CODEX_DIR/codex-tmux.conf"
+# codex-tmux is exported here rather than from apps/codex-cli/exports: `exports`
+# is static and `tools export` cannot see wizard selections, so listing it there
+# would put a command on the host PATH that fails until this tool is ticked.
+TMUX_BIN="/usr/bin/codex-tmux"
+TMUX_BIN_DEST="$HOME/.local/bin/codex-tmux"
 
 # Mirrors the Claude Code status line's segment selection as closely as Codex's
 # built-in item set allows. Codex renders these itself: fixed " · " separator,
@@ -26,7 +37,7 @@ done
 
 for tool in $TOOLS; do
     case "$tool" in
-        statusline) ;;
+        statusline|tmux-statusline) ;;
         *) echo "Unknown tool: $tool" >&2; exit 1 ;;
     esac
 done
@@ -128,6 +139,78 @@ else
             echo "   current: $existing"
         fi
         rm -f "$MARKER"
+    fi
+fi
+
+if has_tool tmux-statusline; then
+    step "Installing tmux status line"
+    for f in "$TMUX_SL_SRC" "$TMUX_CONF_SRC"; do
+        [[ -f "$f" ]] || { echo "Bundled file missing at $f" >&2; exit 1; }
+    done
+    ts="${ts:-$(date +%Y%m%d-%H%M%S)}"
+    # Back up either destination only when it exists and differs, so a script
+    # the user has edited is never silently replaced.
+    for pair in "$TMUX_SL_SRC:$TMUX_SL_DEST" "$TMUX_CONF_SRC:$TMUX_CONF_DEST"; do
+        src="${pair%%:*}" dest="${pair##*:}"
+        if [[ -f "$dest" ]] && ! cmp -s "$src" "$dest"; then
+            cp -p "$dest" "$dest.bak-$ts"
+            echo "   backed up existing $(basename "$dest") to $dest.bak-$ts"
+        fi
+    done
+    install -m 0755 "$TMUX_SL_SRC" "$TMUX_SL_DEST"
+    install -m 0644 "$TMUX_CONF_SRC" "$TMUX_CONF_DEST"
+    echo "   installed $TMUX_SL_DEST"
+    echo "   installed $TMUX_CONF_DEST"
+    # distrobox-export writes the host wrapper into the shared home, so this
+    # works from inside the box exactly as `tools export` would.
+    if distrobox-export --bin "$TMUX_BIN" --export-path "$HOME/.local/bin" >/dev/null 2>&1; then
+        echo "   exported $TMUX_BIN_DEST"
+    else
+        echo "   warning: could not export codex-tmux to $TMUX_BIN_DEST" >&2
+        echo "            run it with: distrobox enter codex-cli-box -- codex-tmux" >&2
+    fi
+    # Codex's own bar would stack underneath the tmux one, so turn it off. Only
+    # touch it when it is ours to touch: a list the user chose is left alone and
+    # they are told why they may end up with two bars.
+    if has_tool statusline; then
+        echo "   note: the built-in bar is also enabled; you will see two bars"
+        echo "         under codex-tmux. Untick 'statusline' to use only this one."
+    elif [[ -f "$MARKER" ]]; then
+        echo "   (built-in bar already removed above)"
+    else
+        cur="$(current_items)"
+        if [[ -z "$cur" ]]; then
+            echo "   built-in bar is not configured; nothing to disable"
+        else
+            echo "   note: tui.status_line is set to a list you chose:"
+            echo "         $cur"
+            echo "         Codex will draw it *inside* its own frame, below which"
+            echo "         tmux draws this bar. Set tui.status_line = [] to use"
+            echo "         only the tmux bar."
+        fi
+    fi
+    echo "   run it with: codex-tmux    (detach with C-\\ d)"
+else
+    # Toggle-off: remove only the two files we install, and only if they still
+    # match what we shipped — an edited copy is the user's now.
+    for pair in "$TMUX_SL_SRC:$TMUX_SL_DEST" "$TMUX_CONF_SRC:$TMUX_CONF_DEST"; do
+        src="${pair%%:*}" dest="${pair##*:}"
+        [[ -f "$dest" ]] || continue
+        [[ -n "${removing_tmux:-}" ]] || { step "Removing tmux status line"; removing_tmux=1; }
+        if [[ -f "$src" ]] && ! cmp -s "$src" "$dest"; then
+            echo "   $(basename "$dest") has local edits; leaving it in place"
+        else
+            rm -f "$dest"
+            echo "   removed $dest"
+        fi
+    done
+    if [[ -e "$TMUX_BIN_DEST" ]]; then
+        [[ -n "${removing_tmux:-}" ]] || { step "Removing tmux status line"; removing_tmux=1; }
+        distrobox-export --bin "$TMUX_BIN" --export-path "$HOME/.local/bin" --delete >/dev/null 2>&1 || true
+        # --delete is a no-op on a wrapper distrobox does not recognise, so make
+        # sure the command is really gone rather than reporting a false success.
+        rm -f "$TMUX_BIN_DEST"
+        echo "   removed $TMUX_BIN_DEST"
     fi
 fi
 

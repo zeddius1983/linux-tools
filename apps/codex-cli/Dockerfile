@@ -9,6 +9,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     python3 \
     python3-tomlkit \
+    jq \
+    tmux \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
@@ -38,5 +40,14 @@ RUN echo "==> Installing Codex ${CODEX_RELEASE} (cache-bust: ${CACHE_BUST})" \
 # Optional host integrations, wired up by the setup wizard
 # (wizard/01-statusline.packages). Writes to ~/.codex/ on the host via the
 # shared home; see codex-cli-install for what it touches.
+#
+# The tmux status line ships as data under /usr/share and is copied into
+# ~/.codex/ by the installer, mirroring how claude-code bundles statusline.sh.
+# codex-tmux itself is an exported command, so it must live in /usr/bin —
+# `command -pv` (used to resolve exports) does not search /usr/local/bin.
 COPY codex-cli-install /usr/bin/codex-cli-install
-RUN chmod +x /usr/bin/codex-cli-install
+COPY codex-tmux /usr/bin/codex-tmux
+COPY codex-statusline.sh codex-tmux.conf /usr/share/codex-cli/
+RUN chmod +x /usr/bin/codex-cli-install /usr/bin/codex-tmux \
+    && chmod 0644 /usr/share/codex-cli/codex-tmux.conf \
+    && chmod 0755 /usr/share/codex-cli/codex-statusline.sh
