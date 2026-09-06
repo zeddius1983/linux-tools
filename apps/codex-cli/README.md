@@ -162,8 +162,9 @@ Detach with `C-\ d`. The prefix is `C-\` rather than tmux's usual `C-b` so it
 does not shadow Codex's own keys, and the session is kept separate from any
 tmux server of your own.
 
-Scrolling works as it does in Codex normally — `Shift`+`↑`/`↓` a line at a time,
-`PgUp`/`PgDn` a page, and the mouse wheel.
+The mouse wheel scrolls, as it does when you run Codex directly. Codex owns
+every other key: `↑`/`↓` move through your input history, not the transcript.
+Press `?` in Codex for its own shortcut list rather than trusting one here.
 
 ### What it shows
 
