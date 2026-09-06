@@ -26,6 +26,18 @@
 
 set -uo pipefail
 
+# Two render modes, both driven from codex-tmux.conf:
+#   <width>          the status bar itself (status-format[1])
+#   --rule <width>   the horizontal rule above it (status-format[0])
+# The rule is a separate tmux status line, so it needs its own invocation; it
+# returns before any of the rollout/git/gh work below, so the extra call per
+# status-interval costs nothing measurable.
+mode=bar
+if [[ "${1:-}" == "--rule" ]]; then
+    mode=rule
+    shift
+fi
+
 # tmux expands #{client_width} in the status-format command and passes it as
 # $1 (see codex-tmux.conf). 0 means "unknown" — render everything and let tmux
 # clip. Segment dropping below depends on this being the *client* width.
@@ -37,6 +49,32 @@ term_width="${1:-0}"
 # environment is not guaranteed to carry a UTF-8 locale, so pin one.
 if [[ "${LC_ALL:-}${LC_CTYPE:-}${LANG:-}" != *[Uu][Tt][Ff]* ]]; then
     export LC_ALL=C.UTF-8
+fi
+
+# --- gruvbox_dark palette, copied from [palettes.gruvbox_dark] in
+#     ~/.config/starship.toml. Hex here rather than the Claude script's "R;G;B"
+#     because tmux styles take #rrggbb, not SGR parameters. ---
+c_fg0='#fbf1c7'    # default ink
+c_ink='#282828'    # dark ink, for light backgrounds (yellow)
+c_bg1='#3c3836'
+c_bg3='#665c54'
+c_blue='#458588'
+c_aqua='#689d6a'
+c_green='#98971a'
+c_orange='#d65d0e'
+c_purple='#b16286'
+c_red='#cc241d'
+c_yellow='#d79921'
+
+# --- rule: a full-width horizontal line, drawn as its own tmux status line so
+#     it separates the bar from Codex's own frame. Returns before any data is
+#     gathered — nothing below this point runs in rule mode.
+if [[ "$mode" == "rule" ]]; then
+    rule_w=$term_width
+    (( rule_w > 0 )) || rule_w=80
+    printf -v rule_pad '%*s' "$rule_w" ''
+    printf '#[fg=%s]%s#[default]' "$c_bg3" "${rule_pad// /─}"
+    exit 0
 fi
 
 CODEX_DIR="${CODEX_HOME:-$HOME/.codex}"
@@ -109,20 +147,6 @@ cache_total=$((cache_read + cache_write))
 ctx_pct=0
 (( ctx_size > 0 )) && ctx_pct=$(((ctx_used * 100 + ctx_size / 2) / ctx_size))
 
-# --- gruvbox_dark palette, copied from [palettes.gruvbox_dark] in
-#     ~/.config/starship.toml. Hex here rather than the Claude script's "R;G;B"
-#     because tmux styles take #rrggbb, not SGR parameters. ---
-c_fg0='#fbf1c7'    # default ink
-c_ink='#282828'    # dark ink, for light backgrounds (yellow)
-c_bg1='#3c3836'
-c_bg3='#665c54'
-c_blue='#458588'
-c_aqua='#689d6a'
-c_green='#98971a'
-c_orange='#d65d0e'
-c_purple='#b16286'
-c_red='#cc241d'
-c_yellow='#d79921'
 
 fg_for() { # readable ink for a given background
     case "$1" in

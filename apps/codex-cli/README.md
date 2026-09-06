@@ -152,12 +152,15 @@ see [No custom text, glyphs or separators](#no-custom-text-glyphs-or-separators)
 So this renders the same bar *around* Codex, using tmux as the frame:
 
 ```
-┌─ codex (fullscreen TUI) ─────────────────────────────┐
-│  > explain this repository                           │
-└──────────────────────────────────────────────────────┘
+  > explain this repository
+  ...codex, fullscreen...
+────────────────────────────────────────────────────────────────────────────────
   ~/D/linux-tools   main ●2 ?4   #45   gpt-6-astra high   215.9k/258.4k 84%   5h 52% 4h10m   13:54
-  └── tmux status bar: same palette, glyphs and geometry as the Claude Code one
 ```
+
+tmux draws two status lines: a full-width rule separating Codex from the bar,
+and the bar itself — same palette, glyphs and geometry as the Claude Code one.
+Together they take two terminal rows.
 
 Enable it by ticking **tmux-statusline** in the wizard, or directly:
 
@@ -241,7 +244,7 @@ the usual host path:
 | `~/.codex/` | Auth, sessions, history |
 | `~/.codex/.linux-tools-statusline` | Marker recording the items we set (see notes) |
 | `~/.codex/codex-statusline.sh` | Gruvbox bar renderer, installed by the wizard |
-| `~/.codex/codex-tmux.conf` | tmux config used by `codex-tmux` |
+| `~/.codex/codex-tmux.conf` | tmux config used by `codex-tmux` (2 status lines) |
 | `~/.local/bin/codex-tmux` | Exported command, added/removed by the wizard item |
 | `~/.codex/sessions/` | Per-session rollout files (the bar's data source) |
 
