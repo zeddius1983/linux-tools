@@ -459,11 +459,12 @@ func (m *model) wizardView() string {
 	w := m.wiz
 	var b strings.Builder
 
-	// "Wizard" rather than the action name: which action is running is spelled
-	// out in words by actionNote() on the review screen, right before anything
-	// is committed, which is where it actually matters.
+	// "Wizard", with the action as a dim suffix — the review screen spells the
+	// action out in words via actionNote() before anything is committed, but on
+	// the pages this is the only thing distinguishing a `b` (build) wizard from
+	// an `s` (setup) one.
 	b.WriteString(styTabOn.Render(" "+w.app.Label()+" ") +
-		styDesc.Render("  Wizard") + "\n")
+		styDesc.Render("  Wizard · "+w.action) + "\n")
 	b.WriteString(m.wizardTabsView() + "\n")
 	b.WriteString(styBorder.Render(strings.Repeat("─", m.w)) + "\n\n")
 

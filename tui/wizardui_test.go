@@ -614,3 +614,34 @@ func TestWizardPageNavigationClamps(t *testing.T) {
 		t.Errorf("right past the last page: stage = %v, want stageConfirm", m.wiz.stage)
 	}
 }
+
+// The header names the action. On the pages it is the only thing distinguishing
+// a build wizard from a setup one — the review screen's actionNote() comes too
+// late to help someone who opened the wrong one.
+func TestWizardHeaderNamesTheAction(t *testing.T) {
+	for _, action := range []string{"setup", "build", "create"} {
+		m := newModel([]App{}, appsDir, "tools", true)
+		m.w, m.h = 90, 24
+		m.wiz, _ = newWizardSession(testApp(t, "comfyui"), action, t.TempDir())
+		header := strings.SplitN(m.wizardView(), "\n", 2)[0]
+		if !strings.Contains(header, "Wizard") || !strings.Contains(header, action) {
+			t.Errorf("%s: header = %q, want it to name both Wizard and the action",
+				action, stripStyles(header))
+		}
+	}
+}
+
+// stripStyles removes SGR escapes so a failure prints something readable.
+func stripStyles(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] == 0x1b {
+			for i < len(s) && s[i] != 'm' {
+				i++
+			}
+			continue
+		}
+		b.WriteByte(s[i])
+	}
+	return b.String()
+}

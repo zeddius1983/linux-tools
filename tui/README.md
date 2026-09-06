@@ -181,9 +181,10 @@ sentence and too long for a tab. Words in `wizTabAcronyms` are spelled out in
 full caps, so `00-gpu.runtime` tabs as **GPU**, not "Gpu" — extend that set when
 a new page name needs it.
 
-The header reads `<app>  Wizard` rather than naming the action. Which action is
-about to run is spelled out in words by `actionNote()` on the review screen,
-immediately before anything is committed.
+The header reads `<app>  Wizard · <action>`. The review screen spells the action
+out in words via `actionNote()` before anything is committed, but on the pages
+this dim suffix is the only thing distinguishing a `b` (build) wizard from an
+`s` (setup) one.
 
 Keys: `space` toggle/select, `a`/`n` all/none, `↑`/`↓` move, `←`/`→` (or `h`/`l`,
 `tab`/`shift+tab`) change page, `⏎` next page or review, `esc` back a page (and out
