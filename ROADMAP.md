@@ -26,6 +26,9 @@ Priority order within each section: highest first.
 - [x] `copilot-cli` — GitHub Copilot CLI
 - [x] `antigravity` — Google Antigravity AI CLI (agy)
 - [x] `dev-toolbox` SDKMAN/Java support — project JDK management moved out of `jetbrains-toolbox`
+- [ ] `orca` — ADE for driving a fleet of parallel coding agents (Claude Code, Codex, opencode, Copilot), each in its own git worktree; ships a Linux AppImage, so `gui:` + a wrapper script (https://github.com/stablyai/orca)
+  - Orca launches agent CLIs, and the already-exported ones reach it fine: `distrobox-export --bin` wrappers carry a branch for exactly this — from inside a *different* box they re-dispatch through `distrobox-host-exec`, which lands back on the host wrapper and enters the right box. Verified with `distrobox enter chrome-box -- ~/.local/bin/codex --version`, which prints `codex-cli 0.153.4`. So Orca needs neither the agents baked into its own image nor `host-only` status on that account.
+  - What it does inherit is the `distrobox-host-exec` prerequisite chain already documented in CLAUDE.md: `flatpak` on the host, and `curl`/`wget` in the Orca image so `host-spawn` can bootstrap. Both fail silently when missing, so check them first if agents don't launch.
 - [ ] `opencode` — AI coding agent CLI (https://opencode.ai/docs/ru)
 - [ ] `cursor` — AI-powered code editor (Electron)
 - [ ] `windsurf` — Codeium Windsurf editor
