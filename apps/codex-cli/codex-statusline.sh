@@ -357,10 +357,10 @@ line+="#[bg=default,fg=${last_bg}]${cap_r}#[default]"
 # ---- assemble right side ----
 #
 # Collected first, rendered second: the bar is 147 columns on a typical session,
-# so on a narrower terminal something has to go. tmux's own clipping would eat
-# the *start* of the right side (the model name) and leave a half-drawn segment,
-# which reads as a bug. Dropping whole low-value segments instead degrades
-# cleanly. Model and context window are never dropped.
+# so on a narrower terminal something has to go. Letting tmux clip would cut
+# mid-segment and leave a half-drawn coloured block, which reads as a bug.
+# Dropping whole low-value segments instead degrades cleanly. Model and context
+# window are never dropped.
 seg_bg=() seg_text=() seg_prio=()
 add_seg() { # $1=bg $2=text $3=drop priority (higher drops first; 0 = never)
     seg_bg+=("$1"); seg_text+=("$2"); seg_prio+=("${3:-0}")
@@ -439,6 +439,7 @@ if (( term_width > 0 )); then
     done
 fi
 
-# tmux's status-format understands #[align=right]; one invocation renders both
-# halves, which keeps this to a single process per status-interval.
-printf '%s#[align=right]%s' "$line" "$right"
+# Two spaces between the halves, exactly as the Claude Code bar joins them —
+# the right side flows on from the left rather than being pushed to the far
+# edge. (tmux's #[align=right] would do the latter; it is deliberately unused.)
+printf '%s  %s' "$line" "$right"

@@ -155,7 +155,7 @@ So this renders the same bar *around* Codex, using tmux as the frame:
 ┌─ codex (fullscreen TUI) ─────────────────────────────┐
 │  > explain this repository                           │
 └──────────────────────────────────────────────────────┘
-  ~/D/linux-tools   main ●2 ?4   #45 │ gpt-6-astra high   215.9k/258.4k 84%   5h 52% 4h10m   13:54
+  ~/D/linux-tools   main ●2 ?4   #45   gpt-6-astra high   215.9k/258.4k 84%   5h 52% 4h10m   13:54
   └── tmux status bar: same palette, glyphs and geometry as the Claude Code one
 ```
 
@@ -208,6 +208,10 @@ Two consequences worth knowing:
   bars at whichever wrote most recently.
 
 ### Narrow terminals
+
+The two halves are joined by two spaces, so the right side flows on from the
+left rather than hugging the terminal edge — the same layout as the Claude Code
+bar, byte for byte at the join.
 
 The full bar is about 147 columns. Below that it drops whole segments rather
 than letting tmux clip mid-segment, in this order: cache → user@host → 7d
