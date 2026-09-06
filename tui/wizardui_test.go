@@ -541,19 +541,30 @@ func TestWizTabLabel(t *testing.T) {
 	}
 }
 
-// twoPageSession builds a session with two pages, since no app in the repo is
-// guaranteed to ship more than one and the tab bar is only interesting with
-// several.
+// twoPageSession builds a session with exactly two pages, named so the tab
+// labels are predictable.
+//
+// The page list is *replaced*, not appended to: an earlier version of this
+// helper appended to whatever codex-cli shipped, which silently became a
+// three-page session the moment that app gained a second wizard page. A test
+// about page navigation must control how many pages there are.
 func twoPageSession(t *testing.T) *wizardSession {
 	t.Helper()
 	w, _ := newWizardSession(testApp(t, "codex-cli"), "setup", t.TempDir())
-	second := w.pages[0]
+	if len(w.pages) == 0 {
+		t.Fatalf("codex-cli has no wizard pages to build a session from")
+	}
+	first := w.pages[0]
+	first.Name, first.Type = "00-release", "buildarg"
+	first.items = []Item{{Name: "latest"}}
+	first.loading = false
+
+	second := first
 	second.Name, second.Type = "01-statusline", "packages"
 	second.items = []Item{{Name: "statusline"}}
 	second.checked = []bool{false}
-	second.loading = false
-	w.pages[0].loading = false
-	w.pages = append(w.pages, second)
+
+	w.pages = []wizPage{first, second}
 	return w
 }
 
