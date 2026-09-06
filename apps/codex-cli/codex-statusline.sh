@@ -22,7 +22,9 @@
 #
 # Perf note: tmux re-runs this every status-interval, so the rollout file is
 # read via a bounded `tail` (not a whole-file scan, which grows without limit
-# over a long session) and all fields come out of a single jq call.
+# over a long session) plus one backwards `tac`/`grep -m1` probe for the
+# once-per-turn turn_context record, and all fields come out of a single jq
+# call.
 
 set -uo pipefail
 
@@ -100,9 +102,17 @@ rollout="$(newest_rollout)"
 # whitespace delimiters even when IFS is one of them, silently swallowing empty
 # fields and shifting every field after. \x1f isn't whitespace.
 #
-# Only the tail is parsed. Both records we need are rewritten on every turn, so
-# the last of each is always near the end; a full scan would make the bar get
-# slower the longer the session runs.
+# token_count is rewritten several times per turn, so a bounded `tail` always
+# catches the newest one and the bar stays O(1) in session length. turn_context
+# is written only *once per turn*, though, and a single turn can easily emit
+# more than 400 records — so it is fetched separately by scanning backwards from
+# the end (`tac` + `grep -m1`, which stops at the first hit) and prepended to
+# the tail. Both streams go into the same jq call; the prepended line is the
+# oldest candidate, so `last` still picks whatever the tail holds when the
+# turn_context is recent enough to appear in both.
+#
+# The grep pattern is anchored with `[^{]*` so it cannot match a nested
+# `"type":"turn_context"` that a response_item quoted in its own payload.
 IFS=$'\x1f' read -r \
     cwd model_name effort \
     ctx_in ctx_out ctx_size \
@@ -110,7 +120,11 @@ IFS=$'\x1f' read -r \
     five_h_used seven_d_used five_h_resets_at seven_d_resets_at \
     <<< "$(
     if [[ -n "$rollout" && -r "$rollout" ]]; then
-        tail -n 400 "$rollout" 2>/dev/null | jq -rs '
+        {
+            tac "$rollout" 2>/dev/null \
+                | grep -m1 -E '^\{[^{]*"type":"turn_context"'
+            tail -n 400 "$rollout" 2>/dev/null
+        } | jq -rs '
           # Last turn_context wins for model/cwd; last token_count for usage.
           (map(select(.type == "turn_context")) | last | .payload?) as $t
           | (map(select(.type == "event_msg" and .payload.type == "token_count"))
