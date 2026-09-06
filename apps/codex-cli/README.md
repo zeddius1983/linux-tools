@@ -29,8 +29,12 @@ Leave both unticked to keep `~/.codex/` untouched.
 | Export | Type | Description |
 |---|---|---|
 | `codex` | `bin` | Codex CLI on the host `PATH` |
-| `codex-tmux` | `bin` | Codex wrapped in tmux with the gruvbox status bar |
 | `Codex CLI` | `desktop` | Codex in a terminal from the app menu |
+
+`codex-tmux` is a third command, but it is **not** exported by default — it
+appears on your `PATH` only if you tick **tmux-statusline** in the wizard, and
+disappears when you untick it. See
+[Gruvbox powerline status line](#gruvbox-powerline-status-line-optional).
 
 Examples:
 
@@ -161,6 +165,10 @@ Enable it by ticking **tmux-statusline** in the wizard, or directly:
 distrobox enter codex-cli-box -- codex-cli-install --tools tmux-statusline
 ```
 
+That installs the renderer and tmux config into `~/.codex/` **and** exports the
+`codex-tmux` command to `~/.local/bin`. Unticking removes all three, so an
+install that never enables this gains nothing on its `PATH`.
+
 Then run Codex through the wrapper instead of `codex`:
 
 ```bash
@@ -230,6 +238,7 @@ the usual host path:
 | `~/.codex/.linux-tools-statusline` | Marker recording the items we set (see notes) |
 | `~/.codex/codex-statusline.sh` | Gruvbox bar renderer, installed by the wizard |
 | `~/.codex/codex-tmux.conf` | tmux config used by `codex-tmux` |
+| `~/.local/bin/codex-tmux` | Exported command, added/removed by the wizard item |
 | `~/.codex/sessions/` | Per-session rollout files (the bar's data source) |
 
 The container can also see repositories and files under the host home
