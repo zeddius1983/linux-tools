@@ -1,1 +1,3 @@
 /tools-tui
+# `go build` with no -o defaults to the package directory's name.
+/tui

@@ -167,14 +167,14 @@ func (w *wizardSession) window(rows int) (top, end int) {
 }
 
 // wizardRows is how many item rows fit on screen: the terminal less the app
-// header and its rule (3), the page title, prompt and the blank after it (3),
-// the row counter (1), the packages footnote and its blank (2), and the rule
-// above the key legend plus the legend itself (2).
+// header, the page tab bar and its rule (4), the page title, prompt and the
+// blank after it (3), the row counter (1), the packages footnote and its blank
+// (2), and the rule above the key legend plus the legend itself (2).
 //
 // It is the same budget for a page that has no footnote, which just leaves a
 // blank line — better than a page that runs one line past the bottom.
 func (m *model) wizardRows() int {
-	rows := m.h - 11
+	rows := m.h - 12
 	if rows < 3 {
 		rows = 3
 	}
@@ -402,7 +402,15 @@ func (m *model) wizardKey(k string) (tea.Model, tea.Cmd) {
 				p.checked[i] = false
 			}
 		}
-	case "enter", "right", "l":
+	case "left", "h", "shift+tab":
+		// Back one page. Clamped, not wrapped: this is a linear flow, and
+		// wrapping from the first page to the last would skip the ones between.
+		// esc remains the way out of the wizard from page 0.
+		if w.idx > 0 {
+			w.idx--
+			w.focus()
+		}
+	case "enter", "right", "l", "tab":
 		if !w.ready() {
 			break
 		}
@@ -452,11 +460,9 @@ func (m *model) wizardView() string {
 	var b strings.Builder
 
 	b.WriteString(styTabOn.Render(" "+w.app.Label()+" ") +
-		styDesc.Render("  "+w.action))
-	if w.stage == stagePages {
-		b.WriteString(styDesc.Render(fmt.Sprintf("   step %d/%d", w.idx+1, len(w.pages))))
-	}
-	b.WriteString("\n" + styBorder.Render(strings.Repeat("─", m.w)) + "\n\n")
+		styDesc.Render("  "+w.action) + "\n")
+	b.WriteString(m.wizardTabsView() + "\n")
+	b.WriteString(styBorder.Render(strings.Repeat("─", m.w)) + "\n\n")
 
 	if w.stage == stageConfirm {
 		b.WriteString(m.wizardConfirmBody())
@@ -467,6 +473,50 @@ func (m *model) wizardView() string {
 	b.WriteString("\n" + styBorder.Render(strings.Repeat("─", m.w)) + "\n")
 	b.WriteString(m.wizardKeys())
 	return b.String()
+}
+
+// wizTabLabel turns a page's file name into a tab label: "01-statusline" reads
+// as "Statusline". The NN- prefix only exists to order the files, and the page
+// Title ("Optional Codex CLI Integrations") is a sentence, too long for a tab.
+func wizTabLabel(name string) string {
+	// Strip the ordering prefix. Anything not matching NN- is used as-is.
+	if len(name) > 3 && name[0] >= '0' && name[0] <= '9' &&
+		name[1] >= '0' && name[1] <= '9' && name[2] == '-' {
+		name = name[3:]
+	}
+	name = strings.ReplaceAll(name, "-", " ")
+	if name == "" {
+		return name
+	}
+	return strings.ToUpper(name[:1]) + name[1:]
+}
+
+// wizardTabsView renders one tab per page plus a trailing Review tab, in the
+// same style as the dashboard's category tabs so the two screens read alike.
+//
+// Unlike those, these are a linear flow rather than a ring: Review is always
+// last and the tabs do not wrap.
+func (m *model) wizardTabsView() string {
+	w := m.wiz
+	if len(w.pages) == 0 {
+		return ""
+	}
+	var tabs []string
+	for i, p := range w.pages {
+		label := wizTabLabel(p.Name)
+		if w.stage == stagePages && i == w.idx {
+			tabs = append(tabs, styTabOn.Render(label))
+		} else {
+			tabs = append(tabs, styTabOff.Render(label))
+		}
+	}
+	review := "Review"
+	if w.stage == stageConfirm {
+		tabs = append(tabs, styTabOn.Render(review))
+	} else {
+		tabs = append(tabs, styTabOff.Render(review))
+	}
+	return lipgloss.JoinHorizontal(lipgloss.Top, tabs...)
 }
 
 func (m *model) wizardPageBody() string {
@@ -647,8 +697,11 @@ func (m *model) wizardKeys() string {
 			next = " review"
 		}
 		parts = append(parts,
-			styKey.Render("↑/↓")+styDesc.Render(" move"),
-			styKey.Render("⏎")+styDesc.Render(next))
+			styKey.Render("↑/↓")+styDesc.Render(" move"))
+		if len(w.pages) > 1 {
+			parts = append(parts, styKey.Render("←/→")+styDesc.Render(" page"))
+		}
+		parts = append(parts, styKey.Render("⏎")+styDesc.Render(next))
 		if w.idx == 0 {
 			// There is no page behind the first one, so esc leaves outright.
 			parts = append(parts, styKey.Render("q/esc")+styDesc.Render(" cancel"))

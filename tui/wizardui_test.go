@@ -521,3 +521,94 @@ func TestWizardWaitsForLoadingPage(t *testing.T) {
 		t.Error("enter did not advance once the items had arrived")
 	}
 }
+
+func TestWizTabLabel(t *testing.T) {
+	cases := map[string]string{
+		"00-release":     "Release",
+		"01-statusline":  "Statusline",
+		"00-tools":       "Tools",
+		"02-gpu-runtime": "Gpu runtime",
+		// Not an NN- prefix, so it is used as-is apart from casing.
+		"custom": "Custom",
+		"":       "",
+	}
+	for in, want := range cases {
+		if got := wizTabLabel(in); got != want {
+			t.Errorf("wizTabLabel(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// twoPageSession builds a session with two pages, since no app in the repo is
+// guaranteed to ship more than one and the tab bar is only interesting with
+// several.
+func twoPageSession(t *testing.T) *wizardSession {
+	t.Helper()
+	w, _ := newWizardSession(testApp(t, "codex-cli"), "setup", t.TempDir())
+	second := w.pages[0]
+	second.Name, second.Type = "01-statusline", "packages"
+	second.items = []Item{{Name: "statusline"}}
+	second.checked = []bool{false}
+	second.loading = false
+	w.pages[0].loading = false
+	w.pages = append(w.pages, second)
+	return w
+}
+
+// The highlighted tab must track the page, and Review must light up on the
+// confirmation screen — a tab bar that does not move is worse than none.
+func TestWizardTabsHighlightFollowsStage(t *testing.T) {
+	m := newModel([]App{}, appsDir, "tools", true)
+	m.w, m.h = 100, 24
+	m.wiz = twoPageSession(t)
+
+	active := func() string {
+		bar := m.wizardTabsView()
+		for _, label := range []string{"Release", "Statusline", "Review"} {
+			if strings.Contains(bar, styTabOn.Render(label)) {
+				return label
+			}
+		}
+		return "none"
+	}
+
+	m.wiz.idx, m.wiz.stage = 0, stagePages
+	if got := active(); got != "Release" {
+		t.Errorf("page 0: active tab = %q, want Release", got)
+	}
+	m.wiz.idx = 1
+	if got := active(); got != "Statusline" {
+		t.Errorf("page 1: active tab = %q, want Statusline", got)
+	}
+	m.wiz.stage = stageConfirm
+	if got := active(); got != "Review" {
+		t.Errorf("confirm: active tab = %q, want Review", got)
+	}
+}
+
+// ←/→ walk the pages and clamp at the ends: this is a linear flow, so wrapping
+// from the first page to the last would skip everything between.
+func TestWizardPageNavigationClamps(t *testing.T) {
+	m := newModel([]App{}, appsDir, "tools", true)
+	m.w, m.h = 100, 24
+	m.wiz = twoPageSession(t)
+
+	m.wizardKey("left")
+	if m.wiz.idx != 0 || m.wiz.stage != stagePages {
+		t.Errorf("left on page 0: idx=%d stage=%v, want 0/stagePages", m.wiz.idx, m.wiz.stage)
+	}
+	m.wizardKey("right")
+	if m.wiz.idx != 1 {
+		t.Fatalf("right: idx = %d, want 1", m.wiz.idx)
+	}
+	m.wizardKey("left")
+	if m.wiz.idx != 0 {
+		t.Errorf("left: idx = %d, want 0", m.wiz.idx)
+	}
+	// Past the last page, forward hands over to the confirmation screen.
+	m.wizardKey("right")
+	m.wizardKey("right")
+	if m.wiz.stage != stageConfirm {
+		t.Errorf("right past the last page: stage = %v, want stageConfirm", m.wiz.stage)
+	}
+}
