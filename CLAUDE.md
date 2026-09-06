@@ -8,9 +8,37 @@ Packages Linux GUI and CLI applications into [Distrobox](https://distrobox.it/) 
 
 ## Runtime environment
 
-Claude Code runs inside `claude-code-box`, a Distrobox container (`linux-tools/claude-code:latest`). All shell commands execute inside that container by default.
+Claude Code may be running **on the host** or **inside `claude-code-box`** (the
+Distrobox container built from `linux-tools/claude-code:latest`), depending on how
+it was launched. The two need different command prefixes, so check first — don't
+assume:
 
-Commands that interact with the host — running `tools`, `podman`, `distrobox`, or anything that needs to see the host filesystem or process tree — must be prefixed with `distrobox-host-exec`:
+```bash
+[ -f /run/.containerenv ] && echo container || echo host
+```
+
+`$CONTAINER_ID` works as a secondary signal — inside a box it holds the box name
+(`chrome-box`), on the host it is unset. `/etc/os-release` is a useful cross-check
+too: it names the container's base image inside a box (`Ubuntu 24.04.4 LTS`) and
+the real distro on the host (`Linux Mint 22.3`). **`hostname` is not a signal** —
+Distrobox gives the container the host's hostname, so it reads the same (`halo`)
+from both sides.
+
+**On the host** (no `/run/.containerenv`): run everything directly. `tools`,
+`podman` and `distrobox` are all on `PATH`, and `distrobox-host-exec` refuses to
+run at all — it prints `You must run distrobox-host-exec inside a container!` and
+exits 126, so prefixing with it there breaks the command rather than being a
+harmless no-op.
+
+```bash
+tools setup <app>
+podman images
+distrobox list
+```
+
+**Inside `claude-code-box`** (`/run/.containerenv` exists): commands that touch the
+host — `tools`, `podman`, `distrobox`, or anything that needs the host filesystem
+or process tree — must be prefixed:
 
 ```bash
 distrobox-host-exec tools setup <app>
@@ -19,7 +47,8 @@ distrobox-host-exec podman images
 distrobox-host-exec distrobox list
 ```
 
-Plain shell commands (file edits, `git`, `grep`, etc.) run fine inside the container without the prefix because `$HOME` is shared.
+Plain shell commands (file edits, `git`, `grep`, etc.) need no prefix in either
+case — `$HOME` is shared, so the working tree is the same files either way.
 
 ## Common commands
 
