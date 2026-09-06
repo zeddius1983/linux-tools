@@ -1,4 +1,5 @@
 Optional Codex CLI Integrations
 Select host integrations to enable (reselecting updates them):
 setup
-statusline|statusline|Status line in ~/.codex|off|~/.codex/.linux-tools-statusline
+statusline|statusline|Built-in bar in ~/.codex|off|~/.codex/.linux-tools-statusline
+tmux-statusline|tmux-statusline|Gruvbox bar via codex-tmux|off|~/.codex/codex-statusline.sh
