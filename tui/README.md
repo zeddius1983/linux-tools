@@ -177,7 +177,13 @@ same information and names the pages as well.
 
 Tab labels come from the page's file name, not its `Title`: `01-statusline.packages`
 reads as **Statusline**, where the title ("Optional Codex CLI Integrations") is a
-sentence and too long for a tab.
+sentence and too long for a tab. Words in `wizTabAcronyms` are spelled out in
+full caps, so `00-gpu.runtime` tabs as **GPU**, not "Gpu" — extend that set when
+a new page name needs it.
+
+The header reads `<app>  Wizard` rather than naming the action. Which action is
+about to run is spelled out in words by `actionNote()` on the review screen,
+immediately before anything is committed.
 
 Keys: `space` toggle/select, `a`/`n` all/none, `↑`/`↓` move, `←`/`→` (or `h`/`l`,
 `tab`/`shift+tab`) change page, `⏎` next page or review, `esc` back a page (and out

@@ -459,8 +459,11 @@ func (m *model) wizardView() string {
 	w := m.wiz
 	var b strings.Builder
 
+	// "Wizard" rather than the action name: which action is running is spelled
+	// out in words by actionNote() on the review screen, right before anything
+	// is committed, which is where it actually matters.
 	b.WriteString(styTabOn.Render(" "+w.app.Label()+" ") +
-		styDesc.Render("  "+w.action) + "\n")
+		styDesc.Render("  Wizard") + "\n")
 	b.WriteString(m.wizardTabsView() + "\n")
 	b.WriteString(styBorder.Render(strings.Repeat("─", m.w)) + "\n\n")
 
@@ -475,20 +478,40 @@ func (m *model) wizardView() string {
 	return b.String()
 }
 
+// wizTabAcronyms are page-name words that are initialisms, so "00-gpu.runtime"
+// tabs as "GPU" rather than "Gpu". Kept as an explicit set rather than a rule
+// (all-caps under N letters, say) because "Gui"/"Cli" and "Tools" are the same
+// shape — only a list knows which is which. Extend it when a page name needs it.
+var wizTabAcronyms = map[string]string{
+	"ai": "AI", "cli": "CLI", "cpu": "CPU", "gpu": "GPU", "gui": "GUI",
+	"llm": "LLM", "mcp": "MCP", "npu": "NPU", "tui": "TUI",
+}
+
 // wizTabLabel turns a page's file name into a tab label: "01-statusline" reads
-// as "Statusline". The NN- prefix only exists to order the files, and the page
-// Title ("Optional Codex CLI Integrations") is a sentence, too long for a tab.
+// as "Statusline", "00-gpu" as "GPU". The NN- prefix only exists to order the
+// files, and the page Title ("Optional Codex CLI Integrations") is a sentence,
+// too long for a tab.
 func wizTabLabel(name string) string {
 	// Strip the ordering prefix. Anything not matching NN- is used as-is.
 	if len(name) > 3 && name[0] >= '0' && name[0] <= '9' &&
 		name[1] >= '0' && name[1] <= '9' && name[2] == '-' {
 		name = name[3:]
 	}
-	name = strings.ReplaceAll(name, "-", " ")
 	if name == "" {
 		return name
 	}
-	return strings.ToUpper(name[:1]) + name[1:]
+	words := strings.Split(name, "-")
+	for i, w := range words {
+		if w == "" {
+			continue
+		}
+		if a, ok := wizTabAcronyms[strings.ToLower(w)]; ok {
+			words[i] = a
+			continue
+		}
+		words[i] = strings.ToUpper(w[:1]) + w[1:]
+	}
+	return strings.Join(words, " ")
 }
 
 // wizardTabsView renders one tab per page plus a trailing Review tab, in the

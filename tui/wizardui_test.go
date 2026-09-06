@@ -527,7 +527,9 @@ func TestWizTabLabel(t *testing.T) {
 		"00-release":     "Release",
 		"01-statusline":  "Statusline",
 		"00-tools":       "Tools",
-		"02-gpu-runtime": "Gpu runtime",
+		"00-gpu":         "GPU",
+		"02-gpu-runtime": "GPU Runtime",
+		"03-mcp":         "MCP",
 		// Not an NN- prefix, so it is used as-is apart from casing.
 		"custom": "Custom",
 		"":       "",
