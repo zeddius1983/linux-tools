@@ -20,21 +20,17 @@ refreshes the installer layer, so rerunning the command picks up a newly
 published stable release instead of reusing an older cached binary.
 
 The wizard's second page offers two optional status lines — Codex's
-[built-in bar](#status-line-optional) and the
-[gruvbox powerline bar](#gruvbox-powerline-status-line-optional) rendered by tmux.
-Leave both unticked to keep `~/.codex/` untouched.
+[built-in bar](#status-line-optional) and a
+[styled powerline bar](#powerline-status-bar-optional). Leave both unticked to
+keep `~/.codex/` untouched.
 
 ## Commands
 
 | Export | Type | Description |
 |---|---|---|
 | `codex` | `bin` | Codex CLI on the host `PATH` |
+| `codex-tmux` | `bin` | *Optional.* Codex with the [powerline status bar](#powerline-status-bar-optional). Added only if you tick **tmux-statusline** in the wizard, and removed if you untick it |
 | `Codex CLI` | `desktop` | Codex in a terminal from the app menu |
-
-`codex-tmux` is a third command, but it is **not** exported by default — it
-appears on your `PATH` only if you tick **tmux-statusline** in the wizard, and
-disappears when you untick it. See
-[Gruvbox powerline status line](#gruvbox-powerline-status-line-optional).
 
 Examples:
 
@@ -54,8 +50,7 @@ codex --version
 
 ## Status line (optional)
 
-The setup wizard can configure Codex's built-in status line to show roughly the
-same information as this repo's [Claude Code status line](../claude-code/README.md#status-line-optional):
+The setup wizard can turn on Codex's own status line, showing:
 
 ```
 project · branch · #PR · model · context used · 5h limit · weekly limit
@@ -84,19 +79,16 @@ status_line = [
 ]
 ```
 
-**This is a config change, not a script.** Unlike Claude Code, Codex has no hook
-for running a custom command and rendering its output — `tui.status_line` accepts
-only an ordered list of built-in item identifiers. So it carries the same
-*information* as the Claude Code bar, but not its powerline segments, rounded caps
-or gruvbox palette; see [No custom text, glyphs or separators](#no-custom-text-glyphs-or-separators).
-
-You can also configure it interactively inside Codex with `/statusline`.
+Codex draws this bar itself, so its colours and spacing come from the Codex
+theme and are not configurable. You can change *which* items appear, and in
+what order — either by editing the list below, or interactively inside Codex
+with `/statusline`. If you want a styled bar instead, see
+[Powerline status bar](#powerline-status-bar-optional).
 
 ### Available items
 
 Pick any subset, in any order, by editing `tui.status_line` yourself. This is
-the complete set as of Codex 0.153.4 — the identifiers are a closed enum in the
-binary, so anything not listed here is rejected:
+everything Codex accepts as of 0.153.4; anything else is rejected:
 
 | Item | Shows |
 |---|---|
@@ -119,37 +111,28 @@ Items with no value are omitted rather than rendered empty. Setting
 `[tui].terminal_title` takes identifiers from this same set, if you want your
 terminal's title bar driven by it too.
 
-### No custom text, glyphs or separators
-
-`tui.status_line` accepts only the identifiers above — there is no `custom`,
-`text`, `command` or format-string variant, and the only other status-line key
-in `[tui]` is the boolean `status_line_use_colors`. So **Nerd Font glyphs,
-powerline separators and a custom palette are not achievable here**, however the
-Claude Code bar is configured. Codex assembles the string itself, joins items
-with a fixed ` · ` separator, and colors them from its own theme.
+You cannot add your own text, icons or separators to this bar — it is built
+from the items above and nothing else.
 
 ### Safety
 
 Your config is never silently overwritten:
 
-- `config.toml` is edited with `tomlkit`, so **comments, key order and formatting
-  are preserved**.
+- **Comments, key order and formatting are preserved** — the file is edited in
+  place, not rewritten.
 - If it already has a *different* `tui.status_line`, the whole file is copied to
   `config.toml.bak-<timestamp>` first, and the previous items are printed.
 - If the file exists but isn't valid TOML, the installer refuses and exits
   without writing anything.
 
-Untick it (or run `codex-cli-install --tools ""`) to remove it again. The
-`tui.status_line` key is dropped **only if it still matches what we wrote** — if
-you've customised the list since, it's left alone. Other `[tui]` keys always
-survive, and the `[tui]` table itself is removed only if emptying it left it bare.
+Untick it in the wizard to turn it off again. The `tui.status_line` key is
+removed **only if it still matches what the wizard set** — if you have edited
+the list since, it is left alone. Your other `[tui]` settings are never touched.
 
-## Gruvbox powerline status line (optional)
+## Powerline status bar (optional)
 
-Codex cannot draw the powerline bar from
-[`~/.claude/statusline.sh`](../claude-code/README.md#status-line-optional) —
-see [No custom text, glyphs or separators](#no-custom-text-glyphs-or-separators).
-So this renders the same bar *around* Codex, using tmux as the frame:
+A styled status bar with a gruvbox palette and Nerd Font icons, drawn beneath
+Codex:
 
 ```
   > explain this repository
@@ -158,9 +141,9 @@ So this renders the same bar *around* Codex, using tmux as the frame:
   ~/D/linux-tools   main ●2 ?4   #45   gpt-6-astra high   215.9k/258.4k 84%   5h 52% 4h10m   13:54
 ```
 
-tmux draws two status lines: a full-width rule separating Codex from the bar,
-and the bar itself — same palette, glyphs and geometry as the Claude Code one.
-Together they take two terminal rows.
+Codex cannot style its own bar, so this one is drawn around it by tmux: a rule
+and the bar, taking two terminal rows. It needs a Nerd Font in your terminal
+for the icons and separators.
 
 Enable it by ticking **tmux-statusline** in the wizard, or directly:
 
@@ -168,65 +151,47 @@ Enable it by ticking **tmux-statusline** in the wizard, or directly:
 distrobox enter codex-cli-box -- codex-cli-install --tools tmux-statusline
 ```
 
-That installs the renderer and tmux config into `~/.codex/` **and** exports the
-`codex-tmux` command to `~/.local/bin`. Unticking removes all three, so an
-install that never enables this gains nothing on its `PATH`.
-
-Then run Codex through the wrapper instead of `codex`:
+Then start Codex with `codex-tmux` instead of `codex`:
 
 ```bash
 codex-tmux                       # takes the same arguments as codex
 codex-tmux resume
 ```
 
-Detach with `C-\ d` (the prefix is `C-\`, not `C-b`, so it does not shadow
-Codex's own key bindings). The session uses a private tmux socket (`-L codex`),
-so it never touches your own tmux server, config or bindings.
+Detach with `C-\ d`. The prefix is `C-\` rather than tmux's usual `C-b` so it
+does not shadow Codex's own keys, and the session is kept separate from any
+tmux server of your own.
 
 ### What it shows
 
-Identical segments to the Claude Code bar, minus one and plus one:
-
-| Segment | Source |
+| Segment | Shows |
 |---|---|
-| OS icon, dir, git branch + status | host `/run/host/etc/os-release`, `git status --porcelain=v2` |
-| PR number, coloured by review state | `gh pr view`, cached for 90s |
-| model **+ reasoning effort** | rollout `turn_context` (Claude's bar has no effort field) |
-| context window used | rollout `last_token_usage` / `model_context_window` |
-| cache read/write | rollout `cached_input_tokens` / `cache_write_input_tokens` |
-| 5h and 7d limits + reset countdown | rollout `rate_limits.primary` / `.secondary` |
-| user@host (ssh/root only), clock | same as the Claude Code bar |
+| OS icon and directory | Your distro, and the working directory |
+| Branch | Current branch, changed and untracked file counts, ahead/behind |
+| PR | Open pull request for the branch, coloured by review state |
+| Model | Model name and reasoning effort |
+| Context | Context window used, of the total |
+| Cache | Cache hit rate, tokens read and written |
+| 5h / 7d | Usage remaining, and time until each limit resets |
+| Clock | Current time |
 
-The `agent` segment is dropped — Codex has no equivalent.
+Token and usage numbers refresh once per turn rather than continuously, so a
+new session shows the directory, branch and PR until its first turn finishes.
 
-Live token and rate-limit numbers come from the session's rollout file under
-`~/.codex/sessions/`, which is the only machine-readable source Codex exposes.
-Two consequences worth knowing:
-
-- Numbers update when Codex writes a `token_count` record, i.e. per turn — not
-  continuously. A brand-new session shows dir/branch/PR only until its first
-  turn completes.
-- The active rollout file is identified as the newest one written since the
-  wrapper started. Running two `codex-tmux` sessions at once will point both
-  bars at whichever wrote most recently.
+Running two `codex-tmux` sessions at once is not supported: both bars will
+follow whichever session was most recently active.
 
 ### Narrow terminals
 
-The two halves are joined by two spaces, so the right side flows on from the
-left rather than hugging the terminal edge — the same layout as the Claude Code
-bar, byte for byte at the join.
+The full bar needs about 147 columns. Below that it drops segments in order —
+cache, then user@host, the weekly limit and the clock — rather than truncating.
+The model and context window always stay.
 
-The full bar is about 147 columns. Below that it drops whole segments rather
-than letting tmux clip mid-segment, in this order: cache → user@host → 7d
-limit → clock → 5h limit. Model and context window are never dropped, so the
-floor is roughly 84 columns.
+### Using both bars
 
-### Using it with the built-in bar
-
-The two are independent and you can enable both, but Codex draws its bar inside
-its own frame and tmux draws this one below it, so you get two. To use only this
-one, leave **statusline** unticked (or set `tui.status_line = []`). The installer
-prints a note if it sees both.
+The two status lines are independent. If you enable both, Codex draws its own
+inside its frame and tmux draws this one below it, so you see two. To use only
+this one, leave **statusline** unticked, or set `tui.status_line = []`.
 
 ## Configuration and storage
 
@@ -241,12 +206,11 @@ the usual host path:
 | Path | Contents |
 |---|---|
 | `~/.codex/config.toml` | Codex configuration, including `tui.status_line` |
-| `~/.codex/` | Auth, sessions, history |
-| `~/.codex/.linux-tools-statusline` | Marker recording the items we set (see notes) |
-| `~/.codex/codex-statusline.sh` | Gruvbox bar renderer, installed by the wizard |
-| `~/.codex/codex-tmux.conf` | tmux config used by `codex-tmux` (2 status lines) |
-| `~/.local/bin/codex-tmux` | Exported command, added/removed by the wizard item |
-| `~/.codex/sessions/` | Per-session rollout files (the bar's data source) |
+| `~/.codex/sessions/` | Session history |
+| `~/.codex/.linux-tools-statusline` | Records which status line items were set (see notes) |
+| `~/.codex/codex-statusline.sh` | Powerline bar renderer, added by the wizard |
+| `~/.codex/codex-tmux.conf` | tmux settings for `codex-tmux`, added by the wizard |
+| `~/.local/bin/codex-tmux` | The `codex-tmux` command, added by the wizard |
 
 The container can also see repositories and files under the host home
 directory. Its system packages and `/usr/bin/codex` remain isolated in
@@ -278,10 +242,11 @@ distrobox enter codex-cli-box
 
 ## Notes
 
-- **The status line needs a reasonably current Codex.** `tui.status_line` as an
-  item list is a recent addition — older builds only had a simpler on/off form.
-  If the key seems to do nothing, check `codex --version` and rebuild.
-- The marker file at `~/.codex/.linux-tools-statusline` exists because the setup
-  wizard detects installed integrations by file existence and cannot inspect a
-  TOML key. Deleting it makes the wizard show the status line as not installed;
-  it does not change your Codex config.
+- **The built-in status line needs a reasonably current Codex.** Choosing which
+  items it shows is a recent addition; older builds only had a simple on/off
+  form. If `tui.status_line` seems to do nothing, check `codex --version` and
+  re-run setup.
+- **The powerline bar needs a Nerd Font** in your terminal. Without one the
+  icons and separators show as missing-glyph boxes.
+- Deleting `~/.codex/.linux-tools-statusline` makes the wizard show the built-in
+  status line as not enabled. It does not change your Codex config.
