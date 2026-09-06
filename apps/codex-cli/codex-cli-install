@@ -1,0 +1,134 @@
+#!/usr/bin/env bash
+# Install optional Codex CLI host integrations into Distrobox's shared home.
+# Runs inside codex-cli-box but writes to ~/.codex/, which is the host's home.
+# Usage: codex-cli-install --tools "statusline"
+set -euo pipefail
+
+TOOLS=""
+CODEX_DIR="$HOME/.codex"
+CONFIG="$CODEX_DIR/config.toml"
+# Records the item list we wrote, and doubles as the wizard's detect path
+# (wizard detection is file-existence only — it cannot inspect a TOML key).
+MARKER="$CODEX_DIR/.linux-tools-statusline"
+
+# Mirrors the Claude Code status line's segment selection as closely as Codex's
+# built-in item set allows. Codex renders these itself: fixed " · " separator,
+# colors from its own theme. There is no custom-command hook, so the bar cannot
+# be made to look like the Claude Code one — only to carry the same information.
+STATUSLINE_ITEMS='project-name git-branch pull-request-number model context-used five-hour-limit weekly-limit'
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --tools) TOOLS="${2:-}"; shift 2 ;;
+        *) echo "Unknown option: $1" >&2; exit 1 ;;
+    esac
+done
+
+for tool in $TOOLS; do
+    case "$tool" in
+        statusline) ;;
+        *) echo "Unknown tool: $tool" >&2; exit 1 ;;
+    esac
+done
+
+has_tool() { [[ " $TOOLS " == *" $1 "* ]]; }
+step() { printf '\n==> %s\n' "$*"; }
+
+mkdir -p "$CODEX_DIR"
+
+# Edit config.toml with tomlkit, which round-trips comments, key order and
+# formatting — this is a file the user owns and hand-edits.
+#   $1 = "set" | "unset"
+#   $2 = space-separated item list (set only)
+# Exits 2 without writing if the file exists but is not valid TOML.
+edit_config() {
+    python3 - "$CONFIG" "$1" "$2" <<'PY'
+import sys, pathlib, tomlkit
+
+path, action, items = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3].split()
+
+if path.exists() and path.read_text().strip():
+    try:
+        doc = tomlkit.parse(path.read_text())
+    except Exception as exc:
+        print(f"Warning: {path} is not valid TOML ({exc}); leaving it untouched.",
+              file=sys.stderr)
+        sys.exit(2)
+else:
+    doc = tomlkit.document()
+
+if action == "set":
+    tui = doc.get("tui")
+    if tui is None:
+        tui = tomlkit.table()
+        doc["tui"] = tui
+    arr = tomlkit.array()
+    arr.extend(items)
+    arr.multiline(True)
+    tui["status_line"] = arr
+else:
+    tui = doc.get("tui")
+    if tui is not None and "status_line" in tui:
+        del tui["status_line"]
+        # Drop a [tui] table we emptied, but never one the user has other keys in.
+        if not tui:
+            del doc["tui"]
+
+path.write_text(tomlkit.dumps(doc))
+PY
+}
+
+# Current value of tui.status_line as a space-separated list ("" if unset).
+# Never fails the script: an unreadable or invalid config just reads as empty.
+current_items() {
+    [[ -s "$CONFIG" ]] || return 0
+    python3 - "$CONFIG" <<'PY' 2>/dev/null || true
+import sys, pathlib, tomlkit
+try:
+    doc = tomlkit.parse(pathlib.Path(sys.argv[1]).read_text())
+    print(" ".join(doc.get("tui", {}).get("status_line", []) or []))
+except Exception:
+    pass
+PY
+}
+
+if has_tool statusline; then
+    step "Configuring Codex status line"
+    ts="$(date +%Y%m%d-%H%M%S)"
+    existing="$(current_items)"
+    # Back up the whole config when it already carries a *different* status line,
+    # so a hand-tuned item list is never silently replaced.
+    if [[ -n "$existing" && "$existing" != "$STATUSLINE_ITEMS" ]]; then
+        backup="$CONFIG.bak-$ts"
+        cp -p "$CONFIG" "$backup"
+        echo "   backed up existing config to $backup"
+        echo "   previous items: $existing"
+    fi
+    if ! edit_config set "$STATUSLINE_ITEMS"; then
+        echo "Status line not configured." >&2
+        exit 1
+    fi
+    printf '%s\n' "$STATUSLINE_ITEMS" > "$MARKER"
+    echo "   tui.status_line set in $CONFIG"
+    echo "   items: $STATUSLINE_ITEMS"
+else
+    # Toggle-off: only revert a status line that still matches what we wrote, so
+    # a list the user has since customised is left alone.
+    if [[ -f "$MARKER" ]]; then
+        step "Removing Codex status line"
+        existing="$(current_items)"
+        ours="$(cat "$MARKER")"
+        if [[ -z "$existing" ]]; then
+            echo "   no tui.status_line set; nothing to remove"
+        elif [[ "$existing" == "$ours" ]]; then
+            edit_config unset "" || true
+            echo "   tui.status_line removed from $CONFIG"
+        else
+            echo "   tui.status_line has been customised since we set it; leaving it alone"
+            echo "   current: $existing"
+        fi
+        rm -f "$MARKER"
+    fi
+fi
+
+step "Selected integrations are ready: ${TOOLS:-none}"

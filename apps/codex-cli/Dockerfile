@@ -7,6 +7,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     bubblewrap \
     git \
+    python3 \
+    python3-tomlkit \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
@@ -32,3 +34,9 @@ RUN echo "==> Installing Codex ${CODEX_RELEASE} (cache-bust: ${CACHE_BUST})" \
        CODEX_NON_INTERACTIVE=true sh /tmp/codex-install.sh \
     && /usr/bin/codex --version \
     && rm -rf /opt/codex-install /tmp/codex-install.sh
+
+# Optional host integrations, wired up by the setup wizard
+# (wizard/01-statusline.packages). Writes to ~/.codex/ on the host via the
+# shared home; see codex-cli-install for what it touches.
+COPY codex-cli-install /usr/bin/codex-cli-install
+RUN chmod +x /usr/bin/codex-cli-install

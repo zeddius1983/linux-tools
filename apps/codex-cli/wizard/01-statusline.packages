@@ -1,0 +1,4 @@
+Optional Codex CLI Integrations
+Select host integrations to enable (reselecting updates them):
+setup
+statusline|statusline|Status line in ~/.codex|off|~/.codex/.linux-tools-statusline
