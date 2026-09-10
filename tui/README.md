@@ -126,7 +126,7 @@ the old path is still there for a scripted `tools setup`.
 |---|---|---|
 | `.packages` | checklist, pre-ticked from each item's detect path | `PAGE_<name>` → the app's `-install --tools` run |
 | `.mcp` | checklist | `PAGE_<name>` → `claude mcp add/remove` |
-| `.buildarg` | single choice, items from the page's `items-cmd` | `BUILD_ARGS` → `--build-arg NAME=value` |
+| `.buildarg` | single choice, items from the page's `releases\|owner/repo` or `items-cmd`, with release notes beside them | `BUILD_ARGS` → `--build-arg NAME=value` |
 | `.runtime` | single choice | `VARIANT` → `create_flags.<value>`, plus `BUILD_ARGS` when the page has an `arg\|NAME` line |
 
 A `.runtime` page's optional `arg|NAME` line makes the same answer a build arg
@@ -134,11 +134,51 @@ too, so one question can select both a base image and the container's GPU
 passthrough (`apps/comfyui` picks AMD/NVIDIA that way). The *value* is passed,
 not the shown label, so `NVIDIA (CUDA)|nvidia` yields `--build-arg NAME=nvidia`.
 
-A `.buildarg` page's `items-cmd` reaches the network (a GitHub API call, a
-`git ls-remote`), so it runs off the update loop with a 30s timeout, and Enter
-is held while it is in flight. If it produces nothing the page is left
-unanswered and the build keeps its Dockerfile default — the same outcome as the
-bash path.
+A `.buildarg` page's items reach the network (a GitHub API call, a
+`git ls-remote`), so they are fetched off the update loop with a 30s timeout,
+and Enter is held while that is in flight. If nothing comes back the page is
+left unanswered and the build keeps its Dockerfile default — the same outcome as
+the bash path.
+
+### Release notes
+
+A `.buildarg` page can name a GitHub repo instead of writing its own
+`items-cmd`:
+
+```
+arg|FLM_REF
+releases|FastFlowLM/FastFlowLM
+```
+
+The dashboard then fetches that repo's releases itself, which is what makes the
+notes possible: one API call yields the tags, their dates and their markdown
+bodies together, where the one-value-per-line `items-cmd` protocol can only
+carry the tag. The notes for the highlighted version are rendered with Glamour
+in a pane beside the list — `PgDn`/`PgUp` or the wheel scrolls them, and moving
+the cursor starts the next version at its own top. Below 69 columns the pane is
+dropped rather than squeezed; the version list is what the page is for.
+
+Two optional lines go with it:
+
+| Line | Effect |
+|---|---|
+| `extra\|master` | a literal choice listed after the releases — a branch is not a release, and gets no notes (`apps/comfyui`) |
+| `notes-repo\|owner/repo[\|tag-template[\|count]]` | notes for a page that keeps its own `items-cmd`: each value is matched to a release tag, with `%s` in the template standing for the value (`rust-v%s` for `apps/codex-cli`, whose values are bare versions of a `rust-v` tag) |
+
+`notes-repo` is decoration on a list that already works, so a rate-limited or
+offline lookup costs the notes only — never the versions. It also reads deeper
+into the feed than a `releases|` page does (50 vs 10), because a repo that
+publishes several trains from one repo interleaves them and the newest ten
+releases may contain barely any of the tags being offered. A value of `latest`
+is not a tag: it resolves to the newest release the template can name, labelled
+with the tag it resolved to.
+
+`GITHUB_TOKEN` or `GH_TOKEN`, when set, is sent as a bearer token — anonymous
+API calls are limited to 60 per hour per address. Nothing prompts for one.
+
+The whiptail fallback understands `releases|` and `extra|` too, deriving the
+same tag list with `curl`; it has nowhere to put notes, so it ignores
+`notes-repo`.
 
 Ticked state is what will exist *after* the run, not what to add: unticking an
 already-installed tool removes it. The review screen before the run spells that

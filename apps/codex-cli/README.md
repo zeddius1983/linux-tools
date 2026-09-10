@@ -15,6 +15,10 @@ follow OpenAI's stable standalone-installer channel, or pin one of the ten most
 recent stable releases. The release list is read from the official
 `openai/codex` tags at setup time.
 
+Each version's release notes are shown beside the picker (`PgDn`/`PgUp` scrolls
+them); `latest` shows the newest stable release's, labelled with the tag it
+resolves to.
+
 A non-interactive setup skips the wizard and installs `latest`. Every setup
 refreshes the installer layer, so rerunning the command picks up a newly
 published stable release instead of reusing an older cached binary.

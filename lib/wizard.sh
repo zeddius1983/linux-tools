@@ -11,6 +11,19 @@
 #                 arg|<BUILD_ARG_NAME>
 #                 items-cmd|<shell command printing one value per line,
 #                            preferred value first — it becomes the default>
+#               Instead of items-cmd, a page may name a GitHub repo:
+#                 releases|<owner>/<repo>[|<count>]   (default count: 10)
+#               which lists that repo's release tags, newest first. The Go
+#               dashboard fetches the same releases through the API and shows
+#               each one's notes beside the list; whiptail has nowhere to put
+#               them, so here it is only the tag list. Two optional lines:
+#                 extra|<value>       literal choice appended after the tags
+#                                     (e.g. a branch name like "master")
+#                 notes-repo|<owner>/<repo>[|<tag-template>[|<count>]]
+#                                     notes for an items-cmd list, matched by
+#                                     tag; "%s" in the template is the item
+#                                     value (e.g. "rust-v%s"). Dashboard-only —
+#                                     ignored here.
 #   .runtime  → radiolist; picks a create-time variant (consumed by cmd_create
 #               via wizard_create_variant, no post-action apply step). Body lines
 #               are items: Label|value|description (first line = default). The
@@ -185,22 +198,39 @@ _wizard_run_page() {
 }
 
 # Single-choice radiolist for .buildarg pages. Items are produced by the
-# page's items-cmd at wizard time (first line = default); the selection is
-# stored for wizard_build_args to turn into a --build-arg during cmd_build.
+# page's items-cmd — or by its releases| repo — at wizard time (first line =
+# default); the selection is stored for wizard_build_args to turn into a
+# --build-arg during cmd_build.
+#
+# 'val' deliberately keeps everything after the first '|' (items-cmd routinely
+# contains pipes); the multi-field keys split it themselves.
 _wizard_run_buildarg_page() {
     local page="$1" pagename="$2" title="$3" prompt="$4"
-    local arg_name="" items_cmd="" key val
+    local arg_name="" items_cmd="" rel_repo="" rel_count="" key val
+    local -a extras=()
     while IFS='|' read -r key val; do
         key="${key%$'\r'}"; val="${val%$'\r'}"
         case "$key" in
-            arg)       arg_name="$val" ;;
-            items-cmd) items_cmd="$val" ;;
+            arg)        arg_name="$val" ;;
+            items-cmd)  items_cmd="$val" ;;
+            releases)   rel_repo="${val%%|*}"
+                        [[ "$val" == *"|"* ]] && rel_count="${val#*|}" ;;
+            extra)      extras+=("${val%%|*}") ;;
+            notes-repo) : ;;  # notes have nowhere to go in whiptail
         esac
     done < <(tail -n +4 "$page")
+
+    # A releases| page has no items-cmd of its own: derive the same tag list the
+    # dashboard shows, minus the notes it has no room for.
+    if [[ -z "$items_cmd" && -n "$rel_repo" ]]; then
+        items_cmd="curl -fsSL 'https://api.github.com/repos/${rel_repo}/releases?per_page=${rel_count:-10}' | grep -o '\"tag_name\": *\"[^\"]*\"' | sed 's/.*\"\\([^\"]*\\)\"\$/\\1/'"
+    fi
     [[ -z "$arg_name" || -z "$items_cmd" ]] && return 0
 
     local -a values=()
     mapfile -t values < <(bash -c "$items_cmd" 2>/dev/null)
+    # Bash 4.3 and older choke on expanding an empty array under `set -u`.
+    if ((${#extras[@]})); then values+=("${extras[@]}"); fi
     if [[ ${#values[@]} -eq 0 ]]; then
         echo "Warning: wizard page '$pagename': items-cmd produced no items, using build default" >&2
         return 0

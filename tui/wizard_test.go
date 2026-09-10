@@ -78,9 +78,31 @@ func TestCodexBuildargConfig(t *testing.T) {
 	}
 }
 
-// .buildarg bodies are config, not items: arg + items-cmd must survive parsing,
-// including an items-cmd containing pipes.
-func TestBuildargConfig(t *testing.T) {
+// .buildarg bodies are config, not items: an items-cmd containing pipes must
+// survive parsing whole, since the command itself is full of them.
+func TestBuildargItemsCmdSurvivesPipes(t *testing.T) {
+	pages, err := LoadPages(filepath.Join(appsDir, "llama-cpp-rocm", "wizard"))
+	if err != nil || len(pages) == 0 {
+		t.Fatalf("load: %v", err)
+	}
+	p := pages[0]
+	if p.ArgName != "LLAMA_REF" {
+		t.Errorf("ArgName = %q, want LLAMA_REF", p.ArgName)
+	}
+	if !strings.Contains(p.ItemsCmd, "git ls-remote") || !strings.Contains(p.ItemsCmd, "|") {
+		t.Errorf("ItemsCmd did not survive pipe-splitting: %q", p.ItemsCmd)
+	}
+	if p.NotesRepo != "ggml-org/llama.cpp" {
+		t.Errorf("NotesRepo = %q", p.NotesRepo)
+	}
+	if len(p.Items) != 0 {
+		t.Errorf("buildarg body should yield no items, got %d", len(p.Items))
+	}
+}
+
+// A page that names a repo needs no items-cmd at all: the versions and their
+// notes both come from the releases API.
+func TestBuildargReleasesConfig(t *testing.T) {
 	pages, err := LoadPages(filepath.Join(appsDir, "fastflowlm", "wizard"))
 	if err != nil || len(pages) == 0 {
 		t.Fatalf("load: %v", err)
@@ -89,11 +111,54 @@ func TestBuildargConfig(t *testing.T) {
 	if p.ArgName != "FLM_REF" {
 		t.Errorf("ArgName = %q, want FLM_REF", p.ArgName)
 	}
-	if !strings.Contains(p.ItemsCmd, "curl") || !strings.Contains(p.ItemsCmd, "|") {
-		t.Errorf("ItemsCmd did not survive pipe-splitting: %q", p.ItemsCmd)
+	if p.ReleasesRepo != "FastFlowLM/FastFlowLM" {
+		t.Errorf("ReleasesRepo = %q", p.ReleasesRepo)
+	}
+	if p.ItemsCmd != "" {
+		t.Errorf("ItemsCmd = %q, want none", p.ItemsCmd)
+	}
+	if !p.HasSource() {
+		t.Error("a releases page must count as having a source of items")
 	}
 	if len(p.Items) != 0 {
 		t.Errorf("buildarg body should yield no items, got %d", len(p.Items))
+	}
+}
+
+// extra| values are config too, and they are choices the releases API will
+// never return — comfyui's "master" branch.
+func TestBuildargExtraValues(t *testing.T) {
+	pages, err := LoadPages(filepath.Join(appsDir, "comfyui", "wizard"))
+	if err != nil || len(pages) < 2 {
+		t.Fatalf("load: %v", err)
+	}
+	p := pages[1]
+	if p.Type != "buildarg" || p.ReleasesRepo != "Comfy-Org/ComfyUI" {
+		t.Fatalf("page 1 = %+v", p)
+	}
+	if len(p.Extra) != 1 || p.Extra[0] != "master" {
+		t.Errorf("Extra = %v, want [master]", p.Extra)
+	}
+	for _, it := range p.Items {
+		t.Errorf("config line parsed as a selectable item: %+v", it)
+	}
+}
+
+// A tag template is how an items-cmd list of bare versions finds its releases.
+func TestBuildargNotesTagTemplate(t *testing.T) {
+	pages, err := LoadPages(filepath.Join(appsDir, "codex-cli", "wizard"))
+	if err != nil || len(pages) == 0 {
+		t.Fatalf("load: %v", err)
+	}
+	p := pages[0]
+	if p.NotesRepo != "openai/codex" || p.NotesTag != "rust-v%s" {
+		t.Errorf("notes-repo = %q, tag template = %q", p.NotesRepo, p.NotesTag)
+	}
+	if got := notesTag(p.NotesTag, "0.50.0"); got != "rust-v0.50.0" {
+		t.Errorf("notesTag = %q", got)
+	}
+	if got := notesTag("", "b1234"); got != "b1234" {
+		t.Errorf("an empty template must pass the value through, got %q", got)
 	}
 }
 

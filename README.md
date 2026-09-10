@@ -15,7 +15,7 @@ Manages Linux GUI and CLI applications inside [Distrobox](https://distrobox.it/)
 ./tools.sh
 ```
 
-Opens a dashboard with category tabs, an app table showing image and box state, and the selected app's README rendered beside it. Move with the arrow keys, switch category with `tab`, and press **⏎** to set an app up — apps with optional configuration (tool selection, GPU runtime, upstream release) show their wizard first, then a review screen. `?` lists every key.
+Opens a dashboard with category tabs, an app table showing image and box state, and the selected app's README rendered beside it. Move with the arrow keys, switch category with `tab`, and press **⏎** to set an app up — apps with optional configuration (tool selection, GPU runtime, upstream release) show their wizard first, then a review screen. Release pickers list each version's date and show its GitHub release notes beside the list. `?` lists every key.
 
 See [`tui/README.md`](tui/README.md) for the full key reference. The older `whiptail` menu is still there as a fallback, and `LT_NO_GO_TUI=1 tools` selects it deliberately.
 

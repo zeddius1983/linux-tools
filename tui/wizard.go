@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -15,6 +16,12 @@ type Item struct {
 	Desc      string
 	DefaultOn bool
 	Detect    []string // .packages only
+
+	// .buildarg only, and only when the page names a release source: the
+	// markdown body of the release this value installs, with the release's own
+	// title above it. Both are empty for a value with no matching release.
+	Notes      string
+	NotesTitle string
 }
 
 // Page is a parsed apps/<app>/wizard/NN-name.<type> file.
@@ -34,6 +41,17 @@ type Page struct {
 	// .buildarg config
 	ArgName  string
 	ItemsCmd string
+
+	// .buildarg release sources. ReleasesRepo ("owner/repo") replaces ItemsCmd
+	// entirely — the tags and their notes both come from one API call.
+	// NotesRepo instead decorates an ItemsCmd list with notes, for pages whose
+	// values come from somewhere else (git tags, a hard-coded "latest").
+	ReleasesRepo  string
+	ReleasesLimit int
+	NotesRepo     string
+	NotesTag      string // tag template, "%s" = the item value
+	NotesLimit    int
+	Extra         []string // literal values appended after the fetched releases
 }
 
 // AppliesTo mirrors the action gate in _wizard_run_page.
@@ -112,6 +130,23 @@ func parsePage(path string) (Page, error) {
 				case "items-cmd":
 					// Rejoin: the command itself may contain '|'.
 					p.ItemsCmd = strings.Join(fields[1:], "|")
+				case "releases":
+					p.ReleasesRepo = strings.TrimSpace(fields[1])
+					if len(fields) > 2 {
+						p.ReleasesLimit = atoiOr(fields[2], 0)
+					}
+				case "notes-repo":
+					p.NotesRepo = strings.TrimSpace(fields[1])
+					if len(fields) > 2 {
+						p.NotesTag = strings.TrimSpace(fields[2])
+					}
+					if len(fields) > 3 {
+						p.NotesLimit = atoiOr(fields[3], 0)
+					}
+				case "extra":
+					if v := strings.TrimSpace(fields[1]); v != "" {
+						p.Extra = append(p.Extra, v)
+					}
 				}
 			}
 			continue
@@ -154,6 +189,21 @@ func parsePage(path string) (Page, error) {
 // to $HOME. Any match wins. When a detect field exists it is the sole
 // authority and DefaultOn is ignored, so uninstalled tools always start
 // unchecked — same rule as _wizard_run_page.
+// HasSource reports whether a .buildarg page knows where to get its items.
+func (p Page) HasSource() bool {
+	return p.ArgName != "" && (p.ItemsCmd != "" || p.ReleasesRepo != "")
+}
+
+// atoiOr parses a small positive count, falling back on anything unparseable —
+// a typo in a page's limit should cost the default, not the page.
+func atoiOr(s string, fallback int) int {
+	n, err := strconv.Atoi(strings.TrimSpace(s))
+	if err != nil || n <= 0 {
+		return fallback
+	}
+	return n
+}
+
 func (i Item) Installed(home string) bool {
 	for _, d := range i.Detect {
 		var path string

@@ -56,11 +56,12 @@ func main() {
 			m.selectApp(renderApp)
 		}
 		if renderWizard != "" {
-			// Draw the wizard instead of the dashboard. Any items-cmd is left
-			// unresolved: the command returned here would normally be run by
-			// the event loop, and a single frame has none.
+			// Draw the wizard instead of the dashboard. The event loop that
+			// would resolve a .buildarg page's versions does not exist for a
+			// single frame, so they are fetched inline instead.
 			if a, ok := m.current(); ok {
 				m.startWizard(action{name: renderWizard, wizard: true}, a)
+				m.resolveWizardItems()
 			}
 		}
 		fmt.Println(m.View().Content)
