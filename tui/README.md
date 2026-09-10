@@ -67,7 +67,22 @@ tools                     # the normal way in
 
 # render the wizard for an app instead of the dashboard
 ./tui/tools-tui --apps-dir apps --render --render-app lmstudio --render-wizard setup
+
+# press keys before drawing, to reach a screen that is not the first one
+./tui/tools-tui --apps-dir apps --render --render-app dev-toolbox \
+    --render-wizard setup --render-keys "space,j,space,enter"
 ```
+
+`--render` resolves a `.buildarg` page's versions inline rather than through the
+event loop it does not have, so a release page draws its real contents instead
+of "loading available versions…".
+
+The README screenshots come from exactly this path —
+[`scripts/screenshots.sh`](../scripts/screenshots.sh) renders each frame and
+pipes it through [freeze](https://github.com/charmbracelet/freeze) — so an image
+in the docs is reproducible rather than a photo of someone's terminal. Rerun it
+after changing the dashboard's layout. It passes `--ascii`, because freeze
+rasterises with a font that has no Nerd Font private-use glyphs.
 
 ## Footer
 

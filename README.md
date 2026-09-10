@@ -1,128 +1,128 @@
 # linux-tools
 
-Manages Linux GUI and CLI applications inside [Distrobox](https://distrobox.it/) containers, keeping the host system clean. Each app lives in its own container and is exported to the host so it behaves like a natively installed application.
+Install Linux apps into [Distrobox](https://distrobox.it/) containers and use them as if they were installed normally — same entry in your application menu, same command on your `PATH` — while the host stays clean. Each app is one directory in `apps/`, and one command sets it up.
 
-## Prerequisites
+![The linux-tools dashboard: category tabs, the app table, and the selected app's README beside it](docs/images/dashboard.png)
 
-- [Distrobox](https://distrobox.it/#installation) installed on the host
-- [Podman](https://podman.io/docs/installation) (preferred) or Docker
+## Quick start
 
-## Usage
-
-### Dashboard (recommended)
+You need [Distrobox](https://distrobox.it/#installation) and [Podman](https://podman.io/docs/installation) on the host (Docker works too).
 
 ```bash
-./tools.sh
+git clone https://github.com/zeddius1983/linux-tools.git
+cd linux-tools
+./tools.sh install   # symlink `tools` into ~/.local/bin, add shell completion, build the dashboard
+source ~/.bashrc     # or ~/.zshrc
+tools                # open the dashboard
 ```
 
-Opens a dashboard with category tabs, an app table showing image and box state, and the selected app's README rendered beside it. Move with the arrow keys, switch category with `tab`, and press **⏎** to set an app up — apps with optional configuration (tool selection, GPU runtime, upstream release) show their wizard first, then a review screen. Release pickers list each version's date and show its GitHub release notes beside the list. `?` lists every key.
+Move with `↑`/`↓`, switch category with `tab`, press **⏎** to install the selected app, and `?` for the full key list. Prefer the command line? `tools setup claude-code` does the same thing.
 
-See [`tui/README.md`](tui/README.md) for the full key reference. The older `whiptail` menu is still there as a fallback, and `LT_NO_GO_TUI=1 tools` selects it deliberately.
+The first setup of an app pulls a base image and builds it, so give it a few minutes. When it finishes, the app is in your application menu and its commands are on your `PATH` — `claude`, `codex`, `nvtop`, whatever that app exports.
 
-### Install (one-time)
+## What a setup looks like
 
-Symlinks `tools` into `~/.local/bin`, wires up shell completion in `~/.bashrc` (and `~/.zshrc` if present), and builds the dashboard binary — using host Go if you have it, otherwise a throwaway container, and skipping it harmlessly if you have neither:
+Apps with choices ask them first. Nothing is built, removed or installed until you confirm on the last screen.
+
+**1. Pick what goes in the box.** Ticked is what will be there when the run finishes — unticking something already installed removes it.
+
+![A wizard page with a checklist of development tools](docs/images/wizard-tools.png)
+
+**2. Pick a version, and see what changed.** Release pickers list the upstream releases with their dates and show the selected release's GitHub notes beside them (`PgDn`/`PgUp` scrolls).
+
+![A wizard page listing FastFlowLM releases with the selected release's notes beside them](docs/images/wizard-release.png)
+
+**3. Review, then go.** The last screen spells out what will be added, what will be removed, and the command it is about to run.
+
+![The review screen listing three tools to install before the run starts](docs/images/wizard-review.png)
+
+## Apps
+
+`tools setup <name>` installs any of these. Names linked below have their own docs page with usage, storage paths and GPU notes.
+
+### AI / LLM
+
+| App | What it is |
+|---|---|
+| [`comfyui`](apps/comfyui/README.md) | Node-based UI for image and video generation (AMD or NVIDIA) |
+| [`fastflowlm`](apps/fastflowlm/README.md) | LLM runtime for the AMD Ryzen AI NPU |
+| [`llama-cpp-rocm`](apps/llama-cpp-rocm/README.md) | llama.cpp built for ROCm + Vulkan |
+| [`lmstudio`](apps/lmstudio/README.md) | LM Studio desktop app (AMD or NVIDIA) |
+| [`unsloth`](apps/unsloth/README.md) | LLM fine-tuning on ROCm |
+| `vllm` | vLLM inference server |
+
+### Development
+
+| App | What it is |
+|---|---|
+| [`claude-code`](apps/claude-code/README.md) | Anthropic's Claude Code CLI |
+| [`codex-cli`](apps/codex-cli/README.md) | OpenAI Codex CLI |
+| `copilot-cli` | GitHub Copilot CLI |
+| `opencode` | OpenCode agent CLI |
+| `antigravity` | Antigravity CLI (`agy`) |
+| [`dev-toolbox`](apps/dev-toolbox/README.md) | Node, Python, Go, Rust, JVM toolchains and language servers, pick-and-mix |
+| [`jetbrains-toolbox`](apps/jetbrains-toolbox/README.md) | JetBrains Toolbox app |
+
+### System
+
+| App | What it is |
+|---|---|
+| `amdgpu_top` | AMD GPU monitor |
+| [`corefreq`](apps/corefreq/README.md) | CPU monitor with a kernel module built against your host kernel |
+| [`nvtop`](apps/nvtop/README.md) | GPU process monitor |
+| [`nvbandwidth`](apps/nvbandwidth/README.md) | NVIDIA GPU/NVLink bandwidth test |
+| [`nvidia-p2p-driver`](apps/nvidia-p2p-driver/README.md) | NVIDIA GeForce peer-to-peer module |
+| [`nvidia-cdi-service`](apps/nvidia-cdi-service/README.md) | Regenerates the NVIDIA CDI spec on the host *(host install, no container)* |
+| [`nvidia-acs-service`](apps/nvidia-acs-service/README.md) | Disables PCIe ACS for GPU peer-to-peer *(host install, no container)* |
+
+### Browsers, chat and shell
+
+| App | What it is |
+|---|---|
+| `chrome` | Google Chrome |
+| `telegram` | Telegram Desktop |
+| [`shell-toolbox`](apps/shell-toolbox/README.md) | Zsh, Starship and friends *(host install, no container)* |
+
+## Everyday commands
 
 ```bash
-./tools.sh install
-source ~/.bashrc   # or source ~/.zshrc
+tools                # dashboard (same as ./tools.sh)
+tools setup <app>    # install, or reinstall from scratch
+tools list           # what is built, what is running
+tools enter <app>    # shell inside the app's container
+tools rm <app>       # remove the container and its shortcuts (the built image is kept)
 ```
 
-After that, use `tools` from anywhere instead of `./tools.sh`.
+There is also `tools build`, `tools create` and `tools export` when you want a single step of a setup — `tools export` is the one to rerun after changing what an app exposes to the host. `make setup-<app>` and friends wrap the same commands.
 
-### CLI
+## Good to know
 
-```bash
-tools setup <app>    # full install — removes any existing box+image first
-tools export <app>   # re-export after editing an exports file
-tools build <app>    # build container image only
-tools create <app>   # create distrobox from built image
-tools enter <app>    # open a shell inside the box
-tools rm <app>       # remove distrobox (image is kept)
-tools list           # show status of all apps
-```
+- **Rerunning `tools setup <app>` is how you update or reconfigure it.** It removes the old image and box first, so it is a rebuild, not a repair. Answers you gave the wizard last time are asked again — that is how you switch a GPU backend or move to a newer release.
+- **Your home directory is shared with every container.** Config and data written to `~/` are still there after a rebuild, and are visible to the host. Anything inside the container's own filesystem is not.
+- **App windows may not appear in the menu until you log out and back in**, the first time.
+- **`tools rm <app>` keeps the image**, so putting the app back is fast. To reclaim the disk, remove the image with `podman rmi linux-tools/<app>:latest`.
+- **A container is a normal Distrobox**, named `<app>-box`: `distrobox enter comfyui-box` works exactly as you would expect.
+- **No Go, no dashboard, no problem.** `tools.sh install` builds the dashboard with host Go if you have it, otherwise in a throwaway container, and skips it harmlessly if neither is available — the older `whiptail` menu takes over. `LT_NO_GO_TUI=1 tools` selects that menu deliberately.
+- The dashboard's full key reference lives in [`tui/README.md`](tui/README.md).
 
-`make setup-<app>`, `make build-<app>`, etc. are available as shortcuts.
+## Adding your own app
 
-After setup, apps appear in your system application menu. Log out and back in if they don't show immediately.
+Create `apps/<name>/` with four files — no registration step, `tools` discovers it:
 
-### Shell access
+| File | What it is |
+|---|---|
+| `Dockerfile` | the image, usually a base image plus a package install |
+| `exports` | what to put on the host: `bin:mytool`, `gui:myapp:My App`, one per line |
+| `description` | the short label the dashboard shows |
+| `README.md` | usage docs, rendered in the dashboard beside the app table |
 
-```bash
-tools enter <app>          # via tools (also available in the TUI)
-distrobox enter <app>-box  # directly via distrobox
-```
+Then `tools setup <name>`. Optional extras — a bundled icon, extra container flags, a setup wizard, a host-only installer — are documented with the export types, base-image choices and known pitfalls in [`CLAUDE.md`](CLAUDE.md); the dashboard's own design notes are in [`tui/README.md`](tui/README.md) and [`docs/tui-migration.md`](docs/tui-migration.md).
 
-## Available apps
-
-| App | Description | Box |
-|---|---|---|
-| `amdgpu_top` | AMD GPU monitor | `amdgpu_top-box` |
-| `antigravity` | Antigravity CLI (agy) | `antigravity-box` |
-| `chrome` | Google Chrome browser | `chrome-box` |
-| [`claude-code`](apps/claude-code/README.md) | Claude Code | `claude-code-box` |
-| [`codex-cli`](apps/codex-cli/README.md) | OpenAI Codex CLI | `codex-cli-box` |
-| [`comfyui`](apps/comfyui/README.md) | ComfyUI (AMD/NVIDIA) | `comfyui-box` |
-| `copilot-cli` | GitHub Copilot CLI | `copilot-cli-box` |
-| [`corefreq`](apps/corefreq/README.md) | CoreFreq CPU monitor | `corefreq-box` |
-| [`dev-toolbox`](apps/dev-toolbox/README.md) | Dev Toolbox | `dev-toolbox-box` |
-| [`fastflowlm`](apps/fastflowlm/README.md) | FastFlowLM | `fastflowlm-box` |
-| [`jetbrains-toolbox`](apps/jetbrains-toolbox/README.md) | JetBrains Toolbox | `jetbrains-toolbox-box` |
-| [`llama-cpp-rocm`](apps/llama-cpp-rocm/README.md) | llama.cpp (ROCm+Vulkan) | `llama-cpp-rocm-box` |
-| [`lmstudio`](apps/lmstudio/README.md) | LM Studio (AMD/NVIDIA) | `lmstudio-box` |
-| [`nvbandwidth`](apps/nvbandwidth/README.md) | NVIDIA GPU/NVLink bandwidth | `nvbandwidth-box` |
-| [`nvidia-cdi-service`](apps/nvidia-cdi-service/README.md) | NVIDIA CDI auto-regen (host) | — |
-| [`nvidia-acs-service`](apps/nvidia-acs-service/README.md) | NVIDIA P2P ACS fix (host) | — |
-| [`nvidia-p2p-driver`](apps/nvidia-p2p-driver/README.md) | NVIDIA GeForce P2P module | `nvidia-p2p-driver-box` |
-| [`nvtop`](apps/nvtop/README.md) | GPU process monitor | `nvtop-box` |
-| `telegram` | Telegram Desktop | `telegram-box` |
-| [`unsloth`](apps/unsloth/README.md) | Unsloth LLM fine-tuning (ROCm) | `unsloth-box` |
-| [`shell-toolbox`](apps/shell-toolbox/README.md) | Shell Toolbox (host-only installer) | — |
-
-## Adding a new app
-
-Create `apps/<name>/` with these files:
-
-**`Dockerfile`** — container image:
-
-```dockerfile
-FROM ubuntu:24.04
-
-ENV DEBIAN_FRONTEND=noninteractive
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    myapp \
-    && rm -rf /var/lib/apt/lists/*
-```
-
-**`exports`** — what to expose to the host:
-
-```
-# bin     — export binary to ~/.local/bin
-# desktop — create a terminal-launched shortcut
-# gui     — create a non-terminal shortcut (GUI apps)
-# app     — export a .desktop installed by the package manager
-bin:myapp-cli
-desktop:myapp:My App
-```
-
-**`description`** — one-line label for the TUI (keep it short):
-
-```
-My app description
-```
-
-Optionally add **`icon.png`** or **`icon.svg`** to use a custom icon for all exported shortcuts.
-
-Then run:
-
-```bash
-./tools.sh setup myapp
-```
+Screenshots in this README are generated by [`scripts/screenshots.sh`](scripts/screenshots.sh), which renders them from the dashboard itself.
 
 ## Testing on macOS (OrbStack)
 
-Use [OrbStack](https://orbstack.dev) to spin up a lightweight Ubuntu VM:
+[OrbStack](https://orbstack.dev) gives you a Linux VM to try this in:
 
 ```bash
 orb create ubuntu:24.04 linux-tools-test
@@ -134,4 +134,4 @@ bash scripts/setup-vm.sh
 ./tools.sh
 ```
 
-Rendering GUI windows requires X11 forwarding and is easier to verify on a real Linux machine.
+GUI apps need X11 forwarding from there, so they are easier to check on a real Linux machine.
