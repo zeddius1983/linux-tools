@@ -48,6 +48,7 @@ Apps with choices ask them first. Nothing is built, removed or installed until y
 | [`fastflowlm`](apps/fastflowlm/README.md) | LLM runtime for the AMD Ryzen AI NPU |
 | [`llama-cpp-rocm`](apps/llama-cpp-rocm/README.md) | llama.cpp built for ROCm + Vulkan |
 | [`lmstudio`](apps/lmstudio/README.md) | LM Studio desktop app (AMD or NVIDIA) |
+| [`openclaw`](apps/openclaw/README.md) | Personal AI agent — a gateway daemon and its CLI, or a node paired to someone else's gateway |
 | [`unsloth`](apps/unsloth/README.md) | LLM fine-tuning on ROCm |
 | `vllm` | vLLM inference server |
 

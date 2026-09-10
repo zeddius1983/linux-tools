@@ -1,0 +1,8 @@
+# Format: type:name[:Display Name]
+bin:openclaw
+bin:openclaw-gateway
+bin:openclaw-dashboard
+bin:openclaw-service
+desktop:openclaw-gateway:OpenClaw Gateway
+desktop:openclaw-chat:OpenClaw Chat
+gui:openclaw-dashboard:OpenClaw Dashboard

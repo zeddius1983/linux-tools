@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Terminal chat UI. Connects to a running Gateway; `--local` runs the embedded
+# agent runtime instead, without one.
+set -euo pipefail
+# shellcheck source=/dev/null
+source /usr/lib/openclaw/bridge.sh
+ensure_systemd_bridge
+exec "$OPENCLAW_BIN" tui "$@"

@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# Open the OpenClaw Control UI on the host.
+#
+# Usage: openclaw-dashboard [--print] [extra openclaw dashboard flags]
+#        --print  resolve and echo the URL, open nothing
+set -euo pipefail
+# shellcheck source=/dev/null
+source /usr/lib/openclaw/bridge.sh
+ensure_systemd_bridge
+
+print_only=0
+if [[ ${1:-} == --print || ${1:-} == --no-open ]]; then
+    print_only=1
+    shift
+fi
+
+# The Control UI URL is not a fixed string: `dashboard --json` mints a
+# single-use, ten-minute owner pairing link and returns it as browserUrl. The
+# Control UI strips the fragment on load and keeps only a per-browser device
+# credential, so the link cannot be replayed in another profile -- which is also
+# why it has to be re-minted on every launch rather than bookmarked.
+json="$("$OPENCLAW_BIN" dashboard --json "$@" 2>/dev/null || true)"
+url="$(printf '%s' "$json" | jq -r '.browserUrl // .url // empty' 2>/dev/null || true)"
+
+if [[ -z "$url" ]]; then
+    reason="$(printf '%s' "$json" | jq -r '.reason // empty' 2>/dev/null || true)"
+    echo "openclaw-dashboard: no Control UI URL from the gateway." >&2
+    [[ -n "$reason" ]] && echo "  reason: $reason" >&2
+    echo "  Is the gateway running? Start it with 'openclaw-gateway', or" >&2
+    echo "  install it as a service with 'openclaw-service install'." >&2
+    exit 1
+fi
+
+# Always print it. If the host is missing the flatpak package, every
+# distrobox-host-exec call below returns silently with no output and no error,
+# so the printed URL is the only thing the user gets -- make sure they get it.
+printf '%s\n' "$url"
+(( print_only )) && exit 0
+
+CHROME_PROFILE="${HOME}/.openclaw/chrome-profile"
+
+# Deliberately not `... | grep -q chrome-box`: grep -q exits at the first match
+# and closes the pipe, so the producer dies of SIGPIPE (141), and `set -o
+# pipefail` hands that 141 to the caller as the pipeline's status. The probe
+# would then report "no chrome-box" precisely when chrome-box IS present.
+# Capture first, match second, no pipe to break.
+has_chrome_box() {
+    local list
+    list="$(distrobox-host-exec distrobox list 2>/dev/null || true)"
+    [[ "$list" == *chrome-box* ]]
+}
+
+# The FIRST distrobox-host-exec call in a freshly created box returns nothing at
+# all while it bootstraps its host-spawn helper (see the distrobox-host-exec
+# pattern in CLAUDE.md). A probe run as that first call therefore reports "no
+# chrome-box" on every brand-new install and silently downgrades to xdg-open.
+# Burn a throwaway call, then probe with one retry.
+distrobox-host-exec true >/dev/null 2>&1 || true
+
+# An app-mode Chrome window if the chrome box is around, otherwise whatever the
+# host uses for http://. A profile of its own is what makes app mode actually
+# work: with the default profile a running Chrome answers the launch with
+# "Opening in existing browser session" and drops --app on the floor.
+if has_chrome_box || has_chrome_box; then
+    mkdir -p "${CHROME_PROFILE}"
+    # setsid, because this script exits immediately afterwards: the launch is
+    # several processes deep (host-spawn -> distrobox enter -> podman exec) and
+    # a plain background job can be torn down with the exec session before
+    # Chrome is up.
+    setsid distrobox-host-exec distrobox enter chrome-box -- \
+        google-chrome --app="${url}" \
+        --user-data-dir="${CHROME_PROFILE}" >/dev/null 2>&1 &
+else
+    distrobox-host-exec xdg-open "${url}"
+fi

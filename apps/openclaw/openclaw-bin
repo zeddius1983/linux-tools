@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# The real OpenClaw CLI, pinned to this container's Node.
+#
+# npm's own shim is `#!/usr/bin/env node`, which is a trap inside a Distrobox
+# box: $HOME is shared, ~/.local/bin sorts before /usr/bin on PATH, and any
+# OTHER box that ran `distrobox-export --bin node` owns that name for every box
+# on the machine. On this host ~/.local/bin/node is dev-toolbox-box's Node 22
+# export, so `env node` re-entered *that* box and died with
+#   Error: Cannot find module '/usr/bin/openclaw-bin'
+# -- a path that only exists in this container. Naming our own interpreter
+# removes the whole class of problem, and also guarantees the Node that
+# OpenClaw's startup guard checks (>=24.16 <25 || >=26.1) is the one we
+# installed. The launcher respawns itself through process.execPath, so pinning
+# it once here carries to its children.
+#
+# The entrypoint path is resolved from npm's shim at image build time.
+exec /usr/bin/node "$(cat /usr/lib/openclaw/entrypoint)" "$@"

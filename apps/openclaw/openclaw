@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Wrapper for the openclaw CLI. The real binary is /usr/bin/openclaw-bin.
+set -euo pipefail
+# shellcheck source=/dev/null
+source /usr/lib/openclaw/bridge.sh
+ensure_systemd_bridge
+
+args=("$@")
+
+# `openclaw onboard` / `openclaw setup` can offer to install a systemd user
+# service. Accepting that here writes a unit into the shared
+# ~/.config/systemd/user/ whose ExecStart points at container-only paths (this
+# image's node and openclaw-bin), so the host's user manager -- which is the one
+# that actually picks the unit up, since $HOME is shared -- can never start it.
+# Steer both subcommands away from it unless the caller asked for a daemon
+# explicitly. `openclaw-service install` writes a unit that does work.
+#
+# The flag name is resolved at image build time into daemon-skip-flag, because
+# OpenClaw's docs use both --skip-daemon and --no-install-daemon in different
+# places. An empty file means neither was recognised: inject nothing.
+if [[ ${1:-} == onboard || ${1:-} == setup ]]; then
+    skip_flag="$(cat /usr/lib/openclaw/daemon-skip-flag 2>/dev/null || true)"
+    if [[ -n "$skip_flag" ]]; then
+        explicit=0
+        for a in "$@"; do
+            case "$a" in
+                --install-daemon|--skip-daemon|--no-install-daemon|--daemon-runtime*)
+                    explicit=1 ;;
+            esac
+        done
+        (( explicit )) || args+=("$skip_flag")
+    fi
+fi
+
+exec "$OPENCLAW_BIN" "${args[@]}"

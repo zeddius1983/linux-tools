@@ -1,0 +1,6 @@
+Next steps:
+  openclaw onboard            # pick a model provider, create your agent
+  openclaw-service install    # keep the gateway running on the host
+  openclaw-dashboard          # open the Control UI
+
+Full docs: apps/openclaw/README.md
