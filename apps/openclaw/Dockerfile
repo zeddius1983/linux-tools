@@ -48,9 +48,10 @@ RUN mkdir -p /usr/lib/openclaw \
     && rm /usr/bin/openclaw
 
 COPY bridge.sh /usr/lib/openclaw/bridge.sh
-COPY openclaw openclaw-bin openclaw-gateway openclaw-dashboard openclaw-service openclaw-chat /usr/bin/
+COPY openclaw openclaw-bin openclaw-gateway openclaw-node openclaw-dashboard openclaw-service openclaw-chat /usr/bin/
 RUN chmod +x /usr/bin/openclaw /usr/bin/openclaw-bin /usr/bin/openclaw-gateway \
-    /usr/bin/openclaw-dashboard /usr/bin/openclaw-service /usr/bin/openclaw-chat
+    /usr/bin/openclaw-node /usr/bin/openclaw-dashboard /usr/bin/openclaw-service \
+    /usr/bin/openclaw-chat
 
 # Resolve, once at build time, which flag this release uses to decline the
 # systemd-service install during onboarding. OpenClaw's own docs use both

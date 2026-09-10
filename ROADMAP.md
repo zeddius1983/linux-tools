@@ -16,7 +16,7 @@ Priority order within each section: highest first.
 - [x] `unsloth` — fast LLM fine-tuning (https://unsloth.ai/docs)
 - [x] `llama-cpp-rocm` — llama.cpp LLM inference engine (ROCm + Vulkan backends, `--device` selection, multi-stage build, `llama` dispatcher + `llama-serve`)
 - [x] `fastflowlm` — Ollama-style LLM runtime running fully on the AMD Ryzen AI NPU (XDNA2); XRT userspace from the lemonade PPA, release-picker wizard, `flm-doctor` host prerequisite check
-- [x] `openclaw` — personal AI assistant CLI + gateway; routes across AI providers, persistent memory, messaging integrations (release-picker wizard; `openclaw-service` runs the gateway as a host systemd user unit, driven by `systemctl --user` straight from the box)
+- [x] `openclaw` — personal AI assistant CLI + gateway; routes across AI providers, persistent memory, messaging integrations (release-picker wizard; `openclaw-service [gateway|node]` runs either role as a host systemd user unit, driven by `systemctl --user` straight from the box, so one box can be the mesh's gateway or a paired node)
 
 ## Development Tools
 

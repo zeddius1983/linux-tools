@@ -25,7 +25,8 @@ openclaw onboard          # pick a model provider, name your agent, set up chann
 |---|---|
 | `openclaw` | The full CLI. `openclaw --help` lists every subcommand. |
 | `openclaw-gateway` | Runs the Gateway in the foreground (Ctrl-C stops it). Also a **OpenClaw Gateway** desktop entry. |
-| `openclaw-service` | `install` / `uninstall` / `status` — runs the Gateway as a host systemd user service. |
+| `openclaw-node` | Runs a **node host** in the foreground — joins this machine to a gateway as a peripheral. Also a **OpenClaw Node** desktop entry. |
+| `openclaw-service` | `install` / `uninstall` / `status` for the Gateway, or `node install …` for a node host. Host systemd user service. |
 | `openclaw-dashboard` | Opens the Control UI in a browser on the host. Also a **OpenClaw Dashboard** desktop entry. |
 | `openclaw-chat` | Terminal chat UI (`openclaw tui`). Also a **OpenClaw Chat** desktop entry. |
 
@@ -77,6 +78,81 @@ be bookmarked — run the command again instead. If `chrome-box` is installed th
 UI opens as an app-mode Chrome window with its own profile; otherwise it goes to
 your default browser.
 
+## Running a mesh (one gateway, many devices)
+
+OpenClaw splits into two roles, and a machine runs one or the other:
+
+| Role | Responsibility |
+|---|---|
+| **Gateway** | Owns every messaging channel (WhatsApp, Telegram, Discord…), runs the model, routes tool calls, serves the Control UI. **One per host, one per mesh.** |
+| **Node** | A *peripheral* paired to that gateway. Exposes a command surface on its own machine — `system.run`/`system.which`, camera, screen recording, location, notifications, and a zero-config browser proxy. |
+
+Nodes are not gateways: they never run the gateway service, and channel messages
+always land on the gateway. A node is how you let the agent run commands on a
+build server, NAS or second desktop while the model and your WhatsApp session
+stay in one place.
+
+### This machine as the gateway
+
+`openclaw-service install`, as above. To accept nodes from **other machines** you
+must give the gateway a reachable address — the default loopback pin is not
+enough, and `openclaw devices join-code` will say so:
+
+> `Gateway is only bound to loopback. Set gateway.bind=lan, enable tailscale serve, or configure plugins.entries.device-pair.config.publicUrl.`
+
+Pick one:
+
+```bash
+# LAN bind. Read the security note under Networking first.
+printf 'OPENCLAW_BIND=lan
+' >> ~/.openclaw/gateway.env
+openclaw-service uninstall && openclaw-service install
+
+# Or keep loopback and reach it over Tailscale Serve, or an SSH tunnel
+# from each node:  ssh -N -L 18790:127.0.0.1:18789 user@gateway-host
+```
+
+Then mint a join code and approve what connects:
+
+```bash
+openclaw devices join-code          # prints an `openclaw connect <url>` command
+openclaw nodes pending
+openclaw nodes approve <nodeRequestId>
+openclaw nodes list
+```
+
+### This machine as a node
+
+Pair once in the foreground — the setup link is single-use and expires after ten
+minutes, so it must not go into a service unit:
+
+```bash
+openclaw-node --pair "oc-pair://<setup-code>" --display-name "Halo Desk"
+```
+
+Pairing state lands in `~/.openclaw/state`, which is shared `$HOME`, so once
+that succeeds you can hand the connection to a service:
+
+```bash
+openclaw-service node install --host <gateway-host> --port 18789 --display-name "Halo Desk"
+openclaw-service node status
+openclaw-service node uninstall
+```
+
+If the gateway needs a token, put it in `~/.openclaw/node.env` rather than the
+unit file — both roles read an optional `EnvironmentFile`:
+
+```bash
+printf 'OPENCLAW_GATEWAY_TOKEN=%s
+' "<token>" > ~/.openclaw/node.env
+chmod 600 ~/.openclaw/node.env
+```
+
+Note that `openclaw gateway install` and `openclaw node install` are **blocked**
+in this container — they generate a unit naming container-only paths that the
+host's manager cannot start. Use `openclaw-service` instead, or set
+`OPENCLAW_ALLOW_NATIVE_SERVICE=1` if you know what you are doing.
+
 ## Storage
 
 Everything lives in `~/.openclaw` — config, agent memory, sessions, the SQLite
@@ -101,10 +177,10 @@ if you actually want remote access — and read
 
 ## Notes
 
-- **`openclaw gateway install` is not the supported route here.** It generates a
-  systemd unit pointing at container-only paths, which the host's user manager
-  cannot start. `openclaw onboard` is steered away from it automatically; use
-  `openclaw-service install` instead.
+- **`openclaw gateway install` / `openclaw node install` are blocked here.** Both
+  generate a systemd unit pointing at container-only paths, which the host's user
+  manager cannot start. `openclaw onboard` is steered away from installing one
+  too. Use `openclaw-service install` / `openclaw-service node install` instead.
 - **Updating**: re-run `tools setup openclaw` (optionally picking a newer release
   in the wizard). Do not use `openclaw update` — it rewrites the npm install
   inside the container and replaces the wrapper that pins the container's Node.

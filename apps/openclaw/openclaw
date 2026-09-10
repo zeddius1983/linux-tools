@@ -18,6 +18,30 @@ args=("$@")
 # The flag name is resolved at image build time into daemon-skip-flag, because
 # OpenClaw's docs use both --skip-daemon and --no-install-daemon in different
 # places. An empty file means neither was recognised: inject nothing.
+# `openclaw gateway install` and `openclaw node install` write their own
+# launchd/systemd/schtasks unit. Here that unit lands in the shared
+# ~/.config/systemd/user/ naming container-only paths (this image's node and
+# openclaw-bin), so the host's user manager -- the one that picks it up -- can
+# never start it. Refuse, and point at the wrapper that generates a unit which
+# enters the box instead. OPENCLAW_ALLOW_NATIVE_SERVICE=1 overrides.
+if [[ -z "${OPENCLAW_ALLOW_NATIVE_SERVICE:-}" && ${2:-} == install ]]; then
+    case "${1:-}" in
+        gateway|node)
+            role="$1"
+            hint="openclaw-service install"
+            [[ "$role" == node ]] && hint="openclaw-service node install --host <gateway-host>"
+            echo "openclaw: 'openclaw ${role} install' is not supported in this container." >&2
+            # Not $HOSTNAME: distrobox gives the container the host's hostname,
+            # so it reads the same from both sides and would name the wrong machine.
+            echo "  It would write a host systemd unit pointing at paths that only exist" >&2
+            echo "  inside the openclaw-box container, so the host could never start it." >&2
+            echo "  Use instead:  ${hint}" >&2
+            echo "  (set OPENCLAW_ALLOW_NATIVE_SERVICE=1 to bypass this check)" >&2
+            exit 1
+            ;;
+    esac
+fi
+
 if [[ ${1:-} == onboard || ${1:-} == setup ]]; then
     skip_flag="$(cat /usr/lib/openclaw/daemon-skip-flag 2>/dev/null || true)"
     if [[ -n "$skip_flag" ]]; then
