@@ -142,7 +142,7 @@ func buildArgItems(ctx context.Context, p Page) ([]Item, error) {
 		if err != nil {
 			return nil, err
 		}
-		items := releaseItems(rels)
+		items := releaseItems(rels, p.ReleasesRepo)
 		// Values that are not releases at all — comfyui's "master" — are listed
 		// after them, in the order the page wrote them.
 		for _, e := range p.Extra {

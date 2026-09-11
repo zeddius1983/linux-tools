@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Run the OpenClaw Gateway in the foreground.
+set -euo pipefail
+# shellcheck source=/dev/null
+source /usr/lib/openclaw/bridge.sh
+ensure_systemd_bridge
+
+# OpenClaw's bind default is `loopback`, but it flips to `auto` -- which resolves
+# to 0.0.0.0 -- whenever it detects it is running in a container, on the
+# assumption that a container needs to be reachable through a port forward.
+# Distrobox boxes run with --network host, so there is no forward to serve and
+# `auto` would publish the gateway, its Control UI and its agent to the whole
+# LAN. Pin loopback; set OPENCLAW_BIND to override deliberately.
+exec "$OPENCLAW_BIN" gateway run \
+    --bind "${OPENCLAW_BIND:-loopback}" \
+    --port "${OPENCLAW_GATEWAY_PORT:-18789}" \
+    "$@"

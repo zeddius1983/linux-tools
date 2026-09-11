@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Run the OpenClaw node host in the foreground.
+#
+# A node is a *peripheral*, not a gateway: it connects to some gateway's
+# WebSocket with role=node and exposes a command surface (system.run/which,
+# camera, screen, location, notifications, browser proxy) on this machine.
+# Channel messages (WhatsApp, Telegram, ...) land on the gateway, never here,
+# and a node never runs the gateway service.
+#
+# Typical first run, pairing against a gateway with a one-paste setup link
+# minted by that gateway's Control UI (Devices page) or `openclaw devices
+# join-code`. The link is single-use and expires after 10 minutes:
+#
+#   openclaw-node --pair "oc-pair://<setup-code>" --display-name "Desk"
+#
+# Pairing state persists in ~/.openclaw/state, which is shared $HOME, so once
+# paired you can hand the connection over to a service with
+# `openclaw-service node install --host <gateway-host> --port 18789`.
+set -euo pipefail
+# shellcheck source=/dev/null
+source /usr/lib/openclaw/bridge.sh
+ensure_systemd_bridge
+exec "$OPENCLAW_BIN" node run "$@"

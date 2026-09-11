@@ -1,0 +1,10 @@
+Next steps:
+  openclaw onboard            # pick a model provider, create your agent
+  openclaw-service install    # keep the gateway running on the host
+  openclaw-dashboard          # open the Control UI
+
+To join this machine to a gateway elsewhere as a node instead:
+  openclaw-node --pair "oc-pair://<setup-code>"
+  openclaw-service node install --host <gateway-host>
+
+Full docs: apps/openclaw/README.md
