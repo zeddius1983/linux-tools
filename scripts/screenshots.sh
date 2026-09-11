@@ -28,7 +28,27 @@ command -v freeze >/dev/null || {
     echo "freeze not found: go install github.com/charmbracelet/freeze@latest" >&2
     exit 1
 }
-[[ -x "$tui_bin" ]] || tools build-tui
+# The binary is rebuilt on every run, never reused because a file happens to be
+# there: a shot taken with a stale binary documents a layout that no longer
+# exists, and nothing about the image says so. `build-tui` already no-ops when
+# the binary is newer than every Go source under tui/, so this costs nothing
+# when there is nothing to do.
+#
+# Inside a Distrobox container the build has to go to the host — it needs the
+# host's Go toolchain or its container runtime, and the box has neither.
+host_run() {
+    if [[ -f /run/.containerenv || -f /.dockerenv ]]; then
+        distrobox-host-exec "$@"
+    else
+        "$@"
+    fi
+}
+
+host_run "$repo_root/tools.sh" build-tui
+[[ -x "$tui_bin" ]] || {
+    echo "no dashboard binary at $tui_bin, and it could not be built" >&2
+    exit 1
+}
 
 mkdir -p "$out_dir"
 
