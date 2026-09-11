@@ -83,11 +83,11 @@ func extractBadges(md string) (string, []badge) {
 }
 
 var (
-	// Two-tone pills, the same shape shields.io draws: a dim label half and a
-	// verdict half coloured by the answer.
-	styBadgeLabel = lipgloss.NewStyle().
-			Foreground(colFg).Background(colSelBg).Padding(0, 1)
-	styBadgeOK = lipgloss.NewStyle().Bold(true).
+	// Two-tone pills, the same shape shields.io draws: a label half carrying
+	// the distro and a verdict half coloured by the answer. The label's
+	// foreground is set per badge, from the distro's brand colour.
+	styBadgeLabel = lipgloss.NewStyle().Background(colSelBg).Padding(0, 1)
+	styBadgeOK    = lipgloss.NewStyle().Bold(true).
 			Foreground(lipgloss.Color("#1d2021")).Background(colOK).Padding(0, 1)
 	styBadgeNo = lipgloss.NewStyle().
 			Foreground(colDim).Background(colBorder).Padding(0, 1)
@@ -95,7 +95,11 @@ var (
 
 // renderBadges lays the pills out in rows no wider than width, wrapping rather
 // than spilling past the panel edge and corrupting the column layout.
-func renderBadges(badges []badge, width int) []string {
+//
+// The label half shows the distro's Nerd Font glyph, matching the icon-only
+// badge GitHub shows; without a patched font (--ascii) icons.distro falls back
+// to the distro's name, so the row never degrades to unlabelled pills.
+func renderBadges(badges []badge, width int, icons iconSet) []string {
 	if len(badges) == 0 {
 		return nil
 	}
@@ -113,7 +117,8 @@ func renderBadges(badges []badge, width int) []string {
 		if b.ok {
 			verdict = styBadgeOK
 		}
-		pill := styBadgeLabel.Render(b.label) + verdict.Render(b.value)
+		label := styBadgeLabel.Foreground(icons.distroColour(b.label))
+		pill := label.Render(icons.distro(b.label)) + verdict.Render(b.value)
 		pw := lipgloss.Width(pill)
 
 		switch {
@@ -134,14 +139,14 @@ func renderBadges(badges []badge, width int) []string {
 
 // injectBadges swaps the rendered placeholder line for the pill rows, reusing
 // that line's left margin so the badges align with glamour's body text.
-func injectBadges(rendered string, badges []badge, width int) string {
+func injectBadges(rendered string, badges []badge, width int, icons iconSet) string {
 	lines := strings.Split(rendered, "\n")
 	for i, l := range lines {
 		if !strings.Contains(l, badgePlaceholder) {
 			continue
 		}
 		indent := l[:len(l)-len(strings.TrimLeft(l, " "))]
-		pills := renderBadges(badges, width-len(indent))
+		pills := renderBadges(badges, width-len(indent), icons)
 		out := make([]string, 0, len(lines)+len(pills))
 		out = append(out, lines[:i]...)
 		for _, p := range pills {

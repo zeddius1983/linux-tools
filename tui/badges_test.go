@@ -89,7 +89,7 @@ func TestInjectBadgesKeepsIndentAndOrder(t *testing.T) {
 		{label: "CachyOS", value: "untested", ok: false},
 	}
 	rendered := "  title\n\n  " + badgePlaceholder + "\n\n  body text"
-	out := injectBadges(rendered, badges, 80)
+	out := injectBadges(rendered, badges, 80, newIconSet(false))
 
 	if strings.Contains(out, badgePlaceholder) {
 		t.Errorf("placeholder left in output:\n%s", out)
@@ -117,10 +117,10 @@ func TestRenderBadgesWrapsWhenNarrow(t *testing.T) {
 		{label: "Linux Mint", value: "tested", ok: true},
 		{label: "CachyOS", value: "untested", ok: false},
 	}
-	if got := renderBadges(badges, 200); len(got) != 1 {
+	if got := renderBadges(badges, 200, newIconSet(false)); len(got) != 1 {
 		t.Errorf("width 200: got %d rows, want 1", len(got))
 	}
-	narrow := renderBadges(badges, 20)
+	narrow := renderBadges(badges, 20, newIconSet(false))
 	if len(narrow) < 2 {
 		t.Errorf("width 20: got %d rows, want the row wrapped", len(narrow))
 	}
@@ -132,7 +132,42 @@ func TestRenderBadgesWrapsWhenNarrow(t *testing.T) {
 }
 
 func TestRenderBadgesEmpty(t *testing.T) {
-	if got := renderBadges(nil, 80); got != nil {
+	if got := renderBadges(nil, 80, newIconSet(false)); got != nil {
 		t.Errorf("got %v, want nil", got)
+	}
+}
+
+// With a patched font the label half is the distro's glyph; with --ascii it
+// must fall back to the name, never to an empty pill.
+func TestRenderBadgesGlyphAndAsciiFallback(t *testing.T) {
+	badges := []badge{{label: "Ubuntu", value: "tested", ok: true}}
+
+	nerd := renderBadges(badges, 200, newIconSet(true))[0]
+	if strings.Contains(nerd, "Ubuntu") {
+		t.Errorf("nerd row still spells the distro out: %q", nerd)
+	}
+	if !strings.Contains(nerd, "") {
+		t.Errorf("nerd row missing the Ubuntu glyph: %q", nerd)
+	}
+
+	ascii := renderBadges(badges, 200, newIconSet(false))[0]
+	if !strings.Contains(ascii, "Ubuntu") {
+		t.Errorf("--ascii row lost the distro name: %q", ascii)
+	}
+	if strings.Contains(ascii, "") {
+		t.Errorf("--ascii row emitted a Nerd Font glyph: %q", ascii)
+	}
+}
+
+// CachyOS has no glyph of its own and borrows Arch's, the same fallback
+// statusline.sh makes; an unmapped distro keeps its name rather than going
+// blank.
+func TestDistroGlyphFallbacks(t *testing.T) {
+	nerd := newIconSet(true)
+	if got := nerd.distro("CachyOS"); got != "" {
+		t.Errorf("CachyOS glyph = %q, want the Arch glyph", got)
+	}
+	if got := nerd.distro("Slackware"); got != "Slackware" {
+		t.Errorf("unmapped distro = %q, want its name", got)
 	}
 }
