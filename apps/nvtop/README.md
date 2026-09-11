@@ -1,5 +1,11 @@
 # nvtop
 
+<p>
+  <img alt="Ubuntu: tested" src="https://img.shields.io/badge/-tested-brightgreen?logo=ubuntu&logoColor=E95420">
+  <img alt="Linux Mint: tested" src="https://img.shields.io/badge/-tested-brightgreen?logo=linuxmint&logoColor=87CF3E">
+  <img alt="CachyOS: tested" src="https://img.shields.io/badge/-tested-brightgreen?logo=cachyos&logoColor=00C2A0">
+</p>
+
 [nvtop](https://github.com/Syllo/nvtop) — an `htop`-like TUI for GPUs. It shows
 per-GPU utilisation, memory, temperature, power, clocks and a scrolling history
 graph, plus a live per-process table of who is using the GPU. It is

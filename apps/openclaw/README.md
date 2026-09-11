@@ -1,5 +1,11 @@
 # openclaw
 
+<p>
+  <img alt="Ubuntu: tested" src="https://img.shields.io/badge/-tested-brightgreen?logo=ubuntu&logoColor=E95420">
+  <img alt="Linux Mint: tested" src="https://img.shields.io/badge/-tested-brightgreen?logo=linuxmint&logoColor=87CF3E">
+  <img alt="CachyOS: untested" src="https://img.shields.io/badge/-untested-lightgrey?logo=cachyos&logoColor=00C2A0">
+</p>
+
 [OpenClaw](https://openclaw.ai/) is an open-source personal AI agent. It runs a
 long-lived **Gateway** — a WebSocket/HTTP control plane with a web Control UI,
 persistent memory, and OpenAI-compatible endpoints — plus an `openclaw` CLI. You

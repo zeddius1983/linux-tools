@@ -1,5 +1,11 @@
 # nvbandwidth
 
+<p>
+  <img alt="Ubuntu: tested" src="https://img.shields.io/badge/-tested-brightgreen?logo=ubuntu&logoColor=E95420">
+  <img alt="Linux Mint: tested" src="https://img.shields.io/badge/-tested-brightgreen?logo=linuxmint&logoColor=87CF3E">
+  <img alt="CachyOS: tested" src="https://img.shields.io/badge/-tested-brightgreen?logo=cachyos&logoColor=00C2A0">
+</p>
+
 [NVIDIA nvbandwidth](https://github.com/NVIDIA/nvbandwidth) — a tool for
 measuring memory-copy bandwidth across host↔device and device↔device (NVLink /
 PCIe) links on NVIDIA GPUs. It runs a battery of copy-engine and kernel-driven

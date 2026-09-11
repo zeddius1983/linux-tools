@@ -200,7 +200,7 @@ func newModel(apps []App, appsDir, toolsBin string, useNerdFonts bool) *model {
 		cats:     Categories(apps),
 		appsDir:  appsDir,
 		toolsBin: toolsBin,
-		info:     newInfoPanel(appsDir),
+		info:     newInfoPanel(appsDir, newIconSet(useNerdFonts)),
 		icons:    newIconSet(useNerdFonts),
 		w:        100,
 		h:        30,

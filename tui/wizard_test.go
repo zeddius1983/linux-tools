@@ -232,7 +232,7 @@ func TestDetectOverridesDefault(t *testing.T) {
 // The README panel must actually move when scrolled, and must not scroll past
 // the end of the document.
 func TestInfoPanelScrolls(t *testing.T) {
-	p := newInfoPanel(appsDir)
+	p := newInfoPanel(appsDir, newIconSet(false))
 	a := App{Name: "dev-toolbox", Description: "Dev Toolbox"}
 	const w, h = 60, 10
 
@@ -263,7 +263,7 @@ func TestInfoPanelScrolls(t *testing.T) {
 // deliberately one no app dir can have, so adding a README to a real app cannot
 // quietly turn this into a test of nothing.
 func TestInfoPanelMissingReadme(t *testing.T) {
-	p := newInfoPanel(appsDir)
+	p := newInfoPanel(appsDir, newIconSet(false))
 	out := p.view(App{Name: "no-such-app"}, 50, 6)
 	if !strings.Contains(out, "No README.md") {
 		t.Errorf("expected placeholder, got:\n%s", out)

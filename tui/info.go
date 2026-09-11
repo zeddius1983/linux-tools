@@ -16,12 +16,13 @@ import (
 // Rendering markdown is not free, so results are cached per (app, width).
 type infoPanel struct {
 	appsDir string
+	icons   iconSet // for the distro glyphs in the compatibility badges
 	cache   map[string]string
 	top     int // scroll offset in rendered lines
 }
 
-func newInfoPanel(appsDir string) *infoPanel {
-	return &infoPanel{appsDir: appsDir, cache: map[string]string{}}
+func newInfoPanel(appsDir string, icons iconSet) *infoPanel {
+	return &infoPanel{appsDir: appsDir, icons: icons, cache: map[string]string{}}
 }
 
 // readme returns the rendered README for an app, or a placeholder.
@@ -38,12 +39,17 @@ func (p *infoPanel) readme(app string, width int) string {
 		return out
 	}
 
-	md, err := renderMarkdown(string(raw), width)
+	// The compatibility badge row is raw HTML, which glamour drops on the
+	// floor. Lift it out first and paint it back in after rendering.
+	src, badges := extractBadges(string(raw))
+
+	md, err := renderMarkdown(src, width)
 	if err != nil {
 		out := styWarn.Render("could not render README: " + err.Error())
 		p.cache[key] = out
 		return out
 	}
+	md = injectBadges(md, badges, width, p.icons)
 	p.cache[key] = md
 	return md
 }

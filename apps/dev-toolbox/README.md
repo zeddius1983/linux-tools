@@ -1,5 +1,11 @@
 # dev-toolbox
 
+<p>
+  <img alt="Ubuntu: tested" src="https://img.shields.io/badge/-tested-brightgreen?logo=ubuntu&logoColor=E95420">
+  <img alt="Linux Mint: tested" src="https://img.shields.io/badge/-tested-brightgreen?logo=linuxmint&logoColor=87CF3E">
+  <img alt="CachyOS: untested" src="https://img.shields.io/badge/-untested-lightgrey?logo=cachyos&logoColor=00C2A0">
+</p>
+
 Selectable Node.js, Python, Go, Rust, JVM, and Firecrawl tooling, exported to the
 host through Distrobox. Commands run in an Ubuntu environment while retaining
 access to projects and caches in the shared home directory.

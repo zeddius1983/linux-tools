@@ -1,6 +1,10 @@
 package main
 
-import "charm.land/lipgloss/v2"
+import (
+	"image/color"
+
+	"charm.land/lipgloss/v2"
+)
 
 // iconSet supplies the glyphs used across the dashboard.
 //
@@ -81,6 +85,69 @@ func (i iconSet) wizMarker(multi, on bool) string {
 		return "(●)"
 	default:
 		return "( )"
+	}
+}
+
+// distro returns the Nerd Font glyph for a compatibility badge's distro, or
+// the distro's name when there is no patched font (--ascii) or no glyph for it.
+//
+// Codepoints match apps/claude-code/statusline.sh, which already had to solve
+// this — same source as starship's [os.symbols] and p10k's icons.zsh. CachyOS
+// has no glyph of its own in any Nerd Font release, so it borrows Arch's, the
+// same fallback statusline.sh makes via ID_LIKE.
+func (i iconSet) distro(name string) string {
+	if !i.nerd {
+		return name
+	}
+	switch name {
+	case "Ubuntu":
+		return ""
+	case "Linux Mint":
+		return ""
+	case "CachyOS", "Arch", "Arch Linux":
+		return ""
+	case "Debian":
+		return ""
+	case "Fedora":
+		return ""
+	case "openSUSE":
+		return ""
+	case "NixOS":
+		return ""
+	case "Alpine":
+		return ""
+	default:
+		// An unmapped distro must still say which one it is; a generic Tux
+		// glyph here would be indistinguishable from the next unmapped one.
+		return name
+	}
+}
+
+// distroColour is the distro's brand colour, so the glyphs in a badge row are
+// told apart by colour the way the icons on GitHub are. Unmapped distros fall
+// back to the panel foreground, which is also what their name renders in.
+func (i iconSet) distroColour(name string) color.Color {
+	switch name {
+	case "Ubuntu":
+		return lipgloss.Color("#e95420")
+	case "Linux Mint":
+		return lipgloss.Color("#87cf3e")
+	case "CachyOS":
+		return lipgloss.Color("#00c2a0")
+	case "Arch", "Arch Linux":
+		return lipgloss.Color("#1793d1")
+	case "Debian":
+		return lipgloss.Color("#d70a53")
+	case "Fedora":
+		return lipgloss.Color("#51a2da")
+	case "openSUSE":
+		return lipgloss.Color("#73ba25")
+	case "NixOS":
+		return lipgloss.Color("#5277c3")
+	case "Alpine":
+		return lipgloss.Color("#0d597f")
+	default:
+		return colFg
 	}
 }
 

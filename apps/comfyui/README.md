@@ -1,5 +1,11 @@
 # comfyui
 
+<p>
+  <img alt="Ubuntu: tested" src="https://img.shields.io/badge/-tested-brightgreen?logo=ubuntu&logoColor=E95420">
+  <img alt="Linux Mint: tested" src="https://img.shields.io/badge/-tested-brightgreen?logo=linuxmint&logoColor=87CF3E">
+  <img alt="CachyOS: tested" src="https://img.shields.io/badge/-tested-brightgreen?logo=cachyos&logoColor=00C2A0">
+</p>
+
 Node-based UI for generative AI image and video workflows (Stable Diffusion,
 SDXL, Flux, WAN video, …), running as a local web server in a Distrobox
 container.

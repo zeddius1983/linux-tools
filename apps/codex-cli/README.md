@@ -1,5 +1,11 @@
 # codex-cli
 
+<p>
+  <img alt="Ubuntu: tested" src="https://img.shields.io/badge/-tested-brightgreen?logo=ubuntu&logoColor=E95420">
+  <img alt="Linux Mint: tested" src="https://img.shields.io/badge/-tested-brightgreen?logo=linuxmint&logoColor=87CF3E">
+  <img alt="CachyOS: untested" src="https://img.shields.io/badge/-untested-lightgrey?logo=cachyos&logoColor=00C2A0">
+</p>
+
 [OpenAI Codex CLI](https://developers.openai.com/codex/cli) packaged in an
 Ubuntu Distrobox and exported as both a host command and a terminal launcher.
 The image also includes Git, GitHub CLI (`gh`), and Bubblewrap.

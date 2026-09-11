@@ -1,5 +1,11 @@
 # claude-code
 
+<p>
+  <img alt="Ubuntu: tested" src="https://img.shields.io/badge/-tested-brightgreen?logo=ubuntu&logoColor=E95420">
+  <img alt="Linux Mint: tested" src="https://img.shields.io/badge/-tested-brightgreen?logo=linuxmint&logoColor=87CF3E">
+  <img alt="CachyOS: untested" src="https://img.shields.io/badge/-untested-lightgrey?logo=cachyos&logoColor=00C2A0">
+</p>
+
 [Claude Code](https://docs.claude.com/en/docs/claude-code/overview), Anthropic's terminal AI coding assistant, packaged as a Distrobox container.
 
 Installed from the **official native-binary install script** (`https://claude.ai/install.sh`) at image-build time, so each rebuild pulls the latest `claude` release — typically several patch versions ahead of the APT channel.

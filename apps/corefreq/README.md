@@ -1,5 +1,11 @@
 # corefreq
 
+<p>
+  <img alt="Ubuntu: tested" src="https://img.shields.io/badge/-tested-brightgreen?logo=ubuntu&logoColor=E95420">
+  <img alt="Linux Mint: tested" src="https://img.shields.io/badge/-tested-brightgreen?logo=linuxmint&logoColor=87CF3E">
+  <img alt="CachyOS: tested" src="https://img.shields.io/badge/-tested-brightgreen?logo=cachyos&logoColor=00C2A0">
+</p>
+
 [CoreFreq](https://github.com/cyring/CoreFreq) is a CPU monitoring and tuning tool that reads low-level CPU counters (frequency, power, cache, temperature) via a kernel module. Because the module has to load into the *host* kernel, this app uses the container purely as a build environment: it compiles CoreFreq at runtime against whatever kernel headers are mounted in from the host, then copies the resulting module/binaries out to `~/.local/corefreq/` for the host to use directly.
 
 ## Install

@@ -114,7 +114,31 @@ Optionally add `icon.png` or `icon.svg` — if present, it overrides whatever ic
 
 **Every new or touched app must include `apps/<name>/README.md`** covering: what the app does, install command, exported commands with usage examples, any persistent storage paths, and relevant notes (GPU setup, env vars, etc.). The main `README.md` app table row should link to it: `[`name`](apps/name/README.md)`. If you change an existing app that lacks a README, add one as part of the same change — the dashboard renders it in the info panel beside the app table, so a missing README means an empty panel and no reference for that app.
 
-`tools.sh` auto-discovers apps by listing `apps/`; no registration needed.
+#### Compatibility badges
+
+Every `apps/<name>/README.md` opens with a compatibility badge row directly under the `# <name>` heading — three shields.io badges saying which distros the app has actually been run on. Ubuntu and Linux Mint are green everywhere (that is where everything is developed); CachyOS is green only for apps exercised on an Arch-family host, and grey (`untested`) otherwise. The legend lives in the main `README.md` under `## Apps`.
+
+The badges are **icon-only**: the visible badge is the distro's brand-coloured logo plus the verdict, with no distro name spelled out. The name lives in `alt="<label>: <value>"`, which is what screen readers announce and what the dashboard parses — so never drop or reword the alt text, it is load-bearing in a way the visible badge is not.
+
+**Write the row as a raw HTML `<p>` block, never as markdown `![alt](url)` images.** GitHub renders both identically, but the dashboard renders each README through glamour, which expands a markdown image into three lines of `Image: <alt> → <full URL>` — nine lines of shields.io URLs shoved above the app's actual description. Glamour skips raw HTML blocks entirely, so `tui/badges.go` lifts the row out before rendering and paints it back in as coloured terminal pills (`extractBadges` → `injectBadges`, wired into `infoPanel.readme`). The README is the single source of truth for both audiences — there is no per-app metadata file for this.
+
+```markdown
+# <name>
+
+<p>
+  <img alt="Ubuntu: tested" src="https://img.shields.io/badge/-tested-brightgreen?logo=ubuntu&logoColor=E95420">
+  <img alt="Linux Mint: tested" src="https://img.shields.io/badge/-tested-brightgreen?logo=linuxmint&logoColor=87CF3E">
+  <img alt="CachyOS: untested" src="https://img.shields.io/badge/-untested-lightgrey?logo=cachyos&logoColor=00C2A0">
+</p>
+```
+
+A new app starts with the grey CachyOS badge; flip it to `-tested-brightgreen` (and the alt text to `CachyOS: tested`) only once the app has genuinely been run there.
+
+Notes on the two renderings:
+
+- **shields.io logos.** `ubuntu`, `linuxmint` and `cachyos` are all real simple-icons slugs — CachyOS has its own, so it does not borrow Arch's here. `logoColor` carries the brand colour, without which the icons render as white silhouettes that are hard to tell apart. Check a new slug before using it: a logo shields does not know is dropped silently, leaving a narrower badge and no icon.
+- **Terminal glyphs.** `iconSet.distro` maps the label to a Nerd Font glyph and `iconSet.distroColour` to the brand colour, so a badge row reads the same way in both places. CachyOS has no Nerd Font glyph of its own and borrows Arch's — the same fallback `apps/claude-code/statusline.sh` makes via `ID_LIKE`. Under `--ascii` (and so in `docs/images/*.png`, which `scripts/screenshots.sh` renders in that mode) there are no glyphs at all, and the row falls back to brand-coloured distro names.
+- The parser keys on the **first** HTML `<p>` block containing `img.shields.io`, and takes the verdict from the **URL colour** (`-brightgreen` ⇒ green pill, anything else ⇒ grey), not from the alt text. Keep the two in agreement; the colour wins. An app whose README has no badge row renders exactly as before, so this is safe for any README that predates the convention.
 
 ### Export types
 
