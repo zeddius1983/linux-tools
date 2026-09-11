@@ -40,6 +40,22 @@ Apps with choices ask them first. Nothing is built, removed or installed until y
 
 `tools setup <name>` installs any of these. Names linked below have their own docs page with usage, storage paths and GPU notes.
 
+Each docs page opens with compatibility badges saying which distros that app has
+actually been run on:
+
+<p>
+  <img alt="Ubuntu: tested" src="https://img.shields.io/badge/Ubuntu-tested-brightgreen?logo=ubuntu&logoColor=white">
+  <img alt="Linux Mint: tested" src="https://img.shields.io/badge/Linux_Mint-tested-brightgreen?logo=linuxmint&logoColor=white">
+  <img alt="CachyOS: tested" src="https://img.shields.io/badge/CachyOS-tested-brightgreen?logo=archlinux&logoColor=white">
+  <img alt="CachyOS: untested" src="https://img.shields.io/badge/CachyOS-untested-lightgrey?logo=archlinux&logoColor=white">
+</p>
+
+Everything here is developed and tested on **Ubuntu-family** hosts, Linux Mint in
+particular, so those two are green everywhere. A green **CachyOS** badge means the
+app has also been exercised on an Arch-family host; a grey one means it has not —
+it may well work, but nothing is promised. Nothing is deliberately Ubuntu-only, so
+reports from other distros are welcome.
+
 ### AI / LLM
 
 | App | What it is |

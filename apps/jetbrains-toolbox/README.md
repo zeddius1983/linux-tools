@@ -1,5 +1,11 @@
 # jetbrains-toolbox
 
+<p>
+  <img alt="Ubuntu: tested" src="https://img.shields.io/badge/Ubuntu-tested-brightgreen?logo=ubuntu&logoColor=white">
+  <img alt="Linux Mint: tested" src="https://img.shields.io/badge/Linux_Mint-tested-brightgreen?logo=linuxmint&logoColor=white">
+  <img alt="CachyOS: untested" src="https://img.shields.io/badge/CachyOS-untested-lightgrey?logo=archlinux&logoColor=white">
+</p>
+
 JetBrains Toolbox App in a Distrobox container. Manages JetBrains IDEs (IDEA,
 PyCharm, GoLand, RustRover, etc.) installed into the shared `$HOME` — IDE
 binaries and their `.desktop` files appear on the host immediately.

@@ -1,5 +1,11 @@
 # unsloth
 
+<p>
+  <img alt="Ubuntu: tested" src="https://img.shields.io/badge/Ubuntu-tested-brightgreen?logo=ubuntu&logoColor=white">
+  <img alt="Linux Mint: tested" src="https://img.shields.io/badge/Linux_Mint-tested-brightgreen?logo=linuxmint&logoColor=white">
+  <img alt="CachyOS: untested" src="https://img.shields.io/badge/CachyOS-untested-lightgrey?logo=archlinux&logoColor=white">
+</p>
+
 Fast LLM fine-tuning with [Unsloth](https://unsloth.ai/) on AMD GPU via ROCm. The container provides a Python 3.11 venv with PyTorch (ROCm 7.2), `unsloth[amd]`, and ROCm-compatible bitsandbytes pre-installed.
 
 ## Install

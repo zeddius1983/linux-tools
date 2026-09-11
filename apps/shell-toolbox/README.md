@@ -1,5 +1,11 @@
 # shell-toolbox
 
+<p>
+  <img alt="Ubuntu: tested" src="https://img.shields.io/badge/Ubuntu-tested-brightgreen?logo=ubuntu&logoColor=white">
+  <img alt="Linux Mint: tested" src="https://img.shields.io/badge/Linux_Mint-tested-brightgreen?logo=linuxmint&logoColor=white">
+  <img alt="CachyOS: untested" src="https://img.shields.io/badge/CachyOS-untested-lightgrey?logo=archlinux&logoColor=white">
+</p>
+
 A **host-only** installer for Zsh and a curated set of modern shell utilities.
 
 Unlike every other app in this repo, nothing runs inside the container at runtime — the Distrobox box is used purely as a portable download/build environment. Zsh is installed on the host via its package manager; all utilities land in `~/.local/bin` as static musl binaries; configuration is written under `~/.config/zsh/`.

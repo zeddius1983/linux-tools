@@ -1,5 +1,11 @@
 # nvidia-p2p-driver
 
+<p>
+  <img alt="Ubuntu: tested" src="https://img.shields.io/badge/Ubuntu-tested-brightgreen?logo=ubuntu&logoColor=white">
+  <img alt="Linux Mint: tested" src="https://img.shields.io/badge/Linux_Mint-tested-brightgreen?logo=linuxmint&logoColor=white">
+  <img alt="CachyOS: tested" src="https://img.shields.io/badge/CachyOS-tested-brightgreen?logo=archlinux&logoColor=white">
+</p>
+
 Builds and installs the **aikitoria GeForce-P2P-patched NVIDIA open kernel modules**
 so PCIe peer-to-peer (GPU↔GPU DMA) works on consumer cards (RTX 3090/4090…), which
 the stock driver disables.

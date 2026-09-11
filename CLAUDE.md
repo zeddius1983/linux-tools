@@ -114,6 +114,24 @@ Optionally add `icon.png` or `icon.svg` — if present, it overrides whatever ic
 
 **Every new or touched app must include `apps/<name>/README.md`** covering: what the app does, install command, exported commands with usage examples, any persistent storage paths, and relevant notes (GPU setup, env vars, etc.). The main `README.md` app table row should link to it: `[`name`](apps/name/README.md)`. If you change an existing app that lacks a README, add one as part of the same change — the dashboard renders it in the info panel beside the app table, so a missing README means an empty panel and no reference for that app.
 
+#### Compatibility badges
+
+Every `apps/<name>/README.md` opens with a compatibility badge row directly under the `# <name>` heading — three shields.io badges saying which distros the app has actually been run on. Ubuntu and Linux Mint are green everywhere (that is where everything is developed); CachyOS is green only for apps exercised on an Arch-family host, and grey (`untested`) otherwise. The legend lives in the main `README.md` under `## Apps`.
+
+**Write the row as a raw HTML `<p>` block, never as markdown `![alt](url)` images.** GitHub renders both identically, but the dashboard renders each README through glamour, which expands a markdown image into three lines of `Image: <alt> → <full URL>` — nine lines of shields.io URLs shoved above the app's actual description. Glamour skips raw HTML blocks entirely, so the HTML form is invisible in the info panel and costs the dashboard nothing.
+
+```markdown
+# <name>
+
+<p>
+  <img alt="Ubuntu: tested" src="https://img.shields.io/badge/Ubuntu-tested-brightgreen?logo=ubuntu&logoColor=white">
+  <img alt="Linux Mint: tested" src="https://img.shields.io/badge/Linux_Mint-tested-brightgreen?logo=linuxmint&logoColor=white">
+  <img alt="CachyOS: untested" src="https://img.shields.io/badge/CachyOS-untested-lightgrey?logo=archlinux&logoColor=white">
+</p>
+```
+
+A new app starts with the grey CachyOS badge; flip it to `CachyOS-tested-brightgreen` (and the alt text to `CachyOS: tested`) only once the app has genuinely been run there.
+
 `tools.sh` auto-discovers apps by listing `apps/`; no registration needed.
 
 ### Export types

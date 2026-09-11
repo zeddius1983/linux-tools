@@ -1,5 +1,11 @@
 # nvidia-acs-service
 
+<p>
+  <img alt="Ubuntu: tested" src="https://img.shields.io/badge/Ubuntu-tested-brightgreen?logo=ubuntu&logoColor=white">
+  <img alt="Linux Mint: tested" src="https://img.shields.io/badge/Linux_Mint-tested-brightgreen?logo=linuxmint&logoColor=white">
+  <img alt="CachyOS: tested" src="https://img.shields.io/badge/CachyOS-tested-brightgreen?logo=archlinux&logoColor=white">
+</p>
+
 Boot-time systemd service that disables **PCIe ACS redirect** on the bridges above
 your P2P GPUs, so a PCIe switch routes GPU↔GPU peer traffic directly instead of
 bouncing it up to the root complex.

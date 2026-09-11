@@ -1,5 +1,11 @@
 # fastflowlm
 
+<p>
+  <img alt="Ubuntu: tested" src="https://img.shields.io/badge/Ubuntu-tested-brightgreen?logo=ubuntu&logoColor=white">
+  <img alt="Linux Mint: tested" src="https://img.shields.io/badge/Linux_Mint-tested-brightgreen?logo=linuxmint&logoColor=white">
+  <img alt="CachyOS: untested" src="https://img.shields.io/badge/CachyOS-untested-lightgrey?logo=archlinux&logoColor=white">
+</p>
+
 [FastFlowLM](https://github.com/FastFlowLM/FastFlowLM) (FLM) — an Ollama-style LLM
 runtime that executes **entirely on the AMD Ryzen™ AI NPU (XDNA2)**. No GPU, no CPU
 inference load. Supports text, vision, audio, embedding and MoE models with context

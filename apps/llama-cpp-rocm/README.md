@@ -1,5 +1,11 @@
 # llama-cpp-rocm
 
+<p>
+  <img alt="Ubuntu: tested" src="https://img.shields.io/badge/Ubuntu-tested-brightgreen?logo=ubuntu&logoColor=white">
+  <img alt="Linux Mint: tested" src="https://img.shields.io/badge/Linux_Mint-tested-brightgreen?logo=linuxmint&logoColor=white">
+  <img alt="CachyOS: untested" src="https://img.shields.io/badge/CachyOS-untested-lightgrey?logo=archlinux&logoColor=white">
+</p>
+
 llama.cpp LLM inference engine with AMD GPU acceleration via both ROCm and Vulkan backends, packaged as a Distrobox container.
 
 Compiled from source against ROCm 7.2.4 with the Vulkan backend built alongside (`GGML_BACKEND_DL` dynamic backend loading). Each install builds the latest upstream [release tag](https://github.com/ggml-org/llama.cpp/releases) (resolved at build time; `llama-server --version` reports it). Supports GGUF models for chat, HTTP API serving, quantization, and HuggingFace model conversion — all via a single `llama` dispatcher command. Pick the GPU backend per run with `--device`.

@@ -1,5 +1,11 @@
 # LM Studio
 
+<p>
+  <img alt="Ubuntu: tested" src="https://img.shields.io/badge/Ubuntu-tested-brightgreen?logo=ubuntu&logoColor=white">
+  <img alt="Linux Mint: tested" src="https://img.shields.io/badge/Linux_Mint-tested-brightgreen?logo=linuxmint&logoColor=white">
+  <img alt="CachyOS: tested" src="https://img.shields.io/badge/CachyOS-tested-brightgreen?logo=archlinux&logoColor=white">
+</p>
+
 Desktop app for discovering, downloading, and running local LLMs. Packaged as
 the official LM Studio AppImage inside a Distrobox container and exported to the
 host application menu.
