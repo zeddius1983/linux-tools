@@ -7,6 +7,37 @@ ensure_systemd_bridge
 
 args=("$@")
 
+# OpenClaw takes root options *before* the command --
+#   openclaw --profile work gateway install
+# -- so the command is not simply $1, and the guards below cannot read fixed
+# argument positions: `--profile work gateway install` would put "work" in $1
+# and "gateway" in $2, quietly bypassing both of them.
+#
+# The root options are a closed set (`openclaw --help`): --container, --dev,
+# --log-level, --no-color, --profile, -h/--help, -V/--version. Three of them
+# take a value; everything else starting with '-' is a flag. Anything after a
+# bare `--` belongs to the command, not to us.
+openclaw_command_words() {
+    local -a words=()
+    while (( $# )); do
+        case "$1" in
+            --) break ;;
+            --container|--log-level|--profile)
+                shift 2 || break
+                continue ;;
+            --container=*|--log-level=*|--profile=*|-*)
+                shift; continue ;;
+            *) words+=("$1"); shift ;;
+        esac
+    done
+    (( ${#words[@]} )) && printf '%s\n' "${words[@]}"
+}
+
+cmd_words=()
+mapfile -t cmd_words < <(openclaw_command_words "$@")
+cmd="${cmd_words[0]:-}"
+subcmd="${cmd_words[1]:-}"
+
 # `openclaw onboard` / `openclaw setup` can offer to install a systemd user
 # service. Accepting that here writes a unit into the shared
 # ~/.config/systemd/user/ whose ExecStart points at container-only paths (this
@@ -24,10 +55,10 @@ args=("$@")
 # openclaw-bin), so the host's user manager -- the one that picks it up -- can
 # never start it. Refuse, and point at the wrapper that generates a unit which
 # enters the box instead. OPENCLAW_ALLOW_NATIVE_SERVICE=1 overrides.
-if [[ -z "${OPENCLAW_ALLOW_NATIVE_SERVICE:-}" && ${2:-} == install ]]; then
-    case "${1:-}" in
+if [[ -z "${OPENCLAW_ALLOW_NATIVE_SERVICE:-}" && "$subcmd" == install ]]; then
+    case "$cmd" in
         gateway|node)
-            role="$1"
+            role="$cmd"
             hint="openclaw-service install"
             [[ "$role" == node ]] && hint="openclaw-service node install --host <gateway-host>"
             echo "openclaw: 'openclaw ${role} install' is not supported in this container." >&2
@@ -42,7 +73,7 @@ if [[ -z "${OPENCLAW_ALLOW_NATIVE_SERVICE:-}" && ${2:-} == install ]]; then
     esac
 fi
 
-if [[ ${1:-} == onboard || ${1:-} == setup ]]; then
+if [[ "$cmd" == onboard || "$cmd" == setup ]]; then
     skip_flag="$(cat /usr/lib/openclaw/daemon-skip-flag 2>/dev/null || true)"
     if [[ -n "$skip_flag" ]]; then
         explicit=0

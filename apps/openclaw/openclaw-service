@@ -88,10 +88,15 @@ linger_enabled() {
 
 # systemd splits ExecStart on whitespace unless arguments are quoted, so every
 # passed-through flag value (--display-name "Build Node") has to be quoted here.
+#
+# Quoting is not enough on its own: systemd expands %-specifiers inside quoted
+# arguments too, so a display name containing "%n" would arrive as the unit's
+# name rather than as itself. "%%" is the literal percent.
 systemd_quote() {
     local a="$1"
     a="${a//\\/\\\\}"
     a="${a//\"/\\\"}"
+    a="${a//%/%%}"
     printf '"%s"' "$a"
 }
 
@@ -130,6 +135,12 @@ cmd_install() {
 # OpenClaw, so all paths here are host paths.
 [Unit]
 Description=${DESCRIPTION}
+# After= without a matching ordering back from default.target is not a cycle:
+# Wants= carries no ordering of its own, so default.target is *not* ordered
+# after the units in its .wants. Verified on systemd 255 with this very unit
+# enabled -- `systemctl --user show default.target -p After` lists basic.target
+# alone, and with lingering on, the gateway entered active in the same second
+# as the user manager on a cold boot.
 After=default.target
 
 [Service]
@@ -147,8 +158,13 @@ UNITEOF
     echo "==> Wrote ${UNIT_PATH}"
 
     systemctl --user daemon-reload
-    systemctl --user enable --now "$UNIT"
-    echo "==> Enabled and started ${UNIT}"
+    systemctl --user enable "$UNIT"
+    # restart, not `enable --now`: install doubles as reconfigure (new --host,
+    # --port, --display-name), and `--now` only *starts* the unit, which is a
+    # no-op when it is already running. The rewritten ExecStart would then be
+    # reported as started while the old process kept the old arguments.
+    systemctl --user restart "$UNIT"
+    echo "==> Enabled and (re)started ${UNIT}"
     echo "    Environment file (optional): ${ENV_FILE_HINT}"
 
     if ! linger_enabled; then
