@@ -38,12 +38,17 @@ func (p *infoPanel) readme(app string, width int) string {
 		return out
 	}
 
-	md, err := renderMarkdown(string(raw), width)
+	// The compatibility badge row is raw HTML, which glamour drops on the
+	// floor. Lift it out first and paint it back in after rendering.
+	src, badges := extractBadges(string(raw))
+
+	md, err := renderMarkdown(src, width)
 	if err != nil {
 		out := styWarn.Render("could not render README: " + err.Error())
 		p.cache[key] = out
 		return out
 	}
+	md = injectBadges(md, badges, width)
 	p.cache[key] = md
 	return md
 }

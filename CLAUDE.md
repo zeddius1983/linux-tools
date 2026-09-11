@@ -118,7 +118,9 @@ Optionally add `icon.png` or `icon.svg` — if present, it overrides whatever ic
 
 Every `apps/<name>/README.md` opens with a compatibility badge row directly under the `# <name>` heading — three shields.io badges saying which distros the app has actually been run on. Ubuntu and Linux Mint are green everywhere (that is where everything is developed); CachyOS is green only for apps exercised on an Arch-family host, and grey (`untested`) otherwise. The legend lives in the main `README.md` under `## Apps`.
 
-**Write the row as a raw HTML `<p>` block, never as markdown `![alt](url)` images.** GitHub renders both identically, but the dashboard renders each README through glamour, which expands a markdown image into three lines of `Image: <alt> → <full URL>` — nine lines of shields.io URLs shoved above the app's actual description. Glamour skips raw HTML blocks entirely, so the HTML form is invisible in the info panel and costs the dashboard nothing.
+**Write the row as a raw HTML `<p>` block, never as markdown `![alt](url)` images.** GitHub renders both identically, but the dashboard renders each README through glamour, which expands a markdown image into three lines of `Image: <alt> → <full URL>` — nine lines of shields.io URLs shoved above the app's actual description. Glamour skips raw HTML blocks entirely, so `tui/badges.go` lifts the row out before rendering and paints it back in as coloured terminal pills (`extractBadges` → `injectBadges`, wired into `infoPanel.readme`). The README is the single source of truth for both audiences — there is no per-app metadata file for this.
+
+The parser keys on the **first** HTML `<p>` block containing `img.shields.io`, reads the label and value from each `<img>`'s `alt="<label>: <value>"`, and takes the verdict from the **URL colour** (`-brightgreen` ⇒ green pill, anything else ⇒ grey). Keep the alt text and the colour in agreement; the colour is what wins. An app whose README has no badge row renders exactly as before, so this is safe for any README that predates the convention.
 
 ```markdown
 # <name>

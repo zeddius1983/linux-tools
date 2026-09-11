@@ -41,7 +41,8 @@ Apps with choices ask them first. Nothing is built, removed or installed until y
 `tools setup <name>` installs any of these. Names linked below have their own docs page with usage, storage paths and GPU notes.
 
 Each docs page opens with compatibility badges saying which distros that app has
-actually been run on:
+actually been run on. They show as badges here on GitHub and as coloured pills in
+the dashboard's README panel:
 
 <p>
   <img alt="Ubuntu: tested" src="https://img.shields.io/badge/Ubuntu-tested-brightgreen?logo=ubuntu&logoColor=white">
