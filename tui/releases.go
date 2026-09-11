@@ -105,14 +105,14 @@ func githubToken() string {
 // releaseItems turns releases into wizard items: the tag is the value handed to
 // the build, the date and pre-release marker are the list's description column,
 // and the notes fill the panel beside it.
-func releaseItems(rels []ghRelease) []Item {
+func releaseItems(rels []ghRelease, repo string) []Item {
 	items := make([]Item, 0, len(rels))
 	for _, r := range rels {
 		items = append(items, Item{
 			Name:       r.TagName,
 			Desc:       releaseDesc(r),
 			Notes:      r.Body,
-			NotesTitle: releaseTitle(r),
+			NotesTitle: releaseTitle(r, repo),
 		})
 	}
 	return items
@@ -132,9 +132,9 @@ func releaseDesc(r ghRelease) string {
 // releaseTitle is the heading shown beside the tag, above the notes.
 //
 // Most projects title a release after its own tag — "Release v1.0.5", "v1.0.5",
-// "1.0.5" — which next to the tag itself says nothing, so those are dropped and
-// only a real title survives.
-func releaseTitle(r ghRelease) string {
+// "1.0.5", "openclaw 2026.9.4" — which next to the tag itself says nothing, so
+// those are dropped and only a real title survives.
+func releaseTitle(r ghRelease, repo string) string {
 	name := strings.TrimSpace(r.Name)
 	if name == "" || name == r.TagName {
 		return ""
@@ -147,11 +147,39 @@ func releaseTitle(r ghRelease) string {
 	if core := versionCore.FindString(r.TagName); core != "" {
 		rest = strings.ReplaceAll(rest, core, "")
 	}
-	switch strings.ToLower(strings.Trim(rest, " \t-—–:·.,()[]vV")) {
+	rest = strings.ToLower(strings.Trim(rest, " \t-—–:·.,()[]vV"))
+	switch rest {
 	case "", "release", "version", "stable":
 		return ""
 	}
+	// The project's own name is the same kind of nothing: the list is one app's
+	// versions, so "openclaw 2026.9.4" beside the tag 2026.9.4 only repeats
+	// which app is being installed. Compared loosely, because a repo called
+	// llama.cpp titles releases "llama.cpp b1234".
+	if r, n := squashName(rest), squashName(repoName(repo)); n != "" && r == n {
+		return ""
+	}
 	return name
+}
+
+// repoName is the name half of "owner/repo".
+func repoName(repo string) string {
+	if _, name, ok := strings.Cut(repo, "/"); ok {
+		return name
+	}
+	return repo
+}
+
+// squashName reduces a name to its letters and digits, so "llama.cpp" and
+// "llama-cpp" compare equal.
+func squashName(s string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(s) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 // versionCore is the version inside a tag: the digits and everything that
@@ -185,13 +213,13 @@ func attachNotes(ctx context.Context, p Page, items []Item) {
 		r, ok := byTag[notesTag(p.NotesTag, items[i].Name)]
 		switch {
 		case ok:
-			items[i].Notes, items[i].NotesTitle = r.Body, releaseTitle(r)
+			items[i].Notes, items[i].NotesTitle = r.Body, releaseTitle(r, p.NotesRepo)
 			if items[i].Desc == "" {
 				items[i].Desc = releaseDesc(r)
 			}
 		case strings.EqualFold(items[i].Name, "latest") && newest != nil:
 			items[i].Notes = newest.Body
-			items[i].NotesTitle = strings.TrimSpace(newest.TagName + " " + releaseTitle(*newest))
+			items[i].NotesTitle = strings.TrimSpace(newest.TagName + " " + releaseTitle(*newest, p.NotesRepo))
 			if items[i].Desc == "" {
 				items[i].Desc = releaseDesc(*newest)
 			}

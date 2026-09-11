@@ -90,7 +90,11 @@ shot wizard-tools --render-app dev-toolbox --render-wizard setup \
     --render-keys "space,j,space,j,j,space" --render-width 100 --render-height 20
 
 # A .buildarg release picker, with the selected release's notes beside it.
-shot wizard-release --render-app fastflowlm --render-wizard setup \
+# openclaw rather than fastflowlm: freeze's font has no emoji, and upstream
+# release titles routinely carry one — fastflowlm's became "🚀 FastFlowLM v1.0.5
+# — …" overnight and drew a tofu box in the heading. Any app can do that, so
+# check the shot after regenerating rather than trusting the choice forever.
+shot wizard-release --render-app openclaw --render-wizard setup \
     --render-width 100 --render-height 21
 
 # The review screen every wizard ends on, before anything is changed.

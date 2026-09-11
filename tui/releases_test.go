@@ -42,7 +42,7 @@ func TestReleaseItemsFromAPI(t *testing.T) {
 	if err != nil {
 		t.Fatalf("fetch: %v", err)
 	}
-	items := releaseItems(rels)
+	items := releaseItems(rels, "owner/repo")
 	if len(items) != 2 {
 		t.Fatalf("got %d items, want 2 (the draft must be dropped)", len(items))
 	}
@@ -67,16 +67,31 @@ func TestReleaseItemsFromAPI(t *testing.T) {
 func TestReleaseTitleDropsTagEchoes(t *testing.T) {
 	drop := []string{"v1.0.5", "1.0.5", "Release v1.0.5", "Release 1.0.5", "v1.0.5 stable", ""}
 	for _, name := range drop {
-		if got := releaseTitle(ghRelease{TagName: "v1.0.5", Name: name}); got != "" {
+		if got := releaseTitle(ghRelease{TagName: "v1.0.5", Name: name}, "owner/repo"); got != "" {
 			t.Errorf("releaseTitle(%q) = %q, want dropped", name, got)
 		}
 	}
 	// A tag with a train prefix is routinely titled with the bare version.
-	if got := releaseTitle(ghRelease{TagName: "rust-v0.154.0", Name: "0.154.0"}); got != "" {
+	if got := releaseTitle(ghRelease{TagName: "rust-v0.154.0", Name: "0.154.0"}, "openai/codex"); got != "" {
 		t.Errorf("releaseTitle(%q) = %q, want dropped", "0.154.0", got)
 	}
-	if got := releaseTitle(ghRelease{TagName: "v1.0.5", Name: "Hy-MT2 support"}); got != "Hy-MT2 support" {
+	// So is the project's own name, however it is punctuated.
+	echoes := []struct{ tag, name, repo string }{
+		{"2026.9.4", "openclaw 2026.9.4", "openclaw/openclaw"},
+		{"b1234", "llama.cpp b1234", "ggml-org/llama.cpp"},
+		{"v0.30.0", "ComfyUI v0.30.0", "Comfy-Org/ComfyUI"},
+	}
+	for _, c := range echoes {
+		if got := releaseTitle(ghRelease{TagName: c.tag, Name: c.name}, c.repo); got != "" {
+			t.Errorf("releaseTitle(%q, %q) = %q, want dropped", c.name, c.repo, got)
+		}
+	}
+	if got := releaseTitle(ghRelease{TagName: "v1.0.5", Name: "Hy-MT2 support"}, "FastFlowLM/FastFlowLM"); got != "Hy-MT2 support" {
 		t.Errorf("releaseTitle kept = %q", got)
+	}
+	// A title that merely starts with the project name still says something.
+	if got := releaseTitle(ghRelease{TagName: "v2", Name: "openclaw goes multi-node"}, "openclaw/openclaw"); got == "" {
+		t.Error("a real title containing the project name was dropped")
 	}
 }
 
