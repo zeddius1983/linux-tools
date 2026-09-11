@@ -10,7 +10,7 @@ Compiled from source against ROCm 7.2.4 with the Vulkan backend built alongside 
 tools setup llama-cpp-rocm
 ```
 
-When run interactively, a wizard screen lets you pick which upstream release to build from the 10 latest tags (default: latest). Non-interactive installs build the latest release automatically.
+When run interactively, a wizard screen lets you pick which upstream release to build from the 10 latest tags (default: latest), with each tag's release notes shown beside the list (`PgDn`/`PgUp` scrolls them). Non-interactive installs build the latest release automatically. llama.cpp marks nearly every build as a pre-release, so that label next to the date is normal.
 
 Build time: ~10–20 minutes (ROCm/HIP compilation for all GPU architectures).
 

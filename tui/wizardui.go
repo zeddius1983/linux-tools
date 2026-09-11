@@ -49,18 +49,24 @@ type wizardSession struct {
 	cursor int
 	stage  wizStage
 	home   string
+
+	// Release-notes panel: scroll offset for the highlighted item, and the
+	// rendered markdown cached per (tag, width) — glamour is slow enough that
+	// re-rendering on every keypress is visible.
+	notesTop   int
+	notesCache map[string]string
 }
 
-// wizItemsMsg carries the result of a .buildarg page's items-cmd.
+// wizItemsMsg carries the result of a .buildarg page's item lookup.
 //
-// session identifies the wizard that asked. items-cmd takes seconds, and a
+// session identifies the wizard that asked. The lookup takes seconds, and a
 // user who cancels one wizard and opens another before it returns would
 // otherwise have the first app's releases land in the second app's page —
 // matched on page index alone, which every session has.
 type wizItemsMsg struct {
 	session int
 	page    int
-	values  []string
+	items   []Item
 	err     error
 }
 
@@ -89,11 +95,11 @@ func newWizardSession(a App, action, home string) (*wizardSession, tea.Cmd) {
 		wp := wizPage{Page: p}
 		switch p.Type {
 		case "buildarg":
-			if p.ArgName == "" || p.ItemsCmd == "" {
+			if !p.HasSource() {
 				continue
 			}
 			wp.loading = true
-			cmds = append(cmds, loadBuildArgItems(w.id, len(w.pages), p.ItemsCmd))
+			cmds = append(cmds, loadBuildArgItems(w.id, len(w.pages), p))
 		default:
 			// A page whose body has no items is skipped, mirroring the empty
 			// item-list guard in _wizard_run_page.
@@ -114,25 +120,70 @@ func newWizardSession(a App, action, home string) (*wizardSession, tea.Cmd) {
 	return w, tea.Batch(cmds...)
 }
 
-// loadBuildArgItems runs a page's items-cmd. The command is the app's own — it
-// reaches the network (a GitHub API call, a git ls-remote), so it is run off
-// the update loop and bounded by a timeout rather than left to hang the UI.
-func loadBuildArgItems(session, page int, cmdline string) tea.Cmd {
+// loadBuildArgItems resolves a .buildarg page's choices. Either way the work
+// reaches the network (the GitHub API, a git ls-remote), so it is run off the
+// update loop and bounded by a timeout rather than left to hang the UI.
+func loadBuildArgItems(session, page int, p Page) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		out, err := hostCommandContext(ctx, "bash", "-c", cmdline).Output()
+		items, err := buildArgItems(ctx, p)
+		return wizItemsMsg{session: session, page: page, items: items, err: err}
+	}
+}
+
+// buildArgItems is the two ways a page can name its versions: a repo, whose
+// releases carry their own notes, or the app's own items-cmd, which yields bare
+// values that an optional notes-repo can then annotate.
+func buildArgItems(ctx context.Context, p Page) ([]Item, error) {
+	if p.ReleasesRepo != "" {
+		rels, err := fetchReleases(ctx, p.ReleasesRepo, p.ReleasesLimit)
 		if err != nil {
-			return wizItemsMsg{session: session, page: page, err: err}
+			return nil, err
 		}
-		var vals []string
-		for _, l := range strings.Split(string(out), "\n") {
-			if l = strings.TrimSpace(l); l != "" {
-				vals = append(vals, l)
-			}
+		items := releaseItems(rels)
+		// Values that are not releases at all — comfyui's "master" — are listed
+		// after them, in the order the page wrote them.
+		for _, e := range p.Extra {
+			items = append(items, Item{Name: e})
 		}
-		return wizItemsMsg{session: session, page: page, values: vals}
+		return items, nil
+	}
+
+	out, err := hostCommandContext(ctx, "bash", "-c", p.ItemsCmd).Output()
+	if err != nil {
+		return nil, err
+	}
+	var items []Item
+	for _, l := range strings.Split(string(out), "\n") {
+		if l = strings.TrimSpace(l); l != "" {
+			items = append(items, Item{Name: l})
+		}
+	}
+	if p.NotesRepo != "" {
+		attachNotes(ctx, p, items)
+	}
+	return items, nil
+}
+
+// resolveWizardItems fills in the .buildarg pages the event loop would normally
+// resolve through a wizItemsMsg. Only --render needs it: it draws one frame and
+// exits, so without this every release page renders as "loading available
+// versions…" and the layout it exists to check never appears.
+func (m *model) resolveWizardItems() {
+	if m.wiz == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	for i := range m.wiz.pages {
+		p := &m.wiz.pages[i]
+		if !p.loading {
+			continue
+		}
+		p.items, p.loadErr = buildArgItems(ctx, p.Page)
+		p.loading = false
 	}
 }
 
@@ -186,6 +237,7 @@ func (m *model) wizardRows() int {
 // rather than resetting to the top.
 func (w *wizardSession) focus() {
 	w.cursor = 0
+	w.notesTop = 0
 	if p := w.page(); p != nil && !p.multi() && p.radio < len(p.items) {
 		w.cursor = maxInt(p.radio, 0)
 	}
@@ -197,6 +249,16 @@ func (w *wizardSession) focus() {
 func (w *wizardSession) ready() bool {
 	p := w.page()
 	return p == nil || !p.loading
+}
+
+// scrollNotes moves the release-notes panel. The upper bound is applied by the
+// next render, which is the only place that knows how long the rendered notes
+// are at the current width.
+func (w *wizardSession) scrollNotes(delta int) {
+	w.notesTop += delta
+	if w.notesTop < 0 {
+		w.notesTop = 0
+	}
 }
 
 // diff summarises what the run will change, mirroring tui_confirm_wizards.
@@ -301,19 +363,29 @@ func (m *model) wizardUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 		p := &w.pages[msg.page]
 		p.loading = false
 		p.loadErr = msg.err
-		p.items = nil
-		for _, v := range msg.values {
-			p.items = append(p.items, Item{Name: v})
-		}
-		// items-cmd prints the preferred value first; it is the default.
+		p.items = msg.items
+		// The source lists the preferred value first — the newest release, or
+		// whatever items-cmd printed at the top; it is the default.
 		p.radio = 0
+		w.notesTop = 0
 		return m, nil
 
 	case tea.KeyPressMsg:
 		return m.wizardKey(msg.String())
 
 	case tea.MouseWheelMsg:
-		// The wheel moves the cursor, the same as j/k. Toggling still takes a
+		// Over the notes panel the wheel scrolls it, exactly as it does over
+		// the dashboard's README pane.
+		if listW, notesW := m.wizardPaneWidths(); notesW > 0 && msg.X >= listW+dividerWidth {
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				w.scrollNotes(-3)
+			case tea.MouseWheelDown:
+				w.scrollNotes(3)
+			}
+			return m, nil
+		}
+		// Elsewhere it moves the cursor, the same as j/k. Toggling still takes a
 		// deliberate keypress: a wheel click is too easy to fire by accident on
 		// a screen where every row changes what gets installed.
 		switch msg.Button {
@@ -372,15 +444,23 @@ func (m *model) wizardKey(k string) (tea.Model, tea.Cmd) {
 	case "j", "down":
 		if n > 0 {
 			w.cursor = (w.cursor + 1) % n
+			w.notesTop = 0
 		}
 	case "k", "up":
 		if n > 0 {
 			w.cursor = (w.cursor - 1 + n) % n
+			w.notesTop = 0
 		}
 	case "g", "home":
-		w.cursor = 0
+		w.cursor, w.notesTop = 0, 0
 	case "end":
-		w.cursor = maxInt(n-1, 0)
+		w.cursor, w.notesTop = maxInt(n-1, 0), 0
+	case "pgdown":
+		// The notes are the only scrollable thing on a wizard page; the list
+		// itself follows the cursor, so these keys never fight over focus.
+		w.scrollNotes(10)
+	case "pgup":
+		w.scrollNotes(-10)
 	case "space", "x":
 		if p == nil || n == 0 {
 			break
@@ -567,6 +647,63 @@ func (m *model) wizardPageBody() string {
 		return b.String()
 	}
 
+	listW, notesW := m.wizardPaneWidths()
+	list := m.wizardItemsView(listW)
+	if notesW == 0 {
+		b.WriteString(list)
+		return b.String()
+	}
+
+	// Same two-pane construction as the dashboard: the divider is a column of
+	// its own, because JoinHorizontal pads a single-line element rather than
+	// repeating it down the block.
+	notes := m.wizardNotesView(notesW)
+	rows := maxInt(strings.Count(list, "\n")+1, strings.Count(notes, "\n")+1)
+	divider := make([]string, rows)
+	for i := range divider {
+		divider[i] = styBorder.Render(" │ ")
+	}
+	b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top,
+		lipgloss.NewStyle().Width(listW).Render(list),
+		strings.Join(divider, "\n"),
+		notes,
+	))
+	return b.String()
+}
+
+// minWizListWidth is the narrowest choice list worth keeping beside a notes
+// panel: the gutter, the cursor, the marker and a tag long enough to read.
+const minWizListWidth = 26
+
+// wizardPaneWidths splits the page between the choice list and the release
+// notes. A page with no notes source, or a terminal too narrow to hold both,
+// gives the list everything — wrapped markdown in a 20-cell column is worse
+// than no markdown at all.
+func (m *model) wizardPaneWidths() (listW, notesW int) {
+	p := m.wiz.page()
+	if p == nil || !p.notesPane() || m.w < minWizListWidth+dividerWidth+minPanelWidth {
+		return m.w, 0
+	}
+	notesW = m.w * 50 / 100
+	if maxW := m.w - minWizListWidth - dividerWidth; notesW > maxW {
+		notesW = maxW
+	}
+	return m.w - notesW - dividerWidth, notesW
+}
+
+// notesPane reports whether this page has release notes to show. It is keyed on
+// the page declaring a source rather than on any item actually having a body,
+// so a release published with an empty body still gets the panel — and says so
+// — instead of the layout jumping between two shapes as the cursor moves.
+func (p wizPage) notesPane() bool {
+	return p.Type == "buildarg" && (p.ReleasesRepo != "" || p.NotesRepo != "") && len(p.items) > 0
+}
+
+func (m *model) wizardItemsView(width int) string {
+	w := m.wiz
+	p := w.page()
+	var b strings.Builder
+
 	// Widest name, so the descriptions line up in a column of their own.
 	nameW := 0
 	for _, it := range p.items {
@@ -598,7 +735,7 @@ func (m *model) wizardPageBody() string {
 		b.WriteString("  " + cursor + markSty.Render(marker) + " " +
 			nameSty.Render(pad(trunc(it.Name, nameW), nameW)))
 		if it.Desc != "" {
-			room := maxInt(m.w-nameW-12, 10)
+			room := maxInt(width-nameW-12, 10)
 			b.WriteString("  " + descSty.Render(trunc(it.Desc, room)))
 		}
 		b.WriteString("\n")
@@ -615,6 +752,74 @@ func (m *model) wizardPageBody() string {
 		b.WriteString("\n  " + styDesc.Render("ticked = installed after this run; unticking an installed tool removes it"))
 	}
 	return b.String()
+}
+
+// wizardNotesView draws the release notes for the highlighted version, scrolled
+// to the session's offset and padded to a constant height so the footer does
+// not move as the cursor walks a list of releases with different-length notes.
+func (m *model) wizardNotesView(width int) string {
+	w := m.wiz
+	p := w.page()
+	height := m.wizardRows()
+
+	var it Item
+	if w.cursor < len(p.items) {
+		it = p.items[w.cursor]
+	}
+	body := strings.Split(w.renderNotes(it, width), "\n")
+
+	if w.notesTop > len(body)-height {
+		w.notesTop = len(body) - height
+	}
+	if w.notesTop < 0 {
+		w.notesTop = 0
+	}
+	end := minInt(w.notesTop+height, len(body))
+
+	lines := append([]string{}, body[w.notesTop:end]...)
+	for len(lines) < height {
+		lines = append(lines, "")
+	}
+	for i, l := range lines {
+		lines[i] = lipgloss.NewStyle().MaxWidth(width).Render(l)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// renderNotes is the panel's content for one item: a heading naming the version
+// it belongs to, then the release body as rendered markdown.
+//
+// Cached per (value, width): glamour parses and highlights the whole document,
+// which is far too slow to redo on every cursor move and every keypress.
+func (w *wizardSession) renderNotes(it Item, width int) string {
+	// Keyed by page as well as value: two pages of one wizard can offer the
+	// same version string and mean different releases.
+	key := fmt.Sprintf("%d/%s@%d", w.idx, it.Name, width)
+	if v, ok := w.notesCache[key]; ok {
+		return v
+	}
+	if w.notesCache == nil {
+		w.notesCache = map[string]string{}
+	}
+
+	head := styTitle.Render(it.Name)
+	if it.NotesTitle != "" {
+		head += "  " + styDesc.Render(trunc(it.NotesTitle, maxInt(width-len([]rune(it.Name))-4, 10)))
+	}
+
+	var out string
+	switch body := strings.TrimSpace(it.Notes); {
+	case body == "":
+		out = head + "\n\n" + styDesc.Render("No release notes for this version.")
+	default:
+		md, err := renderMarkdown(body, width)
+		if err != nil {
+			md = "  " + styWarn.Render("could not render notes: "+err.Error())
+		}
+		out = head + "\n" + md
+	}
+	w.notesCache[key] = out
+	return out
 }
 
 func (m *model) wizardConfirmBody() string {
@@ -722,6 +927,9 @@ func (m *model) wizardKeys() string {
 		}
 		parts = append(parts,
 			styKey.Render("↑/↓")+styDesc.Render(" move"))
+		if _, notesW := m.wizardPaneWidths(); notesW > 0 {
+			parts = append(parts, styKey.Render("PgDn/PgUp")+styDesc.Render(" notes"))
+		}
 		if len(w.pages) > 1 {
 			parts = append(parts, styKey.Render("←/→")+styDesc.Render(" page"))
 		}

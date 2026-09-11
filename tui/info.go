@@ -38,6 +38,20 @@ func (p *infoPanel) readme(app string, width int) string {
 		return out
 	}
 
+	md, err := renderMarkdown(string(raw), width)
+	if err != nil {
+		out := styWarn.Render("could not render README: " + err.Error())
+		p.cache[key] = out
+		return out
+	}
+	p.cache[key] = md
+	return md
+}
+
+// renderMarkdown renders markdown to fit a pane of the given width. Shared with
+// the wizard's release-notes panel, which is the same problem in a narrower
+// column.
+func renderMarkdown(src string, width int) (string, error) {
 	// Word wrap has to leave room for glamour's own left margin, or long lines
 	// spill past the panel and corrupt the column layout.
 	w := width - 2
@@ -49,19 +63,13 @@ func (p *infoPanel) readme(app string, width int) string {
 		glamour.WithWordWrap(w),
 	)
 	if err != nil {
-		out := styWarn.Render("markdown renderer unavailable: " + err.Error())
-		p.cache[key] = out
-		return out
+		return "", err
 	}
-	md, err := r.Render(string(raw))
+	out, err := r.Render(src)
 	if err != nil {
-		out := styWarn.Render("could not render README: " + err.Error())
-		p.cache[key] = out
-		return out
+		return "", err
 	}
-	md = strings.TrimRight(md, "\n")
-	p.cache[key] = md
-	return md
+	return strings.TrimRight(out, "\n"), nil
 }
 
 // view renders the panel for one app: the rendered README, nothing else.

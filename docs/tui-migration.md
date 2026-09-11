@@ -288,6 +288,13 @@ alternative front-end.
   frame of the wizard. It runs as a `tea.Cmd` with a timeout, and a failure is
   not fatal — the page is left unanswered so the Dockerfile default stands,
   matching what bash does.
+- **Release notes cannot come through `items-cmd` at all.** The bodies are
+  multi-line markdown, and the page protocol is one value per line; the shell
+  side would also have to unescape JSON with `sed`. So a page can instead name a
+  repo (`releases|owner/repo`) and the dashboard calls the API itself, which
+  gets the tags, dates and bodies in one request — see
+  [`tui/README.md`](../tui/README.md#release-notes). Whiptail derives the tag
+  list from the same line with `curl` and shows no notes.
 
 ---
 

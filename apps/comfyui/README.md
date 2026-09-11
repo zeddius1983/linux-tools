@@ -9,7 +9,9 @@ Setup asks two questions:
 1. **GPU backend** — **AMD (ROCm)** or **NVIDIA (CUDA)**. This picks the PyTorch
    base image *and* the container's GPU passthrough.
 2. **Release** — one of the last 10 [ComfyUI releases](https://github.com/Comfy-Org/ComfyUI/releases),
-   or `master` for the branch tip. The newest release is the default.
+   or `master` for the branch tip. The newest release is the default. Each
+   release's notes are shown beside the list (`PgDn`/`PgUp` scrolls them);
+   `master` is a branch, so it has none.
 
 ## Install
 

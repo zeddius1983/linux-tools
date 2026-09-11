@@ -22,7 +22,7 @@ import (
 func main() {
 	var appsDir, toolsBin string
 	var render, asciiIcons, noMouse bool
-	var renderApp, renderWizard string
+	var renderApp, renderWizard, renderKeys string
 	var renderW, renderH int
 	flag.StringVar(&appsDir, "apps-dir", "apps", "path to the apps/ directory")
 	flag.StringVar(&toolsBin, "tools", "tools", "bash entrypoint to run for actions")
@@ -31,6 +31,7 @@ func main() {
 	flag.BoolVar(&render, "render", false, "print one frame and exit (no tty needed)")
 	flag.StringVar(&renderApp, "render-app", "", "select this app for --render")
 	flag.StringVar(&renderWizard, "render-wizard", "", "open the wizard for this action (setup|build|create) in --render")
+	flag.StringVar(&renderKeys, "render-keys", "", "comma-separated keys to press before drawing --render (e.g. \"j,enter\")")
 	flag.IntVar(&renderW, "render-width", 100, "frame width for --render")
 	flag.IntVar(&renderH, "render-height", 28, "frame height for --render")
 	flag.Parse()
@@ -56,13 +57,15 @@ func main() {
 			m.selectApp(renderApp)
 		}
 		if renderWizard != "" {
-			// Draw the wizard instead of the dashboard. Any items-cmd is left
-			// unresolved: the command returned here would normally be run by
-			// the event loop, and a single frame has none.
+			// Draw the wizard instead of the dashboard. The event loop that
+			// would resolve a .buildarg page's versions does not exist for a
+			// single frame, so they are fetched inline instead.
 			if a, ok := m.current(); ok {
 				m.startWizard(action{name: renderWizard, wizard: true}, a)
+				m.resolveWizardItems()
 			}
 		}
+		m.renderKeys(renderKeys)
 		fmt.Println(m.View().Content)
 		return
 	}
@@ -70,6 +73,24 @@ func main() {
 	if _, err := tea.NewProgram(m).Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
+	}
+}
+
+// renderKeys presses a comma-separated list of keys before the frame is drawn,
+// so --render can reach a screen that takes a keystroke to get to — the review
+// stage, a later wizard page — rather than only the first one. Documentation
+// screenshots are the reason it exists: an image of a screen nobody can
+// reproduce goes stale silently.
+func (m *model) renderKeys(keys string) {
+	for _, k := range strings.Split(keys, ",") {
+		if k = strings.TrimSpace(k); k == "" {
+			continue
+		}
+		if m.wiz != nil {
+			m.wizardKey(k)
+			continue
+		}
+		m.onKey(tea.KeyPressMsg{Text: k})
 	}
 }
 

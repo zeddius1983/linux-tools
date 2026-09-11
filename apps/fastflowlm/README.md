@@ -15,8 +15,9 @@ XDNA1 and are **not** supported.
 tools setup fastflowlm
 ```
 
-The interactive setup shows a release picker (last 10 GitHub releases); the
-non-interactive CLI installs the latest release.
+The interactive setup shows a release picker (last 10 GitHub releases), with
+each release's date and notes shown beside the list — `PgDn`/`PgUp` scrolls
+them. The non-interactive CLI installs the latest release.
 
 ## Host prerequisites
 

@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -290,14 +291,14 @@ func TestStaleItemsAreIgnored(t *testing.T) {
 	m.wizardKey("q") // cancel while its items-cmd is still in flight
 
 	m.wiz, _ = newWizardSession(testApp(t, "llama-cpp-rocm"), "setup", t.TempDir())
-	m.wizardUpdate(wizItemsMsg{session: stale, page: 0, values: []string{"v0.9.12"}})
+	m.wizardUpdate(wizItemsMsg{session: stale, page: 0, items: []Item{{Name: "v0.9.12"}}})
 
 	if p := m.wiz.page(); len(p.items) != 0 || !p.loading {
 		t.Errorf("the cancelled wizard's items landed in the new one: %v", p.items)
 	}
 
 	// Its own result is still accepted.
-	m.wizardUpdate(wizItemsMsg{session: m.wiz.id, page: 0, values: []string{"b1234"}})
+	m.wizardUpdate(wizItemsMsg{session: m.wiz.id, page: 0, items: []Item{{Name: "b1234"}}})
 	if got := m.wiz.page().items; len(got) != 1 || got[0].Name != "b1234" {
 		t.Errorf("items = %v, want the session's own result", got)
 	}
@@ -512,7 +513,7 @@ func TestWizardWaitsForLoadingPage(t *testing.T) {
 	if m.wiz.stage == stageConfirm {
 		t.Error("enter advanced past a page that is still loading")
 	}
-	m.wizardUpdate(wizItemsMsg{session: m.wiz.id, page: 0, values: []string{"v1", "v0"}})
+	m.wizardUpdate(wizItemsMsg{session: m.wiz.id, page: 0, items: []Item{{Name: "v1"}, {Name: "v0"}}})
 	if m.wiz.page().loading {
 		t.Fatal("page still loading after its items arrived")
 	}
@@ -655,4 +656,120 @@ func stripStyles(s string) string {
 		b.WriteByte(s[i])
 	}
 	return b.String()
+}
+
+// plain strips styling. Glamour styles a wrapped paragraph word by word, so
+// even a two-word phrase in rendered markdown is split by escape sequences and
+// no assertion about the text survives without this.
+var ansiSeq = regexp.MustCompile("\x1b\\[[0-9;:]*[mK]")
+
+func plain(s string) string { return ansiSeq.ReplaceAllString(s, "") }
+
+// notesSession is a resolved release page: two versions with notes, one extra
+// value without, exactly the shape a releases| page produces.
+func notesSession(t *testing.T, m *model) {
+	t.Helper()
+	m.wiz, _ = newWizardSession(testApp(t, "fastflowlm"), "setup", t.TempDir())
+	m.wizardUpdate(wizItemsMsg{session: m.wiz.id, page: 0, items: []Item{
+		{Name: "v1.0.5", Desc: "2026-09-10", NotesTitle: "Hy-MT2 support",
+			Notes: "## New\n\n" + strings.Repeat("- a released thing\n", 40)},
+		{Name: "v1.0.4", Desc: "2026-09-02", Notes: "an older note"},
+		{Name: "master"},
+	}})
+}
+
+// The whole point of naming a repo: the release notes for the highlighted
+// version sit beside the list, in their own pane.
+func TestWizardNotesPaneShowsSelectedRelease(t *testing.T) {
+	m := newModel([]App{}, appsDir, "tools", true)
+	m.w, m.h = 110, 30
+	notesSession(t, m)
+
+	view := plain(m.wizardView())
+	if !strings.Contains(view, "Hy-MT2 support") || !strings.Contains(view, "a released thing") {
+		t.Errorf("the highlighted release's notes are missing:\n%s", view)
+	}
+	if !strings.Contains(view, "│") {
+		t.Error("no divider between the list and the notes")
+	}
+
+	// Moving the cursor moves the notes with it.
+	m.wizardKey("j")
+	if view := plain(m.wizardView()); !strings.Contains(view, "an older note") ||
+		strings.Contains(view, "a released thing") {
+		t.Errorf("the notes did not follow the cursor:\n%s", view)
+	}
+}
+
+// A value that is not a release at all — comfyui's "master" — keeps the pane
+// rather than collapsing the layout, and says there is nothing to show.
+func TestWizardNotesPlaceholderForNonRelease(t *testing.T) {
+	m := newModel([]App{}, appsDir, "tools", true)
+	m.w, m.h = 110, 30
+	notesSession(t, m)
+	m.wizardKey("end")
+
+	if view := plain(m.wizardView()); !strings.Contains(view, "No release notes") {
+		t.Errorf("no placeholder for a value with no release:\n%s", view)
+	}
+}
+
+// Below a usable width the pane is dropped rather than squeezed: the list is
+// what the page is for, and 20 cells of wrapped markdown is unreadable anyway.
+func TestWizardNotesPaneDroppedWhenNarrow(t *testing.T) {
+	m := newModel([]App{}, appsDir, "tools", true)
+	m.h = 30
+	notesSession(t, m)
+
+	m.w = 60
+	if _, notesW := m.wizardPaneWidths(); notesW != 0 {
+		t.Errorf("notes pane drawn at width 60 (%d cells)", notesW)
+	}
+	if view := plain(m.wizardView()); strings.Contains(view, "a released thing") {
+		t.Errorf("notes drawn on a narrow terminal:\n%s", view)
+	}
+	// The versions themselves are never dropped.
+	if view := plain(m.wizardView()); !strings.Contains(view, "v1.0.5") {
+		t.Errorf("the choice list is missing:\n%s", view)
+	}
+
+	m.w = 110
+	listW, notesW := m.wizardPaneWidths()
+	if notesW == 0 || listW < minWizListWidth {
+		t.Errorf("width 110 split as list %d / notes %d", listW, notesW)
+	}
+}
+
+// Notes longer than the pane scroll; the offset belongs to the highlighted
+// version, so moving the cursor starts the next one at its top.
+func TestWizardNotesScrollResetsWithCursor(t *testing.T) {
+	m := newModel([]App{}, appsDir, "tools", true)
+	m.w, m.h = 110, 30
+	notesSession(t, m)
+
+	m.wizardKey("pgdown")
+	if m.wiz.notesTop != 10 {
+		t.Fatalf("notesTop = %d, want 10", m.wiz.notesTop)
+	}
+	m.wizardKey("pgup")
+	if m.wiz.notesTop != 0 {
+		t.Errorf("notesTop = %d after pgup, want 0", m.wiz.notesTop)
+	}
+	m.wizardKey("pgdown")
+	m.wizardKey("j")
+	if m.wiz.notesTop != 0 {
+		t.Errorf("notesTop = %d after moving the cursor, want a fresh top", m.wiz.notesTop)
+	}
+}
+
+// A release with a long changelog must not push the footer off the screen: the
+// notes pane is clamped to the same row budget as the list beside it.
+func TestWizardNotesPaneFitsTheScreen(t *testing.T) {
+	m := newModel([]App{}, appsDir, "tools", true)
+	m.w, m.h = 110, 24
+	notesSession(t, m)
+
+	if lines := strings.Count(m.wizardView(), "\n") + 1; lines > m.h {
+		t.Errorf("%d lines, want at most %d", lines, m.h)
+	}
 }

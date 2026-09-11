@@ -3,3 +3,4 @@ Choose which upstream release to build:
 setup,build
 arg|LLAMA_REF
 items-cmd|git ls-remote --tags --refs https://github.com/ggml-org/llama.cpp 'b*' | sed 's@.*refs/tags/@@' | grep -E '^b[0-9]+$' | sort -t b -k 2 -n | tail -10 | tac
+notes-repo|ggml-org/llama.cpp
