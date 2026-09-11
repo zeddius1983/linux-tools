@@ -13,7 +13,9 @@ tools setup openclaw
 ```
 
 The setup wizard offers a release to pin (`latest`, or one of the recent tagged
-versions). Then, once:
+versions), with each version's GitHub release notes shown beside the list —
+`PgDn`/`PgUp` scrolls them, and `latest` shows the notes of the release it
+resolves to. Then, once:
 
 ```bash
 openclaw onboard          # pick a model provider, name your agent, set up channels
