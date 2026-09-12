@@ -6,9 +6,9 @@
   <img alt="CachyOS: untested" src="https://img.shields.io/badge/-untested-lightgrey?logo=cachyos&logoColor=00C2A0">
 </p>
 
-[vLLM](https://github.com/vllm-project/vllm) — a high-throughput, OpenAI-compatible LLM inference server — with AMD GPU acceleration via ROCm, packaged as a Distrobox container.
+[vLLM](https://github.com/vllm-project/vllm) — a high-throughput, OpenAI-compatible LLM inference server — on an AMD or NVIDIA GPU, packaged as a Distrobox container.
 
-Built on the official [`vllm/vllm-openai-rocm`](https://hub.docker.com/r/vllm/vllm-openai-rocm) image, so ROCm and PyTorch come pre-installed and matched. The server speaks the OpenAI API on port 8000, which means any OpenAI client SDK — Python, JS, `curl`, or an editor plugin — points at it unchanged. Models are pulled from HuggingFace on first use and cached in `~/.cache/huggingface`.
+Built on the official upstream images, so the GPU stack and PyTorch come pre-installed and matched: [`vllm/vllm-openai-rocm`](https://hub.docker.com/r/vllm/vllm-openai-rocm) for AMD, [`vllm/vllm-openai`](https://hub.docker.com/r/vllm/vllm-openai) for NVIDIA. The server speaks the OpenAI API on port 8000, which means any OpenAI client SDK — Python, JS, `curl`, or an editor plugin — points at it unchanged. Models are pulled from HuggingFace on first use and cached in `~/.cache/huggingface`.
 
 ## Install
 
@@ -16,11 +16,37 @@ Built on the official [`vllm/vllm-openai-rocm`](https://hub.docker.com/r/vllm/vl
 tools setup vllm
 ```
 
-When run interactively, a wizard screen picks which image to install: `latest`, one of the 10 most recent `vX.Y.Z` release images, or `nightly`. The version list comes from the published Docker Hub tags — so every choice is an image that actually exists — and each release's notes from GitHub are shown beside it (`PgDn`/`PgUp` scrolls them). Non-interactive installs take `latest`.
+Run interactively, setup asks two questions:
 
-Re-running `tools setup vllm` rebuilds from scratch, which is how you move between versions. The HuggingFace model cache lives in `$HOME` and survives the rebuild.
+1. **GPU backend** — AMD (ROCm) or NVIDIA (CUDA). This picks both the upstream image and the container's GPU passthrough.
+2. **Release** — one of the 10 newest vLLM releases, or `latest`, or `nightly`. Each release's notes are shown beside the list (`PgDn`/`PgUp` scrolls them); the newest release is the default.
+
+Non-interactive installs build the AMD variant on `:latest`.
+
+Re-running `tools setup vllm` rebuilds from scratch, which is how you move between versions or switch backends — it is a rebuild, not a repair, so it re-pulls the image. The HuggingFace model cache lives in `$HOME` and survives it.
 
 Expect a long first install: these images are 15–25 GB.
+
+### GPU backends
+
+| Wizard choice | Image | Passthrough |
+|---|---|---|
+| AMD (ROCm) | `vllm/vllm-openai-rocm` | `/dev/kfd` + `/dev/dri`, `video`/`render` groups |
+| NVIDIA (CUDA) | `vllm/vllm-openai` | CDI `nvidia.com/gpu=all` |
+
+There is no single image that serves both: vLLM's kernels and the PyTorch underneath them are compiled per accelerator, so each install is one backend. `cat /etc/vllm-gpu` inside the box says which one you have.
+
+#### NVIDIA prerequisite — the CDI spec
+
+`--device nvidia.com/gpu=all` needs a CDI spec on the **host**:
+
+```bash
+sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
+```
+
+Regenerate it after every driver update — the spec pins driver library paths — or install [`nvidia-cdi-service`](../nvidia-cdi-service/README.md), which does that on every boot. Verify with `nvidia-ctk cdi list`; without the spec, `tools setup` fails at container-create time with podman's `no such device nvidia.com/gpu=all`.
+
+Do **not** swap this for `distrobox create --nvidia`. On a rootless-podman host it bind-mounts the entire host driver on every start and can wedge in a remount loop — the post-mortem is in [`apps/lmstudio/README.md`](../lmstudio/README.md).
 
 ## Commands
 
@@ -29,7 +55,7 @@ Two commands are exported to the host:
 | Command | Purpose |
 |---|---|
 | `vllm` | The full vLLM CLI — `serve`, `chat`, `complete`, `bench`, `run-batch`, `collect-env` |
-| `vllm-serve` | Convenience wrapper: starts the OpenAI server on `0.0.0.0:8000` with the Strix Halo ROCm env vars already set |
+| `vllm-serve` | Convenience wrapper: starts the OpenAI server on `0.0.0.0:8000`, with this build's backend environment already applied |
 
 `vllm-serve` passes every argument through to the server, so any flag from `vllm serve` works on it too.
 
@@ -121,8 +147,8 @@ Inside the box, `python` is the system Python with vLLM installed (no venv), and
 
 ## GPU notes
 
-- The box gets `/dev/kfd` and `/dev/dri`, the `video` (44) and `render` (992) groups, `--ipc=host` for ROCm shared memory, and `SYS_PTRACE` for PyTorch's internals. These are set in `create_flags`; check your own GIDs with `getent group render video` if the container fails to see the GPU.
-- `vllm-serve` sets the Strix Halo (gfx1151) workarounds for you:
+- The AMD box gets `/dev/kfd` and `/dev/dri`, the `video` (44) and `render` (992) groups, `--ipc=host` for shared memory, and `SYS_PTRACE` for PyTorch's internals; the NVIDIA box swaps the first for the CDI device. These live in `create_flags` and `create_flags.nvidia`; check your own GIDs with `getent group render video` if the container fails to see the GPU.
+- On the AMD build, `vllm-serve` sets the Strix Halo (gfx1151) workarounds for you (they live in `/etc/vllm-env`, which the wrapper sources; the CUDA build's copy is empty, because none of them mean anything there):
 
   ```
   HSA_ENABLE_SDMA=0
