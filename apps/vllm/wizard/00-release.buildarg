@@ -1,0 +1,6 @@
+Select vLLM release
+Choose which vLLM ROCm image to install:
+setup,build
+arg|VLLM_TAG
+items-cmd|{ printf '%s\n' latest; curl -fsSL 'https://hub.docker.com/v2/repositories/vllm/vllm-openai-rocm/tags/?page_size=100&name=v' | tr ',' '\n' | sed -n 's/.*"name":"\(v[0-9][^"]*\)".*/\1/p' | grep -E '^v[0-9]+(\.[0-9]+){1,3}$' | sort -Vru | head -10; printf '%s\n' nightly; }
+notes-repo|vllm-project/vllm

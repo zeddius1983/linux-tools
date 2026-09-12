@@ -1,4 +1,11 @@
-FROM docker.io/vllm/vllm-openai-rocm:latest
+# Image tag chosen by the setup wizard (wizard/00-release.buildarg):
+#   latest        the newest published release image
+#   vX.Y.Z        a specific vLLM release
+#   nightly       the development build
+# The default keeps a non-interactive `tools setup vllm` on :latest, exactly as
+# before the wizard existed.
+ARG VLLM_TAG=latest
+FROM docker.io/vllm/vllm-openai-rocm:${VLLM_TAG}
 
 # vllm binary is at /usr/local/bin/vllm in this image;
 # command -pv doesn't search /usr/local/bin, so bridge it via /usr/bin.
