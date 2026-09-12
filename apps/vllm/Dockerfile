@@ -41,14 +41,19 @@ RUN printf '%s\n' \
 FROM base-${VLLM_GPU}
 
 # The CLI lives in /usr/local/bin, which `command -pv` (used by tools.sh for
-# bin: exports) does not search, so it is bridged into /usr/bin. Both paths are
+# bin: exports) does not search, so it is bridged into /usr/bin. Its path is
 # resolved at build time rather than hard-coded: the ROCm and CUDA images are
 # separate upstream builds and need not agree on where they put things. The
 # guard keeps the shim from calling itself if a future image ships the CLI in
 # /usr/bin already.
+#
+# vllm-serve goes through `vllm serve`, not `python -m
+# vllm.entrypoints.openai.api_server`: as of 0.29.0 that module warns twice that
+# it is deprecated and may be removed. (Upstream's own message says to use
+# `vllm server`, which is not a subcommand — `serve` is. `--model` is still
+# accepted there alongside the positional form.)
 RUN set -eux; \
     vllm_bin="$(command -v vllm)"; \
-    py_bin="$(command -v python || command -v python3)"; \
     if [ "$vllm_bin" != /usr/bin/vllm ]; then \
         printf '#!/usr/bin/env bash\nexec %s "$@"\n' "$vllm_bin" > /usr/bin/vllm; \
         chmod +x /usr/bin/vllm; \
@@ -57,12 +62,12 @@ RUN set -eux; \
         '#!/usr/bin/env bash' \
         '# Convenience server wrapper: the OpenAI API server on 0.0.0.0:8000,' \
         '# with the environment for this build backend already applied. Every' \
-        '# argument is passed through to the server.' \
+        '# argument is passed through to `vllm serve`.' \
         '. /etc/vllm-env' \
         '[ -n "${MIOPEN_USER_DB_PATH:-}" ] && mkdir -p "$MIOPEN_USER_DB_PATH"' \
         'echo "vLLM OpenAI server starting on http://localhost:8000"' \
-        'exec @PYTHON@ -m vllm.entrypoints.openai.api_server --host 0.0.0.0 --port 8000 "$@"' \
-        | sed "s|@PYTHON@|$py_bin|" > /usr/bin/vllm-serve; \
+        'exec @VLLM@ serve --host 0.0.0.0 --port 8000 "$@"' \
+        | sed "s|@VLLM@|$vllm_bin|" > /usr/bin/vllm-serve; \
     chmod +x /usr/bin/vllm-serve
 
 CMD ["/bin/bash"]

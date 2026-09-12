@@ -55,7 +55,7 @@ Two commands are exported to the host:
 | Command | Purpose |
 |---|---|
 | `vllm` | The full vLLM CLI — `serve`, `chat`, `complete`, `bench`, `run-batch`, `collect-env` |
-| `vllm-serve` | Convenience wrapper: starts the OpenAI server on `0.0.0.0:8000`, with this build's backend environment already applied |
+| `vllm-serve` | Convenience wrapper around `vllm serve`: binds `0.0.0.0:8000` and applies this build's backend environment |
 
 `vllm-serve` passes every argument through to the server, so any flag from `vllm serve` works on it too.
 
@@ -65,13 +65,13 @@ Two commands are exported to the host:
 
 ```bash
 # Small model, good for checking the box works end to end
-vllm-serve --model Qwen/Qwen3-0.6B
+vllm-serve Qwen/Qwen3-0.6B
 
-# A real one, with an explicit context length
+# A real one, with an explicit context length (--model works too)
 vllm-serve --model meta-llama/Llama-3.1-8B-Instruct --max-model-len 8192
 
-# Same thing through the plain CLI (model is positional here, and the
-# wrapper's backend environment is not applied)
+# The plain CLI is the same command without the wrapper's defaults: no
+# 0.0.0.0:8000 binding, and none of the backend environment below
 vllm serve Qwen/Qwen3-0.6B
 ```
 
