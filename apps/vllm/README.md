@@ -70,8 +70,8 @@ vllm-serve --model Qwen/Qwen3-0.6B
 # A real one, with an explicit context length
 vllm-serve --model meta-llama/Llama-3.1-8B-Instruct --max-model-len 8192
 
-# Same thing through the plain CLI (model is positional here, and none of the
-# ROCm env vars below are set for you)
+# Same thing through the plain CLI (model is positional here, and the
+# wrapper's backend environment is not applied)
 vllm serve Qwen/Qwen3-0.6B
 ```
 
@@ -115,11 +115,12 @@ vllm bench throughput --model Qwen/Qwen3-0.6B --num-prompts 100
 | Path | Contents |
 |---|---|
 | `~/.cache/huggingface` | Downloaded model weights and tokenizers |
-| `~/.cache/miopen` | Compiled MIOpen GPU kernels |
+| `~/.cache/miopen` | Compiled MIOpen kernels (AMD build only) |
+| `~/.cache/vllm` | vLLM's own compiled-graph cache |
 
-Both are on the host via Distrobox's shared `$HOME`, so they persist across rebuilds and are shared with any other app that uses the same caches (`comfyui`, `unsloth`).
+All of these are on the host via Distrobox's shared `$HOME`, so they persist across rebuilds and are shared with any other app that uses the same caches (`comfyui`, `unsloth`).
 
-The first load of a given model compiles GPU kernels, which is slow; the second load of the same model reuses `~/.cache/miopen` and is not.
+The first load of a given model compiles GPU kernels, which is slow; loading the same model again reuses those caches and is not.
 
 ### Gated models
 
@@ -143,7 +144,7 @@ tools enter vllm             # via tools
 distrobox enter vllm-box     # directly
 ```
 
-Inside the box, `python` is the system Python with vLLM installed (no venv), and the real CLI is at `/usr/local/bin/vllm`. `vllm collect-env` prints the ROCm/PyTorch/GPU details worth attaching to an upstream bug report.
+Inside the box, the real CLI is at `/usr/local/bin/vllm`, and on the ROCm image `python` is the system Python with vLLM importable (no venv). `cat /etc/vllm-gpu` says which backend the box was built for, and `vllm collect-env` prints the GPU/PyTorch details worth attaching to an upstream bug report.
 
 ## GPU notes
 
