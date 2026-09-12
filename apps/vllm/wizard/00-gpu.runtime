@@ -1,0 +1,6 @@
+Select GPU backend
+Which GPU should vLLM use? This picks the upstream image and passthrough.
+setup,build,create
+arg|VLLM_GPU
+AMD (ROCm)|amd|vllm-openai-rocm image, /dev/kfd + /dev/dri (default)
+NVIDIA (CUDA)|nvidia|vllm-openai image, CDI nvidia.com/gpu=all

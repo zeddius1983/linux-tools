@@ -67,7 +67,7 @@ reports from other distros are welcome.
 | [`lmstudio`](apps/lmstudio/README.md) | LM Studio desktop app (AMD or NVIDIA) |
 | [`openclaw`](apps/openclaw/README.md) | Personal AI agent — a gateway daemon and its CLI, or a node paired to someone else's gateway |
 | [`unsloth`](apps/unsloth/README.md) | LLM fine-tuning on ROCm |
-| `vllm` | vLLM inference server |
+| [`vllm`](apps/vllm/README.md) | OpenAI-compatible LLM inference server (AMD or NVIDIA) |
 
 ### Development
 
