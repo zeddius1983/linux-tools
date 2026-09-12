@@ -77,6 +77,17 @@ vllm serve Qwen/Qwen3-0.6B
 
 The server is reachable on the host at `http://localhost:8000` with no port mapping — Distrobox containers run with `--network host`.
 
+**The first start of a given model is slow, and looks like a hang.** vLLM compiles the model with `torch.compile`, captures GPU graphs, then profiles the KV cache — and only then opens the port, so `curl` is refused the entire time. On this hardware Qwen3-0.6B took ~9 minutes, nearly all of it single-core compilation. Wait for these lines:
+
+```
+torch.compile takes X s in total
+Capturing CUDA graph shapes: 34%|███ | 17/51
+Starting vLLM API server on http://0.0.0.0:8000
+Application startup complete.
+```
+
+The result is cached in `~/.cache/vllm`, so starting the same model again with the same flags is quick — the cache is keyed on the config, so changing `--max-model-len`, dtype or the model recompiles. To skip compilation entirely (much slower per token, up in under a minute), add `--enforce-eager`; it is the fastest way to check the GPU works at all. `VLLM_LOGGING_LEVEL=DEBUG` logs each sub-graph as it compiles.
+
 ### Query it
 
 ```bash
@@ -90,6 +101,8 @@ curl http://localhost:8000/v1/chat/completions \
     "max_tokens": 256
   }'
 ```
+
+Reasoning models (Qwen3 among them) spend the response on a `<think>` block first, so a small `max_tokens` can return nothing but reasoning. Raise it, or turn thinking off per request with `"chat_template_kwargs": {"enable_thinking": false}`.
 
 From an OpenAI SDK, point the base URL at it and use any non-empty key:
 
