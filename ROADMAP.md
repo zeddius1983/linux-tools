@@ -70,4 +70,11 @@ Priority order within each section: highest first.
   - The refactor it needs is separating the *app source directory* from the *instance name*: ~17 `$APPS_DIR/$app/...` lookups in bash and ~7 in `tui/`, all reachable behind one resolver.
   - Two wrinkles worth deciding up front: `bin:` exports collide in `~/.local/bin` (a clone of `vllm` would overwrite `~/.local/bin/vllm` with a wrapper pointing at the other box), so clones need an export naming rule — desktop entries are already safe, being named `<box>-<name>.desktop`; and two servers of the same app default to the same port, which makes the saved state the natural home for a per-instance port too.
 
+- [ ] **ROCm 10.0 migration** — ROCm 10.0 (27 Aug 2026) is the first major version since 7.x, built end to end on TheRock with a ~6-week cadence, and lists gfx1151 (Ryzen AI Max+ 395 / Radeon 8060S) as officially supported. It names Unsloth support on Ryzen AI MAX and ComfyUI tuning for Radeon/Ryzen as release features. What was pullable on 13 Sep 2026, per app:
+  - `llama-cpp-rocm` — `rocm/dev-ubuntu-24.04:10.0.0-full` (8.2 GB, vs 7.4 GB for today's `7.2.4-complete`; note the suffix changed `-complete` → `-full`). The cheapest first move: two `FROM` lines, and the Dockerfile's `ROCM_DOCKER_ARCH` build arg allows a quick test build with `gfx1151` alone instead of eleven architectures. Most likely breakage: `-DGGML_HIP_ROCWMMA_FATTN=ON`.
+  - `unsloth` — `rocm/pytorch:rocm10.0_ubuntu24.04_py3.13_pytorch_release_2.13.0` (20.5 GB). The app with the strongest reason to move, since Ryzen AI MAX support is a headline ROCm 10 feature.
+  - `comfyui` — same image. Hold: the jump to Python 3.13 and torch 2.13 is what breaks custom nodes, and no ROCm 10 feature is missed meanwhile.
+  - `vllm` — only `vllm/vllm-openai-rocm:nightly-rocm100` (no stable `vX.Y.Z-rocm100` tag), or AMD's `rocm/vllm:rocm10.0.0_ubuntu24.04_py3.14_pytorch_2.12.0_vllm_0.27.0`, which pins an older vLLM than the 0.29.0 currently installed. Adding `extra|nightly-rocm100` to the release wizard would make it a one-rebuild A/B.
+  - Re-test the Strix Halo env vars baked into `vllm-serve` (`HSA_ENABLE_SDMA=0` and friends) on the first ROCm 10 box — they may no longer be needed.
+
 ## Misc / Fun

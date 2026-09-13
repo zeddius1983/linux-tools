@@ -80,13 +80,52 @@ The server is reachable on the host at `http://localhost:8000` with no port mapp
 **The first start of a given model is slow, and looks like a hang.** vLLM compiles the model with `torch.compile`, captures GPU graphs, then profiles the KV cache — and only then opens the port, so `curl` is refused the entire time. On this hardware Qwen3-0.6B took ~9 minutes, nearly all of it single-core compilation. Wait for these lines:
 
 ```
-torch.compile takes X s in total
-Capturing CUDA graph shapes: 34%|███ | 17/51
-Starting vLLM API server on http://0.0.0.0:8000
+torch.compile took X s in total
+Capturing CUDA graphs (PIECEWISE): 34%|███ | 17/51
+Starting vLLM server on http://0.0.0.0:8000
 Application startup complete.
 ```
 
-The result is cached in `~/.cache/vllm`, so starting the same model again with the same flags is quick — the cache is keyed on the config, so changing `--max-model-len`, dtype or the model recompiles. To skip compilation entirely (much slower per token, up in under a minute), add `--enforce-eager`; it is the fastest way to check the GPU works at all. `VLLM_LOGGING_LEVEL=DEBUG` logs each sub-graph as it compiles.
+The result is cached in `~/.cache/vllm`, so starting the same model again with the same flags is quick — but the cache is keyed on the configuration, so changing flags recompiles (changing `--max-num-seqs` alone was enough to cost a fresh two-minute compile on a 27B model). To skip compilation entirely (much slower per token, up in under a minute), add `--enforce-eager`; it is the fastest way to check the GPU works at all. `VLLM_LOGGING_LEVEL=DEBUG` logs each sub-graph as it compiles.
+
+### Larger models on Strix Halo
+
+Memory is unified here, and `--gpu-memory-utilization` is a fraction of the GPU's *total* memory — all ~124 GB on a 128 GB Ryzen AI Max machine — not of what is free. vLLM does not account for other processes, so size it yourself: weights plus the KV cache you want. 0.35 is ~43 GB.
+
+**int4 is what makes 27–31B models practical.** Tested on gfx1151 with vLLM 0.29.0:
+
+| Format | Works here? | Notes |
+|---|---|---|
+| AWQ (int4) | ✅ | Triton kernels; greedy output matches the unquantized model |
+| compressed-tensors w4a16 | ✅ | uses the dedicated `RDNAHybridW4A16LinearKernel` |
+| FP8 | ❌ | engine fails to initialise — RDNA3.5 has no FP8 support in this build |
+| MXFP4 / MXFP8 | ❌ | the AMD fast path is gated to a newer architecture (gfx1250) |
+| NVFP4 | ❌ | NVIDIA-targeted; its quantization kernel is not in the ROCm build |
+
+Check a repo's format before downloading it: plenty of recent quantized uploads are NVFP4 or FP8 only (at the time of writing, every quantized Qwen3.8-27B build), and neither runs here. Some that do:
+
+| Model | Format | Weights |
+|---|---|---|
+| `google/gemma-4-31B-it-qat-w4a16-ct` | compressed-tensors, QAT | 23.3 GB |
+| `cyankiwi/Qwen3.6-27B-AWQ-INT4` | AWQ | 20.4 GB |
+| `cyankiwi/Qwen3-Coder-30B-A3B-Instruct-AWQ-4bit` | AWQ, MoE (~3B active) | 18.1 GB |
+| `google/gemma-4-12B-it-qat-w4a16-ct` | compressed-tensors, QAT | 10.3 GB |
+
+A working command for a local, single-user server:
+
+```bash
+VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0 \
+vllm-serve cyankiwi/Qwen3.6-27B-AWQ-INT4 \
+  --max-model-len 16384 --gpu-memory-utilization 0.35 \
+  --max-num-seqs 32 --language-model-only
+```
+
+- **`--max-num-seqs 32`** is required for hybrid models such as Qwen3.5/3.6 once GPU graphs are on. Without it startup fails after several minutes with `max_num_seqs (256) exceeds available Mamba cache blocks`. It also cuts graph capture from 51 shapes to 11, and the memory those graphs pin from 2.5 GB to 0.6 GB.
+- **`VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0`** skips an extra graph capture that exists only to estimate memory. Environment variables set on the host reach the server.
+- **`--language-model-only`** skips the vision encoder's profiling and warmup. Leave it off if you send images.
+- **Keep the flags the same between restarts**, since they are part of the compile cache key.
+
+Even with a warm cache, a 27B model takes roughly two minutes to open its port — reading and repacking weights, a profiling run, and graph capture all happen on every start. That is the cost of vLLM's server design; `llama-cpp-rocm` opens a model of the same size in seconds. If you restart often, or only ever chat alone, llama.cpp is the better fit — vLLM earns its startup back under concurrent load.
 
 ### Query it
 
@@ -135,6 +174,22 @@ All of these are on the host via Distrobox's shared `$HOME`, so they persist acr
 
 The first load of a given model compiles GPU kernels, which is slow; loading the same model again reuses those caches and is not.
 
+### Downloading models
+
+Download ahead of time rather than letting `vllm-serve` fetch the model. The server prints `Loading model from scratch...` *before* the weights arrive, so a slow or stuck download inside it looks exactly like a stuck server.
+
+```bash
+distrobox enter vllm-box -- hf download cyankiwi/Qwen3.6-27B-AWQ-INT4
+```
+
+If a download crawls, turn off Hugging Face's Xet transfer layer. On this machine Xet ran ~9× slower than the classic downloader (1.1 vs 10 MB/s, measured at the same time on the same connection), and once stopped moving data altogether while still logging activity:
+
+```bash
+HF_HUB_DISABLE_XET=1 distrobox enter vllm-box -- hf download <repo>
+```
+
+Interrupted downloads do not resume: each attempt writes its partial files under a new name, and the next run deletes the old ones.
+
 ### Gated models
 
 Models behind a HuggingFace licence (Llama, some Mistral builds) need a token. It is not baked into the image — the container inherits it from your host shell:
@@ -172,5 +227,6 @@ Inside the box, the real CLI is at `/usr/local/bin/vllm`, and on the ROCm image 
   ```
 
   Set them yourself if you invoke `vllm serve` directly instead.
-- vLLM allocates 90% of VRAM for the KV cache by default. On an APU where the GPU shares system memory, `--gpu-memory-utilization 0.7` (or lower) leaves the rest of the desktop something to work with.
+- vLLM claims 90% of GPU memory by default. On an APU that means 90% of *system* memory, so always pass `--gpu-memory-utilization` — see [Larger models on Strix Halo](#larger-models-on-strix-halo) for sizing it.
+- `FLASH_ATTENTION_TRITON_AMD_ENABLE=TRUE` enables a Flash Attention Triton backend that vLLM hints at in its log. On Qwen3.6 it changes only the vision encoder's attention — text generation stays on the same backend — so it does not speed up chat.
 - A model that won't fit is an out-of-memory error at load time, not a slow run — drop `--max-model-len`, use a quantized checkpoint, or pick a smaller model.
