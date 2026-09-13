@@ -113,6 +113,12 @@ llama-server -m ~/models/model.gguf --device Vulkan0 -ngl 99  # any variant
 
 Without `--device`, llama.cpp picks by backend priority (ROCm/CUDA before Vulkan). On Strix Halo (gfx1151) Vulkan often matches or beats ROCm depending on model and quantization — benchmark both with `llama -b -m model.gguf --device <dev>`.
 
+**Compare backends only with the model fully on the GPU, or with the same `-ngl` on both.** When a model doesn't fit, llama.cpp chooses how many layers to offload per backend, based on the memory each one reports and its own buffer sizes. CUDA and Vulkan can land on different splits, so a comparison through `llama-server` measures the splits, not the backends. A model that doesn't fit shows up as `offloaded N/M layers to GPU` with N < M in the startup log. For a fair comparison, fix the layer count:
+
+```bash
+llama-bench -m ~/models/model.gguf -dev CUDA0,Vulkan0 -ngl 99 -fa 1   # lower -ngl if it runs out of memory
+```
+
 ### Chat
 
 ```bash
