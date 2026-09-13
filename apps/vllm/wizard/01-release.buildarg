@@ -1,0 +1,7 @@
+Select vLLM release
+Choose which vLLM release to install:
+setup,build
+arg|VLLM_TAG
+releases|vllm-project/vllm
+extra|latest
+extra|nightly

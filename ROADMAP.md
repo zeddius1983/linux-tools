@@ -6,7 +6,7 @@ Priority order within each section: highest first.
 
 ## AI / LLM Tools
 
-- [x] `vllm` — high-throughput OpenAI-compatible LLM inference server (ROCm)
+- [x] `vllm` — high-throughput OpenAI-compatible LLM inference server (setup-time GPU picker selecting both the upstream image and passthrough: AMD ROCm, or NVIDIA CUDA via CDI; plus a release picker over upstream vLLM releases, with `latest` and `nightly`)
 - [ ] `open-webui` — web UI for local LLMs; works with Ollama and OpenAI-compatible APIs (https://docs.openwebui.com/)
 - [ ] `ollama` — local LLM runtime (GPU-accelerated)
 - [x] `lmstudio` — LM Studio local model runner (setup-time GPU runtime picker: AMD ROCm/Vulkan, or NVIDIA CUDA via CDI `--device nvidia.com/gpu=all`)
@@ -64,5 +64,17 @@ Priority order within each section: highest first.
 ## Tooling / Infrastructure
 
 - [ ] Replace the host TUI (`whiptail`) with a **Go dashboard** modelled on [`gh-dash`](https://github.com/dlvhdr/gh-dash): category tabs, an app table, and a README info panel. Built on Bubble Tea v2 / Lip Gloss v2 / Glamour — *not* `huh`, which is a form library and cannot express tabs plus a table plus a sidebar (gh-dash uses no huh either, and huh still depends on Bubble Tea v1). The bash `cmd_*` backend (`lib/commands.sh`) is untouched: actions suspend the dashboard with `tea.ExecProcess` so podman output streams normally, then it resumes. Wizard pages are native too: answers are collected in Go and handed to bash through a state file, so `whiptail` is no longer reached from the dashboard. `tools install` builds the binary through a ladder — existing binary, else host Go, else a throwaway `golang:1.25-alpine` container with a named volume for the module cache, else skip and keep whiptail — so Go never becomes a dependency of using linux-tools. `tools` now opens the dashboard, with the whiptail menu as the fallback behind `LT_NO_GO_TUI=1`. Remaining: retiring `lib/tui.sh` once it has enough mileage, and multi-app select. Design doc: [`docs/tui-migration.md`](docs/tui-migration.md).
+
+- [ ] **Cloned apps** — a second instance of one app under its own name, so two variants can coexist: `vllm` on ROCm in `vllm-box` and `vllm-cuda` on CUDA in `vllm-cuda-box`, or two vLLM releases side by side. Today `box_name`/`image_name` are derived from the app directory name, so an app is exactly one box and one image — switching `comfyui` or `vllm` between AMD and NVIDIA is a full rebuild, and running both at once is impossible.
+  - Sketch: `apps/<clone>/clone-of` naming the parent app (one line, same shape as `renamed-from`), plus the saved wizard answers that make it a clone. `lib/wizard.sh` already re-hydrates a flat `KEY=value` state file (`LT_WIZARD_STATE`, written by the Go front-end), so a clone is close to "an app directory plus a checked-in wizard state file" rather than a new subsystem. `tools clone <app> <name>` would write it.
+  - The refactor it needs is separating the *app source directory* from the *instance name*: ~17 `$APPS_DIR/$app/...` lookups in bash and ~7 in `tui/`, all reachable behind one resolver.
+  - Two wrinkles worth deciding up front: `bin:` exports collide in `~/.local/bin` (a clone of `vllm` would overwrite `~/.local/bin/vllm` with a wrapper pointing at the other box), so clones need an export naming rule — desktop entries are already safe, being named `<box>-<name>.desktop`; and two servers of the same app default to the same port, which makes the saved state the natural home for a per-instance port too.
+
+- [ ] **ROCm 10.0 migration** — ROCm 10.0 (27 Aug 2026) is the first major version since 7.x, built end to end on TheRock with a ~6-week cadence, and lists gfx1151 (Ryzen AI Max+ 395 / Radeon 8060S) as officially supported. It names Unsloth support on Ryzen AI MAX and ComfyUI tuning for Radeon/Ryzen as release features. What was pullable on 13 Sep 2026, per app:
+  - `llama-cpp-rocm` — `rocm/dev-ubuntu-24.04:10.0.0-full` (8.2 GB, vs 7.4 GB for today's `7.2.4-complete`; note the suffix changed `-complete` → `-full`). The cheapest first move: two `FROM` lines, and the Dockerfile's `ROCM_DOCKER_ARCH` build arg allows a quick test build with `gfx1151` alone instead of eleven architectures. Most likely breakage: `-DGGML_HIP_ROCWMMA_FATTN=ON`.
+  - `unsloth` — `rocm/pytorch:rocm10.0_ubuntu24.04_py3.13_pytorch_release_2.13.0` (20.5 GB). The app with the strongest reason to move, since Ryzen AI MAX support is a headline ROCm 10 feature.
+  - `comfyui` — same image. Hold: the jump to Python 3.13 and torch 2.13 is what breaks custom nodes, and no ROCm 10 feature is missed meanwhile.
+  - `vllm` — only `vllm/vllm-openai-rocm:nightly-rocm100` (no stable `vX.Y.Z-rocm100` tag), or AMD's `rocm/vllm:rocm10.0.0_ubuntu24.04_py3.14_pytorch_2.12.0_vllm_0.27.0`, which pins an older vLLM than the 0.29.0 currently installed. Adding `extra|nightly-rocm100` to the release wizard would make it a one-rebuild A/B.
+  - Re-test the Strix Halo env vars baked into `vllm-serve` (`HSA_ENABLE_SDMA=0` and friends) on the first ROCm 10 box — they may no longer be needed.
 
 ## Misc / Fun
