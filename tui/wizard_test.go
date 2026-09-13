@@ -23,6 +23,8 @@ func TestParseRealPages(t *testing.T) {
 		{"dev-toolbox", "00-tools", "packages", 8},
 		{"shell-toolbox", "00-tools", "packages", 1},
 		{"lmstudio", "00-runtime", "runtime", 2},
+		{"llama-cpp", "00-gpu", "runtime", 3},
+		{"llama-cpp", "01-release", "buildarg", 0},
 		{"fastflowlm", "00-release", "buildarg", 0},
 		{"codex-cli", "00-release", "buildarg", 0},
 		{"codex-cli", "01-statusline", "packages", 1},
@@ -81,11 +83,7 @@ func TestCodexBuildargConfig(t *testing.T) {
 // .buildarg bodies are config, not items: an items-cmd containing pipes must
 // survive parsing whole, since the command itself is full of them.
 func TestBuildargItemsCmdSurvivesPipes(t *testing.T) {
-	pages, err := LoadPages(filepath.Join(appsDir, "llama-cpp-rocm", "wizard"))
-	if err != nil || len(pages) == 0 {
-		t.Fatalf("load: %v", err)
-	}
-	p := pages[0]
+	p := loadPage(t, "llama-cpp", "01-release")
 	if p.ArgName != "LLAMA_REF" {
 		t.Errorf("ArgName = %q, want LLAMA_REF", p.ArgName)
 	}
@@ -203,6 +201,38 @@ func TestRuntimeArgIsConfigNotItem(t *testing.T) {
 	if len(p.Items) != 2 {
 		t.Errorf("Items = %d, want 2 (amd, nvidia)", len(p.Items))
 	}
+}
+
+// llama-cpp's runtime page offers three stacks. The values are what reach
+// LLAMA_GPU and create_flags.<value>, so they must not drift from the Dockerfile.
+func TestLlamaCppRuntimePage(t *testing.T) {
+	p := loadPage(t, "llama-cpp", "00-gpu")
+	if p.Type != "runtime" || p.ArgName != "LLAMA_GPU" {
+		t.Fatalf("type = %q, ArgName = %q; want runtime, LLAMA_GPU", p.Type, p.ArgName)
+	}
+	var values []string
+	for _, it := range p.Items {
+		values = append(values, it.Payload)
+	}
+	if got := strings.Join(values, ","); got != "rocm,rocm10,cuda" {
+		t.Errorf("values = %s, want rocm,rocm10,cuda (rocm first: it is the default)", got)
+	}
+}
+
+// loadPage returns one named page of an app's wizard, failing the test if absent.
+func loadPage(t *testing.T, app, name string) Page {
+	t.Helper()
+	pages, err := LoadPages(filepath.Join(appsDir, app, "wizard"))
+	if err != nil {
+		t.Fatalf("%s: load: %v", app, err)
+	}
+	for _, p := range pages {
+		if p.Name == name {
+			return p
+		}
+	}
+	t.Fatalf("%s: page %q not found", app, name)
+	return Page{}
 }
 
 func TestAppliesTo(t *testing.T) {

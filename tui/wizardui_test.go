@@ -290,16 +290,17 @@ func TestStaleItemsAreIgnored(t *testing.T) {
 	stale := m.wiz.id
 	m.wizardKey("q") // cancel while its items-cmd is still in flight
 
-	m.wiz, _ = newWizardSession(testApp(t, "llama-cpp-rocm"), "setup", t.TempDir())
-	m.wizardUpdate(wizItemsMsg{session: stale, page: 0, items: []Item{{Name: "v0.9.12"}}})
+	// llama-cpp's release list is its second page (the GPU runtime page is first).
+	m.wiz, _ = newWizardSession(testApp(t, "llama-cpp"), "setup", t.TempDir())
+	m.wizardUpdate(wizItemsMsg{session: stale, page: 1, items: []Item{{Name: "v0.9.12"}}})
 
-	if p := m.wiz.page(); len(p.items) != 0 || !p.loading {
+	if p := m.wiz.pages[1]; len(p.items) != 0 || !p.loading {
 		t.Errorf("the cancelled wizard's items landed in the new one: %v", p.items)
 	}
 
 	// Its own result is still accepted.
-	m.wizardUpdate(wizItemsMsg{session: m.wiz.id, page: 0, items: []Item{{Name: "b1234"}}})
-	if got := m.wiz.page().items; len(got) != 1 || got[0].Name != "b1234" {
+	m.wizardUpdate(wizItemsMsg{session: m.wiz.id, page: 1, items: []Item{{Name: "b1234"}}})
+	if got := m.wiz.pages[1].items; len(got) != 1 || got[0].Name != "b1234" {
 		t.Errorf("items = %v, want the session's own result", got)
 	}
 }
