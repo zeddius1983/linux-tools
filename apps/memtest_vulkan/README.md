@@ -222,10 +222,27 @@ both the console and worker processes.
   pattern, reads it back and compares, through Vulkan compute — a correctness
   workload, not a streaming one, and NVIDIA's Vulkan path is less tuned than
   CUDA for this. Cards land closer together than their specs suggest: an RTX
-  3080 (760 GB/s theoretical, no ECC) and a Tesla V100 (900 GB/s, ECC on by
-  default, which itself costs ~10–15%) both measure around 650 GB/s here. Use
+  3080 (760 GB/s theoretical) and a Tesla V100 (900 GB/s) both measure around
+  650 GB/s here. ECC is *not* the explanation on a V100 — HBM2 supports ECC
+  natively, with no capacity or bandwidth overhead, unlike the GDDR5-era
+  implementation that reserved 6.25% of memory. Use
   [`nvbandwidth`](../nvbandwidth/README.md) when you actually want to measure
   bandwidth.
+- **On ECC cards, leave ECC on and watch the counters instead.** ECC corrects
+  single-bit errors in hardware, so memtest_vulkan cannot see them: a `PASS` on
+  an ECC card means "nothing got past ECC", not "no errors occurred". The card
+  already counts them far more precisely than a pattern test can:
+
+  ```bash
+  nvidia-smi -q -d ECC              # corrected + uncorrectable, volatile + aggregate
+  nvidia-smi -q -d PAGE_RETIREMENT  # retired pages (Volta); ROW_REMAPPER on Ampere+
+  ```
+
+  The useful pattern is to run memtest_vulkan as a *load generator* and watch
+  those counters move, rather than relying on its own verdict. Disable ECC
+  (`sudo nvidia-smi -e 0`, GPU idle, then reboot; `-e 1` to restore) only when
+  you specifically want the raw pre-correction error rate — and put it back
+  afterwards.
 - **Two cosmetic warnings in verbose mode** are expected and harmless: a
   `Layer 0 does not exist` line (no validation layers installed — the tool
   retries without them) and a `Received return code -9 ... libvulkan_dzn.so`
