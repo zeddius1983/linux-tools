@@ -3,7 +3,7 @@
 <p>
   <img alt="Ubuntu: tested" src="https://img.shields.io/badge/-tested-brightgreen?logo=ubuntu&logoColor=E95420">
   <img alt="Linux Mint: tested" src="https://img.shields.io/badge/-tested-brightgreen?logo=linuxmint&logoColor=87CF3E">
-  <img alt="CachyOS: untested" src="https://img.shields.io/badge/-untested-lightgrey?logo=cachyos&logoColor=00C2A0">
+  <img alt="CachyOS: tested" src="https://img.shields.io/badge/-tested-brightgreen?logo=cachyos&logoColor=00C2A0">
 </p>
 
 [memtest_vulkan](https://github.com/GpuZelenograd/memtest_vulkan) — a GPU memory
@@ -216,7 +216,16 @@ both the console and worker processes.
   driving your display can make the session stutter. Harmless, but expect it.
 - **NVIDIA GPUs need the CDI choice at setup.** Without it the box has no NVIDIA
   ICD and the card simply does not appear in the device list — no error, just a
-  shorter menu. `memtest_vulkan_verbose` makes this obvious.
+  shorter menu. `memtest_vulkan_verbose` makes this obvious. Exercised on a
+  CachyOS host with an RTX 3080 and a Tesla V100.
+- **The reported GB/sec is not a bandwidth benchmark.** memtest_vulkan writes a
+  pattern, reads it back and compares, through Vulkan compute — a correctness
+  workload, not a streaming one, and NVIDIA's Vulkan path is less tuned than
+  CUDA for this. Cards land closer together than their specs suggest: an RTX
+  3080 (760 GB/s theoretical, no ECC) and a Tesla V100 (900 GB/s, ECC on by
+  default, which itself costs ~10–15%) both measure around 650 GB/s here. Use
+  [`nvbandwidth`](../nvbandwidth/README.md) when you actually want to measure
+  bandwidth.
 - **Two cosmetic warnings in verbose mode** are expected and harmless: a
   `Layer 0 does not exist` line (no validation layers installed — the tool
   retries without them) and a `Received return code -9 ... libvulkan_dzn.so`
