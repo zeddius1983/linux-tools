@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 setup_tui_theme() {
     export NEWT_COLORS='
 root=white,black

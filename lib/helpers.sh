@@ -1,7 +1,21 @@
+# shellcheck shell=bash
 # ── Naming ───────────────────────────────────────────────────────────────────
 
 image_name() { echo "linux-tools/$1:latest"; }
 box_name()   { echo "$1-box"; }
+
+# ── Runtime ──────────────────────────────────────────────────────────────────
+
+# Commands that touch images or boxes need podman or docker; install, version
+# and update do not. Checking here rather than at startup means linux-tools can
+# be installed on a host that has not set up a container runtime yet, and says
+# so when it first matters instead of refusing to install at all.
+require_runtime() {
+    [[ -n "${RUNTIME:-}" ]] && return 0
+    echo "Error: neither podman nor docker found." >&2
+    echo "       podman: https://podman.io/docs/installation" >&2
+    exit 1
+}
 
 # ── Status helpers ───────────────────────────────────────────────────────────
 

@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 cmd_build() {
     local app="$1"
     [[ -d "$APPS_DIR/$app" ]] || { echo "Error: no app directory at $APPS_DIR/$app" >&2; exit 1; }
@@ -299,8 +300,16 @@ TUI_GO_IMAGE="docker.io/library/golang:1.25-alpine"
 TUI_GO_VOLUME="linux-tools-go-cache"
 
 # Is the built binary newer than every source it was built from?
+#
+# A release tree is the exception: it ships a binary built by CI, and its files
+# all come out of one tarball with whatever mtimes tar gave them. Comparing
+# those would be a coin flip that, when it lost, threw away the prebuilt binary
+# and rebuilt it — the exact cost shipping it was meant to remove.
 tui_bin_is_current() {
     [[ -x "$TUI_BIN" ]] || return 1
+    if is_release_install; then
+        return 0
+    fi
     local f
     for f in "$TUI_DIR"/*.go "$TUI_DIR/go.mod" "$TUI_DIR/go.sum"; do
         [[ -f "$f" ]] || continue
@@ -387,39 +396,186 @@ cmd_menu() {
     "$TUI_BIN" "${args[@]}"
 }
 
-cmd_install() {
-    local bin_dir="$HOME/.local/bin"
-    local target="$bin_dir/tools"
-    local completion_line="source \"$SCRIPT_DIR/completion/tools.bash\""
+# Append a line to a shell rc file exactly once, replacing any earlier
+# linux-tools completion line that pointed somewhere else. Earlier installs
+# wrote a path into ~/.bashrc; under the release layout that path is versioned,
+# so without this every update would leave a dead line behind and add a new one.
+install_bash_completion() {  # install_bash_completion <completion-file>
+    local comp="$1" rc="$HOME/.bashrc"
+    local want="source \"$comp\""
 
-    mkdir -p "$bin_dir"
-    ln -sf "$SCRIPT_DIR/tools.sh" "$target"
-    echo "==> Linked: $target -> $SCRIPT_DIR/tools.sh"
+    [[ -f "$rc" ]] || touch "$rc"
 
-    if grep -qF "$completion_line" "$HOME/.bashrc" 2>/dev/null; then
+    if grep -qF "$want" "$rc"; then
         echo "==> Completion already in ~/.bashrc"
-    else
-        printf '\n# linux-tools completion\n%s\n' "$completion_line" >> "$HOME/.bashrc"
-        echo "==> Added completion to ~/.bashrc"
+        return
     fi
 
-    # For zsh, write a conf.d fragment so it survives shell-toolbox regenerating ~/.zshrc
+    if grep -q 'completion/tools\.bash' "$rc"; then
+        local backup="$rc.linux-tools.$(date +%Y%m%d-%H%M%S).bak"
+        cp -p "$rc" "$backup"
+        echo "==> Replacing a stale completion line in ~/.bashrc (backup: $backup)"
+        sed -i '/completion\/tools\.bash/d' "$rc"
+        sed -i '/^# linux-tools completion$/d' "$rc"
+    fi
+
+    printf '\n# linux-tools completion\n%s\n' "$want" >> "$rc"
+    echo "==> Added completion to ~/.bashrc"
+}
+
+# zsh gets a conf.d fragment instead, so it survives shell-toolbox regenerating
+# ~/.zshrc. The file is ours entirely, so it is rewritten rather than patched.
+install_zsh_completion() {  # install_zsh_completion <completion-file>
+    local comp="$1"
     local zsh_conf_dir="${XDG_CONFIG_HOME:-$HOME/.config}/zsh/conf.d"
     local zsh_fragment="$zsh_conf_dir/00-tools-completion.zsh"
-    if [[ -d "$zsh_conf_dir" ]] || [[ -f "$HOME/.zshrc" ]]; then
-        mkdir -p "$zsh_conf_dir"
-        if [[ -f "$zsh_fragment" ]] && grep -qF "$SCRIPT_DIR/completion/tools.bash" "$zsh_fragment" 2>/dev/null; then
-            echo "==> Completion already in $zsh_fragment"
-        else
-            printf '# linux-tools completion\nautoload -Uz bashcompinit && bashcompinit\n%s\n' "$completion_line" > "$zsh_fragment"
-            echo "==> Wrote completion to $zsh_fragment"
-        fi
+
+    [[ -d "$zsh_conf_dir" || -f "$HOME/.zshrc" ]] || return 0
+
+    mkdir -p "$zsh_conf_dir"
+    if [[ -f "$zsh_fragment" ]] && grep -qF "$comp" "$zsh_fragment"; then
+        echo "==> Completion already in $zsh_fragment"
+        return
+    fi
+    printf '# linux-tools completion\nautoload -Uz bashcompinit && bashcompinit\nsource "%s"\n' \
+        "$comp" > "$zsh_fragment"
+    echo "==> Wrote completion to $zsh_fragment"
+}
+
+cmd_install() {
+    local dev=0 modify_rc=1
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --dev)          dev=1;       shift ;;
+            --no-modify-rc) modify_rc=0; shift ;;
+            *) echo "Error: unknown option for install: $1" >&2; return 1 ;;
+        esac
+    done
+
+    # A release install and a git checkout can coexist on one machine — they do
+    # on the maintainer's — but exactly one of them owns ~/.local/bin/tools.
+    # A clone never takes that over silently, or you end up running whichever
+    # was installed last without knowing which one that was.
+    if ! is_release_install && [[ "$(lt_bin_owner)" == "release" && $dev -eq 0 ]]; then
+        cat >&2 <<EOF
+Error: $LT_BIN_LINK points at the release install
+       ($(readlink -f "$LT_BIN_LINK" 2>/dev/null))
+
+  Installing from this checkout would take it over. If that is what you want:
+
+      ./tools.sh install --dev
+
+  To hand it back to the release install afterwards: re-run install.sh
+EOF
+        return 1
+    fi
+
+    # A release install links through `current`, not through the versioned
+    # directory it resolves to, so both the command and the completion line
+    # survive the next update. A checkout links to itself.
+    local root="$SCRIPT_DIR"
+    if is_release_install && [[ -L "$LT_CURRENT_LINK" ]]; then
+        root="$LT_CURRENT_LINK"
+    fi
+
+    local bin_dir="$HOME/.local/bin"
+    local target="$bin_dir/tools"
+
+    mkdir -p "$bin_dir"
+    ln -sfn "$root/tools.sh" "$target"
+    echo "==> Linked: $target -> $root/tools.sh"
+
+    if (( modify_rc )); then
+        install_bash_completion "$root/completion/tools.bash"
+        install_zsh_completion  "$root/completion/tools.bash"
     fi
 
     cmd_build_tui
 
     echo ""
-    echo "Done. Open a new shell or run: source ~/.bashrc / source ~/.zshrc"
+    if (( modify_rc )); then
+        echo "Done. Open a new shell or run: source ~/.bashrc / source ~/.zshrc"
+    else
+        echo "Done."
+    fi
+}
+
+cmd_version() {
+    local kind; kind="$(lt_install_kind)"
+    echo "linux-tools $(lt_version)"
+    echo "  install: $kind"
+    echo "  tree:    $SCRIPT_DIR"
+    if [[ -x "$TUI_BIN" ]]; then
+        echo "  dashboard: built"
+    else
+        echo "  dashboard: not built (the whiptail menu is used)"
+    fi
+}
+
+# Update in place. The two install kinds update in the two different ways they
+# were installed, and neither one is a special case of the other:
+#
+#   release install   re-run the bundled install.sh, which already knows how to
+#                     download, verify, unpack and swap. There is exactly one
+#                     implementation of that, and this is not a second one.
+#   git checkout      git pull, then rebuild the dashboard from the new sources.
+cmd_update() {
+    local req_version="" check_only=0
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --version) req_version="${2:-}"
+                       [[ -n "$req_version" ]] || { echo "Error: --version needs a tag" >&2; return 1; }
+                       shift 2 ;;
+            --check)   check_only=1; shift ;;
+            *) echo "Error: unknown option for update: $1" >&2; return 1 ;;
+        esac
+    done
+
+    if (( check_only )); then
+        local current latest
+        current="$(lt_version)"
+        echo "installed: $current"
+        if ! latest="$(lt_latest_tag)"; then
+            echo "latest:    could not be resolved (no network, or GitHub is unreachable)"
+            return 1
+        fi
+        echo "latest:    $latest"
+        if [[ "$current" == "${latest#v}" ]]; then
+            echo "You are up to date."
+        else
+            echo "Run 'tools update' to install $latest."
+        fi
+        return 0
+    fi
+
+    if is_release_install; then
+        if ! is_managed_install; then
+            echo "Error: this tree is a release tarball, but it is not the one" >&2
+            echo "       $LT_CURRENT_LINK points at, so updating it in place" >&2
+            echo "       would be a surprise. Run install.sh instead." >&2
+            return 1
+        fi
+        local installer="$SCRIPT_DIR/install.sh"
+        [[ -x "$installer" ]] || { echo "Error: no install.sh in $SCRIPT_DIR" >&2; return 1; }
+        if [[ -n "$req_version" ]]; then
+            exec "$installer" --version "$req_version"
+        fi
+        exec "$installer"
+    fi
+
+    # Git checkout.
+    if [[ -n "$req_version" ]]; then
+        echo "Error: --version applies to release installs." >&2
+        echo "       In a checkout, use: git checkout $req_version" >&2
+        return 1
+    fi
+    command -v git &>/dev/null || { echo "Error: git not found" >&2; return 1; }
+    git -C "$SCRIPT_DIR" rev-parse --git-dir &>/dev/null \
+        || { echo "Error: $SCRIPT_DIR is neither a release install nor a git checkout" >&2; return 1; }
+
+    echo "==> Updating the checkout at $SCRIPT_DIR..."
+    git -C "$SCRIPT_DIR" pull --ff-only
+    cmd_build_tui
 }
 
 cmd_list() {

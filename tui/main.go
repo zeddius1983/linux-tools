@@ -187,6 +187,10 @@ type model struct {
 	// events back into one notch.
 	lastWheelAt time.Time
 	lastWheelUp bool
+
+	// latest is the newest published release tag, when the background check
+	// found one. Empty until it answers, and it may never answer.
+	latest string
 }
 
 // wheelNotch is how close together wheel events have to be to count as one
@@ -207,7 +211,9 @@ func newModel(apps []App, appsDir, toolsBin string, useNerdFonts bool) *model {
 	}
 }
 
-func (m *model) Init() tea.Cmd { return nil }
+// Init starts the update check. It runs in the background and is allowed to
+// fail silently, so the dashboard draws immediately either way.
+func (m *model) Init() tea.Cmd { return checkUpdate() }
 
 // selectApp moves the cursor to a named app, switching category if needed.
 func (m *model) selectApp(name string) bool {
@@ -283,6 +289,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.w, m.h = msg.Width, msg.Height
+		return m, nil
+
+	case updateMsg:
+		m.latest = msg.latest
 		return m, nil
 
 	case actionDoneMsg:
@@ -826,7 +836,19 @@ func (m *model) keysLine() string {
 		styKey.Render("?")+styDesc.Render(" help"),
 		styKey.Render("q")+styDesc.Render(" quit"),
 	)
-	return strings.Join(parts, styDesc.Render(" · "))
+	keys := strings.Join(parts, styDesc.Render(" · "))
+
+	// The version sits at the right edge, and only when it fits: the keys are
+	// what the line is for, and a narrow terminal keeps all of them.
+	ver := m.versionLabel()
+	if ver == "" {
+		return keys
+	}
+	gap := m.w - lipgloss.Width(keys) - lipgloss.Width(ver) - 1
+	if gap < 1 {
+		return keys
+	}
+	return keys + strings.Repeat(" ", gap) + ver
 }
 
 func (m *model) helpView() string {

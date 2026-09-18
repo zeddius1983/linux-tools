@@ -1,0 +1,57 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: build and publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # package.sh takes the tree from `git archive` and the tarball
+          # timestamp from the tagged commit, so it needs real history.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: tui/go.mod
+          cache-dependency-path: tui/go.sum
+
+      # The same checks CI runs on a PR. A tag can be pushed to a commit that
+      # never saw one, and a broken app definition in a release tarball is worse
+      # than a failed release.
+      - name: verify
+        run: |
+          shellcheck --severity=warning -e SC1091 \
+            tools.sh install.sh lib/*.sh scripts/*.sh completion/tools.bash
+          ./scripts/lint-apps.sh
+          cd tui && go vet ./... && go test ./...
+
+      - name: package
+        run: ./scripts/package.sh "${GITHUB_REF_NAME}" dist
+
+      # Install what was just built, to catch a tarball that unpacks into the
+      # wrong shape before anyone downloads it.
+      - name: smoke test the artifacts
+        run: |
+          set -euo pipefail
+          ./install.sh --tarball dist/linux-tools-linux-amd64.tar.gz \
+            --skip-checks --no-modify-rc
+          "$HOME/.local/bin/tools" version | grep -q "${GITHUB_REF_NAME#v}"
+
+      - name: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            dist/linux-tools-linux-amd64.tar.gz \
+            dist/linux-tools-linux-arm64.tar.gz \
+            dist/SHA256SUMS

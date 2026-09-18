@@ -6,16 +6,20 @@ APPS_DIR="$SCRIPT_DIR/apps"
 
 # ── Runtime detection ────────────────────────────────────────────────────────
 
+# Left empty when neither is present: `install`, `version` and `update` work
+# fine without a container runtime, and require_runtime fails the ones that do
+# not with a message naming what to install.
 if command -v podman &>/dev/null; then
     RUNTIME="podman"
 elif command -v docker &>/dev/null; then
     RUNTIME="docker"
 else
-    echo "Error: neither podman nor docker found" >&2; exit 1
+    RUNTIME=""
 fi
 
 # ── Libraries ────────────────────────────────────────────────────────────────
 
+source "$SCRIPT_DIR/lib/release.sh"
 source "$SCRIPT_DIR/lib/helpers.sh"
 source "$SCRIPT_DIR/lib/commands.sh"
 source "$SCRIPT_DIR/lib/wizard.sh"
@@ -33,6 +37,13 @@ Usage: $0 [command] [app]
 
 Commands:
   install          Symlink as 'tools' in ~/.local/bin + set up completion
+                     --dev            take the command over from a release install
+                     --no-modify-rc   do not touch ~/.bashrc or the zsh fragment
+  update           Update this installation in place
+                     --version <tag>  install that release instead of the latest
+                                      (this is also how you roll back)
+                     --check          report installed vs latest, change nothing
+  version          Print the installed version and where it came from
   build-tui        Build the Go dashboard binary (host Go, else a container)
   setup  <app>     Install app (removes existing box+image first)
   build  <app>     Build container image only
@@ -49,20 +60,26 @@ EOF
 # ── Entrypoint ───────────────────────────────────────────────────────────────
 
 if [[ $# -eq 0 ]]; then
+    require_runtime
     cmd_menu
     exit 0
 fi
 
 command_="$1"
+shift
 
 case "$command_" in
-    list)      cmd_list;      exit 0 ;;
-    install)   cmd_install;   exit 0 ;;
-    build-tui) cmd_build_tui; exit 0 ;;
+    list)              require_runtime; cmd_list;      exit 0 ;;
+    install)           cmd_install "$@";               exit 0 ;;
+    update)            cmd_update  "$@";               exit 0 ;;
+    version|--version) cmd_version;                    exit 0 ;;
+    build-tui)         cmd_build_tui;                  exit 0 ;;
+    -h|--help|help)    usage;                          exit 0 ;;
 esac
 
-[[ $# -ge 2 ]] || { usage; exit 1; }
-app="$2"
+[[ $# -ge 1 ]] || { usage; exit 1; }
+app="$1"
+require_runtime
 
 case "$command_" in
     setup)

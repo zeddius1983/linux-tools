@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # Wizard pages live in apps/<app>/wizard/NN-name.<type>
 # File format: line1=title  line2=prompt  line3=applicable actions (csv or *)
 #              remaining lines: name|payload|description[|on|off]  (default: off)
@@ -171,6 +172,8 @@ _wizard_run_page() {
             IFS=',' read -ra _dpaths <<< "$detect"
             local _dp
             for _dp in "${_dpaths[@]}"; do
+                # Literal "~/" prefix in the page's detect list, expanded below.
+                # shellcheck disable=SC2088
                 if [[ "$_dp" == "~/"* ]]; then
                     _dp="${HOME}/${_dp:2}"
                 else
@@ -385,6 +388,8 @@ tui_confirm_wizards() {
                 IFS=',' read -ra dpaths <<< "$detect"
                 local dp
                 for dp in "${dpaths[@]}"; do
+                    # Literal "~/" prefix in the page's detect list, expanded below.
+                    # shellcheck disable=SC2088
                     if [[ "$dp" == "~/"* ]]; then
                         dp="${HOME}/${dp:2}"
                     else

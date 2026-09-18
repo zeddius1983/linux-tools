@@ -1,0 +1,117 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  shell:
+    name: shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # shellcheck ships on the GitHub runners, so this needs no action and no
+      # container. The lib/*.sh files are sourced rather than executed and have
+      # no shebang by design; they carry a `# shellcheck shell=bash` directive.
+      - name: shellcheck
+        run: |
+          shellcheck --severity=warning -e SC1091 \
+            tools.sh install.sh lib/*.sh scripts/*.sh completion/tools.bash
+
+  go:
+    name: dashboard
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: tui/go.mod
+          cache-dependency-path: tui/go.sum
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "not gofmt'd:"; echo "$unformatted"; exit 1
+          fi
+      - run: go vet ./...
+      - run: go test ./...
+      - name: cross-compile
+        run: |
+          for arch in amd64 arm64; do
+            CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -o /dev/null .
+          done
+
+  apps:
+    name: app contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Checks every apps/<name>/ against the contract in CLAUDE.md. Rules the
+      # tree does not fully satisfy yet are grandfathered by name inside the
+      # script, so this fails on new violations only.
+      - run: ./scripts/lint-apps.sh
+
+  install:
+    name: install.sh smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: tui/go.mod
+          cache-dependency-path: tui/go.sum
+
+      # Build real artifacts for a throwaway tag, then install them from disk.
+      # This exercises the whole layout — versioned directory, `current`
+      # symlink, the tools symlink, completion, pruning — on every PR, without
+      # needing a published release to point at.
+      - name: package
+        run: ./scripts/package.sh v2026.01.1 dist
+
+      - name: install
+        run: |
+          ./install.sh --tarball dist/linux-tools-linux-amd64.tar.gz \
+            --skip-checks --no-modify-rc
+
+      - name: check the layout
+        run: |
+          set -euo pipefail
+          root="$HOME/.local/share/linux-tools"
+          test -L "$root/current"
+          test -d "$root/versions/2026.01.1"
+          test -x "$HOME/.local/bin/tools"
+          # The command must resolve through `current`, not through the
+          # versioned directory: linking straight at the version is what would
+          # leave a dead symlink behind on the next update.
+          link="$(readlink "$HOME/.local/bin/tools")"
+          case "$link" in
+            */current/tools.sh) ;;
+            *) echo "tools points at $link, expected .../current/tools.sh"; exit 1 ;;
+          esac
+          # A release tree reports its version and never rebuilds the dashboard.
+          "$HOME/.local/bin/tools" version
+          "$HOME/.local/bin/tools" version | grep -q '2026.01.1'
+          test -x "$root/current/tui/tools-tui"
+
+      - name: install a second version, then roll back
+        run: |
+          set -euo pipefail
+          root="$HOME/.local/share/linux-tools"
+          ./scripts/package.sh v2026.02.1 dist2
+          ./install.sh --tarball dist2/linux-tools-linux-amd64.tar.gz \
+            --skip-checks --no-modify-rc
+          "$HOME/.local/bin/tools" version | grep -q '2026.02.1'
+          # Rolling back to a version already on disk must not download
+          # anything — it is a symlink flip.
+          "$HOME/.local/bin/tools" update --version v2026.01.1
+          "$HOME/.local/bin/tools" version | grep -q '2026.01.1'
+          test -d "$root/versions/2026.02.1"
