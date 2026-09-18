@@ -59,6 +59,12 @@ asset_patterns() {
             printf '%s\n' "ubuntu-${version_id//./}.deb" ;;
     esac
 
+    # Arch derivatives that do not name themselves in the list above still say so
+    # in ID_LIKE (and new ones appear faster than any hardcoded list tracks).
+    case "$id_like" in
+        *arch*) printf '%s\n' 'pkg.tar.arch.zst'; return ;;
+    esac
+
     # Mint, Pop!_OS, elementary and friends: derive the Ubuntu base from
     # UBUNTU_CODENAME, which every Ubuntu derivative sets even when ID does not
     # say "ubuntu" (Mint 22.3 reports ID=linuxmint, VERSION_ID=22.3,
@@ -82,12 +88,24 @@ asset_patterns_uniq() { asset_patterns | awk 'NF && !seen[$0]++'; }
 
 # Install command for a downloaded package file.
 install_package() {
-    local file="$1"
+    local file="$1" conventional
     case "$file" in
-        *.deb)          sudo apt-get install -y "$file" ;;
-        *.rpm)          sudo dnf install -y "$file" ;;
-        *.pkg.tar.zst)  sudo pacman -U --noconfirm "$file" ;;
-        *)              echo "Error: don't know how to install '$file'" >&2; exit 1 ;;
+        *.deb) sudo apt-get install -y "$file" ;;
+        *.rpm) sudo dnf install -y "$file" ;;
+        # Upstream tags the Arch build `...pkg.tar.arch.zst`, to tell it apart
+        # from the other packages in the same release. That `.arch` sits between
+        # `.tar` and `.zst`, so a plain `*.pkg.tar.zst` glob does not match it
+        # and the file falls through to the error branch below — which is
+        # exactly how this failed on CachyOS the first time.
+        *.pkg.tar.zst|*.pkg.tar.*.zst)
+            # Rename to the conventional form before handing it to pacman rather
+            # than trusting pacman to accept an extension it never produces
+            # itself. The contents are an ordinary zstd package (.PKGINFO,
+            # .MTREE, .BUILDINFO), so only the name is unusual.
+            conventional="${file%.pkg.tar.*}.pkg.tar.zst"
+            [[ "$file" != "$conventional" ]] && mv -f "$file" "$conventional"
+            sudo pacman -U --noconfirm "$conventional" ;;
+        *) echo "Error: don't know how to install '$file'" >&2; exit 1 ;;
     esac
 }
 
