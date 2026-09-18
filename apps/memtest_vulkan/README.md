@@ -57,9 +57,12 @@ memtest_vulkan
 
 Also available from your app menu as **memtest_vulkan** (opens in a terminal).
 
-The tool takes **no command-line arguments at all** — there is no `--help`, and
-passing flags does nothing. It is driven entirely by the interactive menu, by
-environment variables, and by the name it is invoked as.
+The tool has **no option flags and no `--help`**. It is driven by the interactive
+menu, by environment variables, and by the name it is invoked as. It does accept
+two undocumented positional arguments — it re-execs itself as
+`memtest_vulkan <index> <bytes>` to run the actual test in a worker process — but
+upstream documents neither, so treat them as an implementation detail rather than
+a supported interface.
 
 On start it lists every Vulkan device and waits 10 seconds for you to type an
 index, defaulting to device 1:
@@ -82,6 +85,29 @@ Any error is printed the moment it is found, with the failing address range and
 a per-bit histogram — see [upstream's annotated
 example](https://github.com/GpuZelenograd/memtest_vulkan#errors_screenshot) for
 how to read it.
+
+### Stopping it: `Ctrl+C`, not the window
+
+**`Ctrl+C` in the terminal running the test is the only reliable way to stop it.**
+The test itself runs in a worker process *inside* the container, in a different
+process tree from the `~/.local/bin/memtest_vulkan` wrapper you launched. Kill or
+time out the wrapper — close the terminal window, `timeout 30 memtest_vulkan`,
+Ctrl+C'ing a script that invoked it — and the wrapper dies while the worker keeps
+going, holding its full allocation with nothing on screen to show for it.
+
+This is the containerised form of [upstream's issue
+#11](https://github.com/GpuZelenograd/memtest_vulkan/issues/11), and it is easy
+to miss because a ~80 GB allocation on a unified-memory APU shows up as ordinary
+RAM usage, not as a GPU process.
+
+If you suspect one is stranded:
+
+```bash
+ps -eo pid,etime,args | awk '$3 ~ /^\/usr\/bin\/memtest/'
+pkill -f '^/usr/bin/memtest_vulkan'
+```
+
+Do not script this tool with `timeout` and assume the test stopped — check.
 
 ### Exported commands
 
