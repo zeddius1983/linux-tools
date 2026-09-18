@@ -8,7 +8,10 @@
 #
 #   rocm    ROCm 7.2.4 (HIP) + Vulkan (Mesa RADV)
 #   rocm10  ROCm 10.0  (HIP) + Vulkan (Mesa RADV)
-#   cuda    CUDA 12.8  + Vulkan (NVIDIA's own ICD, supplied by the host via CDI)
+#   cuda12  NVIDIA CUDA 12.8 + Vulkan (NVIDIA's own ICD, via the host's CDI spec)
+#
+# The CUDA value carries its major version so a CUDA 13 variant can be added
+# beside it later rather than replacing it.
 #
 # Unlike comfyui/vllm, both the build stage and the runtime stage depend on the
 # runtime, so each is picked from per-variant stages with `FROM <stage>-${LLAMA_GPU}`.
@@ -26,7 +29,7 @@ FROM ${ROCM_IMAGE} AS toolchain-rocm
 FROM ${ROCM10_IMAGE} AS toolchain-rocm10
 
 # GCC 14 as CUDA's host compiler, matching upstream's .devops/cuda.Dockerfile.
-FROM ${CUDA_DEVEL_IMAGE} AS toolchain-cuda
+FROM ${CUDA_DEVEL_IMAGE} AS toolchain-cuda12
 RUN apt-get update \
     && apt-get install -y gcc-14 g++-14 \
     && rm -rf /var/lib/apt/lists/*
@@ -38,7 +41,7 @@ ARG LLAMA_GPU
 
 # Fat build targeting all supported AMD GPU architectures (ROCm variants only).
 ARG ROCM_DOCKER_ARCH='gfx908;gfx90a;gfx942;gfx1030;gfx1100;gfx1101;gfx1102;gfx1151;gfx1150;gfx1200;gfx1201'
-# CUDA architectures (cuda variant only). "default" leaves ggml's own list.
+# CUDA architectures (cuda12 variant only). "default" leaves ggml's own list.
 ARG CUDA_DOCKER_ARCH=default
 
 RUN apt-get update \
@@ -75,13 +78,13 @@ RUN set -e; \
         rocm|rocm10) \
             export HIPCXX="$(hipconfig -l)/clang" HIP_PATH="$(hipconfig -R)"; \
             set -- -DGGML_HIP=ON -DAMDGPU_TARGETS="${ROCM_DOCKER_ARCH}" ;; \
-        cuda) \
+        cuda12) \
             set -- -DGGML_CUDA=ON -DGGML_NATIVE=OFF \
                    -DCMAKE_EXE_LINKER_FLAGS=-Wl,--allow-shlib-undefined; \
             if [ "$CUDA_DOCKER_ARCH" != default ]; then \
                 set -- "$@" -DCMAKE_CUDA_ARCHITECTURES="${CUDA_DOCKER_ARCH}"; \
             fi ;; \
-        *) echo "Unknown LLAMA_GPU '${LLAMA_GPU}' (want rocm, rocm10 or cuda)" >&2; exit 1 ;; \
+        *) echo "Unknown LLAMA_GPU '${LLAMA_GPU}' (want rocm, rocm10 or cuda12)" >&2; exit 1 ;; \
     esac; \
     cmake -S . -B build \
         -DLLAMA_BUILD_NUMBER="$(cat .build-number)" \
@@ -123,7 +126,7 @@ RUN apt-get update \
 # driver by the CDI spec. Mesa would only add a llvmpipe/lavapipe CPU device.
 # --no-install-recommends is what keeps it out: libvulkan1 recommends
 # mesa-vulkan-drivers, and a plain install pulls it in.
-FROM ${CUDA_RUNTIME_IMAGE} AS runtime-cuda
+FROM ${CUDA_RUNTIME_IMAGE} AS runtime-cuda12
 RUN apt-get update \
     && apt-get install -y --no-install-recommends libvulkan1 vulkan-tools \
     && rm -rf /var/lib/apt/lists/*

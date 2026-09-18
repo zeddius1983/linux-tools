@@ -24,7 +24,7 @@ Run interactively, the wizard asks two questions:
    |---|---|---|---|
    | **ROCm 7.2** (default) | `rocm/dev-ubuntu-24.04:7.2.4-complete` | `ROCm0` + `Vulkan0` (Mesa RADV) | `/dev/kfd` + `/dev/dri` |
    | **ROCm 10.0** | `rocm/dev-ubuntu-24.04:10.0.0-full` | `ROCm0` + `Vulkan0` (Mesa RADV) | `/dev/kfd` + `/dev/dri` |
-   | **NVIDIA (CUDA)** | `nvidia/cuda:12.8.1-devel` → `-runtime` | `CUDA0` + `Vulkan0` (NVIDIA driver) | CDI `nvidia.com/gpu=all` |
+   | **CUDA 12** | `nvidia/cuda:12.8.1-devel` → `-runtime` | `CUDA0` + `Vulkan0` (NVIDIA driver) | CDI `nvidia.com/gpu=all` |
 
 2. **Release** — one of the 10 latest upstream tags (default: the newest), with each tag's release notes shown beside the list (`PgDn`/`PgUp` scrolls them). llama.cpp marks nearly every build as a pre-release, so that label next to the date is normal.
 
@@ -42,8 +42,8 @@ With no wizard (a scripted `tools setup llama-cpp`, or a non-tty shell) you get 
 cat > /tmp/llama-cpp.state <<'EOF'
 APP="llama-cpp"
 ACTION="setup"
-BUILD_ARGS="--build-arg LLAMA_GPU=cuda --build-arg LLAMA_REF=b10948"
-VARIANT="cuda"
+BUILD_ARGS="--build-arg LLAMA_GPU=cuda12 --build-arg LLAMA_REF=b10948"
+VARIANT="cuda12"
 EOF
 
 LT_SKIP_WIZARD=1 LT_WIZARD_STATE=/tmp/llama-cpp.state tools setup llama-cpp

@@ -4,4 +4,4 @@ setup,build,create
 arg|LLAMA_GPU
 ROCm 7.2|rocm|ROCm 7.2.4 HIP + Vulkan, /dev/kfd + /dev/dri (default)
 ROCm 10.0|rocm10|ROCm 10.0 HIP + Vulkan, /dev/kfd + /dev/dri
-NVIDIA (CUDA)|cuda|CUDA 12.8 + Vulkan, CDI nvidia.com/gpu=all
+CUDA 12|cuda12|NVIDIA CUDA 12.8 + Vulkan, CDI nvidia.com/gpu=all

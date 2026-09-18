@@ -214,8 +214,8 @@ func TestLlamaCppRuntimePage(t *testing.T) {
 	for _, it := range p.Items {
 		values = append(values, it.Payload)
 	}
-	if got := strings.Join(values, ","); got != "rocm,rocm10,cuda" {
-		t.Errorf("values = %s, want rocm,rocm10,cuda (rocm first: it is the default)", got)
+	if got := strings.Join(values, ","); got != "rocm,rocm10,cuda12" {
+		t.Errorf("values = %s, want rocm,rocm10,cuda12 (rocm first: it is the default)", got)
 	}
 }
 
