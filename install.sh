@@ -22,7 +22,10 @@
 set -euo pipefail
 
 REPO="zeddius1983/linux-tools"
-RELEASES_URL="https://github.com/$REPO/releases"
+# LT_RELEASES_URL is a test seam: scripts/test-install-e2e.sh points it at a
+# local server that mimics GitHub's redirects, so the download, checksum and
+# tag-resolution paths can be exercised without publishing anything.
+RELEASES_URL="${LT_RELEASES_URL:-https://github.com/$REPO/releases}"
 
 DATA_DIR="${LT_PREFIX:-${XDG_DATA_HOME:-$HOME/.local/share}/linux-tools}"
 BIN_DIR="$HOME/.local/bin"

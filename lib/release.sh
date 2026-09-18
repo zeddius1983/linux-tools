@@ -116,8 +116,11 @@ lt_bin_owner() {
 lt_latest_tag() {
     local repo="zeddius1983/linux-tools" url=""
     command -v curl &>/dev/null || return 1
+    # Same LT_RELEASES_URL seam install.sh uses, so scripts/test-install-e2e.sh
+    # can exercise `tools update --check` against the local stand-in too.
+    local base="${LT_RELEASES_URL:-https://github.com/$repo/releases}"
     url="$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
-           "https://github.com/$repo/releases/latest" 2>/dev/null)" || return 1
+           "$base/latest" 2>/dev/null)" || return 1
     [[ "$url" == */releases/tag/* ]] || return 1
     printf '%s\n' "${url##*/releases/tag/}"
 }

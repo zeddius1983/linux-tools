@@ -102,6 +102,12 @@ jobs:
           "$HOME/.local/bin/tools" version | grep -q '2026.01.1'
           test -x "$root/current/tui/tools-tui"
 
+      # Covers what --tarball cannot: resolving "latest" through the redirect,
+      # downloading, and SHA256SUMS verification, against a local stand-in for
+      # GitHub Releases.
+      - name: end-to-end install over http
+        run: ./scripts/test-install-e2e.sh
+
       - name: install a second version, then roll back
         run: |
           set -euo pipefail
