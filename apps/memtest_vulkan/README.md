@@ -58,11 +58,9 @@ memtest_vulkan
 Also available from your app menu as **memtest_vulkan** (opens in a terminal).
 
 The tool has **no option flags and no `--help`**. It is driven by the interactive
-menu, by environment variables, and by the name it is invoked as. It does accept
-two undocumented positional arguments — it re-execs itself as
-`memtest_vulkan <index> <bytes>` to run the actual test in a worker process — but
-upstream documents neither, so treat them as an implementation detail rather than
-a supported interface.
+menu, by environment variables, and by the name it is invoked as. It does take
+two undocumented positional arguments, covered under [Testing only part of the
+memory](#testing-only-part-of-the-memory) below.
 
 On start it lists every Vulkan device and waits 10 seconds for you to type an
 index, defaulting to device 1:
@@ -119,6 +117,46 @@ Do not script this tool with `timeout` and assume the test stopped — check.
 `memtest_vulkan_verbose` is a symlink, not a wrapper with a flag: the tool
 switches on verbose output when it finds the string `verbose` in the name it was
 invoked as. Use it when a GPU you expect is missing from the device list.
+
+### Testing only part of the memory
+
+By default the tool sizes the test from the driver's reported heap budget and
+takes very nearly all of it — on an 83 GB unified-memory APU that is a ~81 GiB
+allocation. There is **no documented way to limit it**: upstream's README says
+"no parameters required", and the binary has no size-related environment
+variable.
+
+There is an **undocumented positional form** that does exactly this:
+
+```bash
+memtest_vulkan <device-index> <bytes>
+```
+
+| Argument | Meaning |
+|---|---|
+| `<device-index>` | The number from the device menu, 1-based |
+| `<bytes>` | Test buffer size in bytes |
+
+Test 2 GiB on device 1:
+
+```bash
+memtest_vulkan 1 2147483648
+```
+
+Both were verified against v0.5.0 on this host. With no arguments the tool writes
+~75 GB per iteration; with `2147483648` it writes 1.0 GB per iteration. Passing
+`2` selects the second menu entry. The tool re-execs itself in this same form to
+run its worker process, which is where the form comes from.
+
+Treat it as **unsupported**: upstream documents neither argument, so a future
+release may change or drop it. This app pins v0.5.0, so it is stable here. There
+is no bounds-checking to rely on either — ask for more than the device has and
+you get the tool's normal fallback path (`Retrying with lower memory due to …`,
+`No heap reports memory enough for testing`).
+
+Useful when you want a quick sanity check rather than a full soak, when the GPU
+also drives your desktop, or — especially — on a unified-memory APU, where the
+default allocation is system RAM that everything else is competing for.
 
 ### Picking a specific GPU
 
