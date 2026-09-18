@@ -85,6 +85,34 @@ run `sudo update-grub`. Either way it needs a reboot. See upstream's
 [Overclocking (AMD)](https://github.com/ilya-zlobintsev/LACT/wiki/Overclocking-(AMD))
 wiki page.
 
+## Integrated GPUs expose much less
+
+LACT's headline features target discrete cards. On an APU most of them have
+nothing to bind to, and the app will look sparse. Measured on a Strix Halo
+`Radeon 8060S`:
+
+| Feature | On this APU |
+|---|---|
+| GPU clock range (`OD_SCLK`) | available — 600–2900 MHz |
+| Performance level forcing | available |
+| DPM state masking (sclk/mclk/fclk) | available |
+| Monitoring: power, temperature, frequency, voltages | available |
+| **Power cap** (`power1_cap`) | **absent** |
+| **Fan curve** (`fan*` / `pwm*`) | **absent** |
+| Power profile modes | absent |
+| VRAM clocks, voltage offset curve | absent |
+
+The reasons are structural, not fixable: power is a shared SoC budget the SMU
+manages across CPU and GPU, so there is no GPU-level cap to write; there is no
+dedicated GPU fan (chassis fans belong to the EC, not `amdgpu`); and memory is
+unified, so there is no separate VRAM controller to clock.
+
+Worth knowing before reaching for `amdgpu.ppfeaturemask`: that parameter gates
+the *overclocking* interface, so it does not bring back a power cap or fan
+control. Check whether it would change anything before rebooting for it — if
+`/sys/class/drm/card*/device/pp_od_clk_voltage` already prints an `OD_RANGE`,
+the interface is live and the mask is not what is limiting you.
+
 If a bad overclock leaves the machine unstable, upstream documents the
 [recovery procedure](https://github.com/ilya-zlobintsev/LACT/wiki/Recovering-from-a-bad-overclock)
 — in short, boot with `systemd.unit=multi-user.target` and reset
