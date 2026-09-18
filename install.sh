@@ -27,6 +27,7 @@ RELEASES_URL="https://github.com/$REPO/releases"
 DATA_DIR="${LT_PREFIX:-${XDG_DATA_HOME:-$HOME/.local/share}/linux-tools}"
 BIN_DIR="$HOME/.local/bin"
 
+WORKDIR=""          # scratch space for the download, removed on exit
 REQ_VERSION=""      # --version: a tag, pinned
 LOCAL_TARBALL=""    # --tarball: install a local file, skipping download
 KEEP=3              # --keep: how many versions to retain
@@ -86,6 +87,9 @@ done
 
 VERSIONS_DIR="$DATA_DIR/versions"
 CURRENT_LINK="$DATA_DIR/current"
+
+cleanup() { [[ -n "$WORKDIR" ]] && rm -rf "$WORKDIR"; return 0; }
+trap cleanup EXIT
 
 # ── Preflight ────────────────────────────────────────────────────────────────
 
@@ -267,8 +271,11 @@ main() {
     fi
 
     # 2. Fetch and verify.
-    local tmp; tmp="$(mktemp -d)"
-    trap 'rm -rf "$tmp"' EXIT
+    #    WORKDIR is global: the EXIT trap runs outside this function, where a
+    #    local would be unset — and under `set -u` that turns a clean install
+    #    into a non-zero exit after the success message.
+    WORKDIR="$(mktemp -d)"
+    local tmp="$WORKDIR"
 
     local tarball
     if [[ -n "$LOCAL_TARBALL" ]]; then

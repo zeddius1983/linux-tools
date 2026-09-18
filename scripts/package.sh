@@ -36,7 +36,7 @@ VERSION="${TAG#v}"
 ARCHES=(amd64 arm64)
 
 # Paths that exist for developing linux-tools, not for running it.
-EXCLUDE=(.github .claude .firecrawl)
+EXCLUDE=(.github .claude .codex .firecrawl)
 
 command -v go &>/dev/null || { echo "error: go is required to build the dashboard" >&2; exit 1; }
 

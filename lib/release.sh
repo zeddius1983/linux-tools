@@ -17,7 +17,26 @@
 # ~/.cache/linux-tools/wizard — which is what makes a versioned directory safe
 # to delete and a rollback a symlink flip.
 
-LT_DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/linux-tools"
+# The install root. A release tree knows its own: it lives at
+# <root>/versions/<version>, so <root> is two directories up — which is what
+# makes --prefix work without anything having to be told about it. Anything
+# else falls back to the default location.
+lt_default_root() { printf '%s\n' "${XDG_DATA_HOME:-$HOME/.local/share}/linux-tools"; }
+
+lt_root_from_tree() {
+    local parent="${SCRIPT_DIR%/*}"
+    [[ "${parent##*/}" == "versions" ]] || return 1
+    printf '%s\n' "${parent%/*}"
+}
+
+if [[ -n "${LT_PREFIX:-}" ]]; then
+    LT_DATA_DIR="$LT_PREFIX"
+elif LT_DATA_DIR="$(lt_root_from_tree)"; then
+    :
+else
+    LT_DATA_DIR="$(lt_default_root)"
+fi
+
 LT_VERSIONS_DIR="$LT_DATA_DIR/versions"
 LT_CURRENT_LINK="$LT_DATA_DIR/current"
 LT_BIN_LINK="$HOME/.local/bin/tools"
