@@ -45,6 +45,7 @@ Priority order within each section: highest first.
 - [x] `nvidia-cdi-service` — host-only boot service; regenerates the CDI spec each boot to match installed GPUs
 - [x] `nvidia-acs-service` — host-only boot service; clears PCIe ACS redirect for switch-local GPU P2P (renumber-proof)
 - [x] `nvidia-p2p-driver` — build/install the aikitoria GeForce-P2P-patched nvidia module (corefreq-style build container, Arch/Ubuntu)
+- [x] `memtest_vulkan` — Vulkan-compute GPU memory stress test (upstream prebuilt binary pinned to v0.5.0; GPU passthrough picker: default /dev/dri or NVIDIA CDI)
 - [ ] `btop` — modern resource monitor
 
 ## Browsers / Web

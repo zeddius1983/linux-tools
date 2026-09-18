@@ -4,3 +4,6 @@
 # Shared project config (.claude/settings.json, agents, skills) stays tracked.
 .claude/settings.local.json
 .claude/*.tmp.*
+
+# memtest_vulkan writes this into whatever directory it is run from
+memtest_vulkan.log

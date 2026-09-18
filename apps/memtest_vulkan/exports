@@ -1,0 +1,4 @@
+# Format: type:name[:Display Name]
+bin:memtest_vulkan
+bin:memtest_vulkan_verbose
+desktop:memtest_vulkan:memtest_vulkan
