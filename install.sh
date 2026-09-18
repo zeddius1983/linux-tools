@@ -88,6 +88,14 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Absolute from here on. `current` is created with a target that the symlink
+# stores verbatim, and a relative target is resolved against the directory
+# holding the link — so a relative --prefix would point current at
+# <prefix>/<prefix>/versions/... and every path built from it, the `tools`
+# command included, would dangle while the install still reported success.
+mkdir -p "$DATA_DIR" 2>/dev/null || die "cannot create $DATA_DIR"
+DATA_DIR="$(cd "$DATA_DIR" && pwd)"
+
 VERSIONS_DIR="$DATA_DIR/versions"
 CURRENT_LINK="$DATA_DIR/current"
 

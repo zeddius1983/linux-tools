@@ -12,8 +12,14 @@
 #   /releases/latest/download/<asset>    302 -> /releases/download/<tag>/<asset>
 #   /releases/download/<tag>/<asset>     the file, or 404
 #
-# Everything happens under a temporary prefix and is removed afterwards; no
-# release is published and the real installation is untouched.
+# Everything happens under a temporary prefix *and a temporary HOME*, and is
+# removed afterwards; no release is published and the real installation is
+# untouched.
+#
+# The temporary HOME is not optional. --prefix moves the release directory, but
+# the `tools` command itself is always linked into $HOME/.local/bin — so
+# without this the test would repoint a developer's own `tools` at a directory
+# it then deletes, leaving them with a dangling command.
 #
 # Usage: scripts/test-install-e2e.sh
 
@@ -28,11 +34,20 @@ NEW="2026.09.1"
 WORK="$(mktemp -d)"
 PREFIX="$WORK/prefix"
 SERVE="$WORK/serve"
+FAKE_HOME="$WORK/home"
 SERVER_PID=""
 PORT=""
 
+REAL_HOME="$HOME"
+REAL_TOOLS_LINK="$(readlink "$HOME/.local/bin/tools" 2>/dev/null || true)"
+
+DIRTIED=""   # tracked file the packaging test edits, restored on the way out
+
 cleanup() {
     [[ -n "$SERVER_PID" ]] && kill "$SERVER_PID" 2>/dev/null
+    # Restored from a copy rather than with `git checkout`, so a developer's own
+    # uncommitted edits to this file survive the test.
+    [[ -n "$DIRTIED" && -f "$WORK/dirtied.orig" ]] && cp "$WORK/dirtied.orig" "$DIRTIED"
     rm -rf "$WORK"
     return 0
 }
@@ -51,6 +66,60 @@ check() {  # check <description> <expected> <actual>
 # The installed tree's own tools.sh, which is what a user would be running.
 tools() { "$PREFIX/current/tools.sh" "$@"; }
 
+# ── The binary must come from the same source as the tarball ────────────────
+
+# package.sh takes the tree from `git archive HEAD` but used to build the
+# dashboard from the working tree, so an uncommitted edit could ship as a binary
+# that no source in the tarball produces — and a release install never rebuilds
+# it, so nothing downstream would ever notice.
+step "An uncommitted edit does not leak into the release binary"
+# The marker replaces a string the dashboard actually renders (the help
+# screen's "quit" label). Appending a `var _ = "..."` instead would prove
+# nothing: the compiler drops dead code, so the marker would be absent from the
+# binary whichever tree it was built from, and the test would pass either way.
+MARKER="UNCOMMITTEDMARKER$$"
+DIRTIED="$ROOT/tui/main.go"
+cp "$DIRTIED" "$WORK/dirtied.orig"
+sed -i "s/{\"q \/ esc\", \"quit\"}/{\"q \/ esc\", \"$MARKER\"}/" "$DIRTIED"
+grep -q "$MARKER" "$DIRTIED" || bad "could not plant the marker — has tui/main.go changed?"
+
+./scripts/package.sh "v$NEW" "$WORK/dist-dirty" >/dev/null
+mkdir -p "$WORK/dirty"
+tar -xzf "$WORK/dist-dirty/linux-tools-linux-amd64.tar.gz" -C "$WORK/dirty" --strip-components=1
+
+# Both files must exist before anything is concluded from them. A grep against
+# a missing path exits non-zero, which reads exactly like "marker absent" — so
+# without these the test would pass while checking nothing at all.
+src="$WORK/dirty/tui/main.go"
+bin="$WORK/dirty/tui/tools-tui"
+[[ -f "$src" ]] || bad "no tui/main.go in the tarball"
+[[ -f "$bin" ]] || bad "no tui/tools-tui in the tarball"
+command -v strings >/dev/null || bad "strings(1) is needed for this check"
+
+if [[ -f "$src" ]]; then
+    if grep -q "$MARKER" "$src"; then
+        bad "the uncommitted edit reached the tarball's source"
+    else
+        ok "tarball source is the committed tree"
+    fi
+fi
+if [[ -f "$bin" ]] && command -v strings >/dev/null; then
+    # grep -c, not grep -q, and the count captured before it is tested.
+    # `strings | grep -q` exits on the first match and closes the pipe, strings
+    # dies of SIGPIPE, and `set -o pipefail` turns that into a failed pipeline —
+    # so a marker that WAS found reads as "not found". That inversion made this
+    # test pass against the very bug it exists to catch.
+    hits="$(strings "$bin" | grep -c "$MARKER" || true)"
+    if [[ "$hits" != "0" ]]; then
+        bad "the uncommitted edit reached the release binary"
+    else
+        ok "binary built from the committed tree"
+    fi
+fi
+
+cp "$WORK/dirtied.orig" "$DIRTIED"
+DIRTIED=""
+
 # ── Build two releases and lay them out the way GitHub serves them ──────────
 
 step "Packaging $OLD and $NEW"
@@ -60,6 +129,12 @@ for v in "$OLD" "$NEW"; do
     cp "$WORK/dist-$v"/* "$SERVE/download/v$v/"
 done
 ok "built both releases"
+
+# From here on every install runs against a throwaway HOME, so the `tools`
+# symlink and completion files land inside $WORK. Packaging happens first, on
+# purpose: it needs the real Go module and build caches.
+export HOME="$FAKE_HOME"
+mkdir -p "$HOME/.local/bin"
 
 # ── A stand-in for GitHub's release endpoints ───────────────────────────────
 
@@ -172,6 +247,10 @@ else
     grep -q "no release asset at" "$WORK/log6" && ok "named the missing asset" \
         || { cat "$WORK/log6"; bad "failed without a useful message"; }
 fi
+
+step "The developer's own installation was left alone"
+now="$(readlink "$REAL_HOME/.local/bin/tools" 2>/dev/null || true)"
+check "real tools link unchanged" "$REAL_TOOLS_LINK" "$now"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 ((fail == 0))

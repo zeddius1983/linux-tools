@@ -43,7 +43,7 @@ jobs:
           set -euo pipefail
           ./install.sh --tarball dist/linux-tools-linux-amd64.tar.gz \
             --skip-checks --no-modify-rc
-          "$HOME/.local/bin/tools" version | grep -q "${GITHUB_REF_NAME#v}"
+          [ "$("$HOME/.local/bin/tools" version | head -1 | awk '{print $2}')" = "${GITHUB_REF_NAME#v}" ]
 
       - name: publish
         env:

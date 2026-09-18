@@ -533,18 +533,51 @@ cmd_update() {
     done
 
     if (( check_only )); then
-        local current latest
-        current="$(lt_version)"
-        echo "installed: $current"
-        if ! latest="$(lt_latest_tag)"; then
-            echo "latest:    could not be resolved (no releases published yet, no network, or GitHub is unreachable)"
+        # The two install kinds are asked two different questions, because
+        # `tools update` does two different things. A checkout's version is a
+        # git description, which can never equal a release tag — comparing it
+        # against one reported an update every single time, and pointed at a
+        # release that `tools update` would not have installed anyway.
+        if is_release_install; then
+            local current latest
+            current="$(lt_version)"
+            echo "installed: $current"
+            if ! latest="$(lt_latest_tag)"; then
+                echo "latest:    could not be resolved (no releases published yet, no network, or GitHub is unreachable)"
+                return 1
+            fi
+            echo "latest:    $latest"
+            if [[ "$current" == "${latest#v}" ]]; then
+                echo "You are up to date."
+            else
+                echo "Run 'tools update' to install $latest."
+            fi
+            return 0
+        fi
+
+        command -v git &>/dev/null || { echo "Error: git not found" >&2; return 1; }
+        git -C "$SCRIPT_DIR" rev-parse --git-dir &>/dev/null || {
+            echo "Error: $SCRIPT_DIR is neither a release install nor a git checkout" >&2
+            return 1
+        }
+        echo "installed: $(lt_version)"
+
+        local upstream
+        if ! upstream="$(git -C "$SCRIPT_DIR" rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null)"; then
+            echo "upstream:  none configured for this branch"
             return 1
         fi
-        echo "latest:    $latest"
-        if [[ "$current" == "${latest#v}" ]]; then
+        echo "upstream:  $upstream"
+        if ! git -C "$SCRIPT_DIR" fetch --quiet 2>/dev/null; then
+            echo "           could not be reached"
+            return 1
+        fi
+        local behind
+        behind="$(git -C "$SCRIPT_DIR" rev-list --count 'HEAD..@{u}' 2>/dev/null)" || behind=0
+        if [[ "$behind" == "0" ]]; then
             echo "You are up to date."
         else
-            echo "Run 'tools update' to install $latest."
+            echo "$behind commit(s) behind. Run 'tools update' to pull them."
         fi
         return 0
     fi

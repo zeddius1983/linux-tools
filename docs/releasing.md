@@ -63,8 +63,17 @@ dashboard binary for that arch. `.github`, `.claude` and `.codex` are dropped.
 
 `--prefix` keeps a test install away from the real one; `--tarball` skips the
 download entirely, which is also how CI smoke-tests the installer without a
-published release to point at. Note that `package.sh` archives **HEAD**, not
-the working tree, so commit before packaging or you will test the wrong code.
+published release to point at.
+
+`package.sh` archives **HEAD**, not the working tree — the dashboard binary is
+built from the archived tree too, so an uncommitted change cannot ship as a
+binary no shipped source produces. Commit before packaging, or you will package
+the wrong code.
+
+`scripts/test-install-e2e.sh` drives the whole thing against a local stand-in
+for GitHub Releases: the `latest` → tag redirect, downloading, checksum
+verification, a corrupted tarball being refused, and a missing tag. It runs
+under a temporary `HOME` so it cannot repoint your own `tools` command.
 
 ## The installed layout
 

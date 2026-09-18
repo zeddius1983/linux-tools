@@ -23,14 +23,19 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
-cd "$ROOT"
 
 TAG="${1:-}"
-OUT="${2:-$ROOT/dist}"
-
 [[ -n "$TAG" ]] || { echo "usage: scripts/package.sh <tag> [outdir]" >&2; exit 1; }
 [[ "$TAG" =~ ^v?[0-9]{4}\.[0-9]{2}\.[0-9]+$ ]] \
     || { echo "error: '$TAG' is not a CalVer tag (want vYYYY.MM.N)" >&2; exit 1; }
+
+# Resolved against the caller's directory, before the cd below moves us to the
+# repo root — otherwise `package.sh <tag> dist` run from anywhere else would
+# silently write into the repo instead of where it was asked to.
+OUT="${2:-$ROOT/dist}"
+OUT="$(mkdir -p "$OUT" && cd "$OUT" && pwd)" || { echo "error: cannot use outdir '${2:-}'" >&2; exit 1; }
+
+cd "$ROOT"
 
 VERSION="${TAG#v}"
 ARCHES=(amd64 arm64)
@@ -69,7 +74,11 @@ printf '%s\n' "$VERSION" > "$STAGE/tree/VERSION"
 # makes the binary run on a host whose libc nobody asked about.
 for arch in "${ARCHES[@]}"; do
     say "Building the dashboard for linux/$arch"
-    ( cd tui && CGO_ENABLED=0 GOOS=linux GOARCH="$arch" \
+    # Built from the staged tree, not the working tree: the tarball's source is
+    # `git archive HEAD`, and a release install never rebuilds the dashboard
+    # (see tui_bin_is_current), so building from the working tree would let an
+    # uncommitted edit ship as a binary that no source in the tarball produces.
+    ( cd "$STAGE/tree/tui" && CGO_ENABLED=0 GOOS=linux GOARCH="$arch" \
         go build -trimpath -ldflags "-s -w -X main.version=$VERSION" \
         -o "$STAGE/tools-tui-$arch" . )
 done
