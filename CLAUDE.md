@@ -267,6 +267,34 @@ The old `whiptail` menu (`lib/tui.sh`) is the fallback, used when the binary is 
 - **Keep `README.md` current**: if a new app is added or an existing one changes significantly (new features, renamed exports, different usage), update `README.md`.
 - **Every new or touched app needs `apps/<name>/README.md`**: cover install, exported commands with examples, storage paths, and any GPU/env notes. Link to it from the main `README.md` table: `[`name`](apps/name/README.md)`. If you're modifying an existing app that doesn't have one, add it in the same change — the dashboard renders it in the info panel beside the app table, which is the user's primary reference for the app. `tools setup` deliberately does not print it (it prints the path only); use `post-install` for anything that must be seen right after an install.
 
+## Releases
+
+Distribution is a GitHub Release per CalVer tag; full detail in
+[`docs/releasing.md`](docs/releasing.md). What matters when changing code here:
+
+- **`scripts/lint-apps.sh` enforces the app contract above.** It runs in CI on
+  every PR. It is a ratchet: apps that predate a rule are listed by name inside
+  the script (`LEGACY_NO_README`, `LEGACY_UNQUALIFIED_FROM`), so a *new*
+  violation fails the build. Run it locally with `./scripts/lint-apps.sh`, and
+  `--strict` to see what is still grandfathered.
+- **A release tree is identified by a `VERSION` file at its root** (`lib/release.sh`).
+  That is what switches `tools` to the versioned layout under
+  `~/.local/share/linux-tools/`, and what stops `cmd_build_tui` rebuilding the
+  dashboard binary CI already shipped.
+- **Never link or write a path into a versioned directory.** `tools` and the
+  shell completion line both go through `<root>/current`, so an update is a
+  symlink flip. `SCRIPT_DIR` resolves *through* that symlink to the real
+  directory, so anything derived from it is version-specific and will be dead
+  after the next update.
+- **`tools update` re-runs the bundled `install.sh`** rather than reimplementing
+  download-verify-swap. If you change the install layout, change it there.
+- Shellcheck runs over `tools.sh`, `install.sh`, `lib/`, `scripts/` and the
+  completion script at `--severity=warning`. `lib/*.sh` are sourced and carry a
+  `# shellcheck shell=bash` directive instead of a shebang.
+- Watch `((i++))` in any script with `set -e`: it evaluates to the pre-increment
+  value, so the first iteration from zero is a non-zero exit status and ends the
+  script. Use `((++i))`.
+
 ## Branching policy
 
 - Primary branch is `main` — all branches are cut from `main` and PRed back to `main`
