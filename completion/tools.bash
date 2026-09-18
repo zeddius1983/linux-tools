@@ -1,6 +1,9 @@
 # Bash completion for tools.sh
 # Installed automatically by: ./tools.sh install
 
+# COMPREPLY=($(compgen ...)) is the standard bash-completion idiom; the words
+# compgen emits are exactly what should be split here.
+# shellcheck disable=SC2207
 _tools_complete() {
     local cur prev script_path script_dir apps_dir commands apps
     cur="${COMP_WORDS[COMP_CWORD]}"

@@ -87,7 +87,8 @@ is_hostonly_installer() {
 }
 
 check_app() {
-    local app="$1" d="$APPS_DIR/$app"
+    local app="$1"
+    local d="$APPS_DIR/$app"
     local hostonly=0
     is_hostonly_installer "$app" && hostonly=1
 

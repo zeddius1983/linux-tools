@@ -37,7 +37,6 @@ else
     LT_DATA_DIR="$(lt_default_root)"
 fi
 
-LT_VERSIONS_DIR="$LT_DATA_DIR/versions"
 LT_CURRENT_LINK="$LT_DATA_DIR/current"
 LT_BIN_LINK="$HOME/.local/bin/tools"
 
@@ -95,10 +94,13 @@ lt_bin_owner() {
     [[ -e "$LT_BIN_LINK" || -L "$LT_BIN_LINK" ]] || { echo "none"; return; }
     local target
     target="$(readlink -f "$LT_BIN_LINK" 2>/dev/null)" || { echo "other"; return; }
-    if [[ "$target" == "$LT_VERSIONS_DIR"/* ]]; then
-        echo "release"
-    elif [[ "$target" == "$SCRIPT_DIR"/* ]]; then
+    if [[ "$target" == "$SCRIPT_DIR"/* ]]; then
         echo "checkout"
+    elif [[ -f "${target%/*}/VERSION" ]]; then
+        # Identified by the tree it lands in, not by where that tree sits: an
+        # install under --prefix is still a release install, and a clone must
+        # not walk over it just because it is somewhere unexpected.
+        echo "release"
     else
         echo "other"
     fi

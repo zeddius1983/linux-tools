@@ -412,7 +412,8 @@ install_bash_completion() {  # install_bash_completion <completion-file>
     fi
 
     if grep -q 'completion/tools\.bash' "$rc"; then
-        local backup="$rc.linux-tools.$(date +%Y%m%d-%H%M%S).bak"
+        local backup
+        backup="$rc.linux-tools.$(date +%Y%m%d-%H%M%S).bak"
         cp -p "$rc" "$backup"
         echo "==> Replacing a stale completion line in ~/.bashrc (backup: $backup)"
         sed -i '/completion\/tools\.bash/d' "$rc"
@@ -536,7 +537,7 @@ cmd_update() {
         current="$(lt_version)"
         echo "installed: $current"
         if ! latest="$(lt_latest_tag)"; then
-            echo "latest:    could not be resolved (no network, or GitHub is unreachable)"
+            echo "latest:    could not be resolved (no releases published yet, no network, or GitHub is unreachable)"
             return 1
         fi
         echo "latest:    $latest"

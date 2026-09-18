@@ -212,7 +212,10 @@ prune_versions() {  # prune_versions <keep-version>
     ((${#all[@]} > KEEP)) || return 0
     local i=0
     for name in "${all[@]}"; do
-        ((i++))
+        # ++i, not i++: the post-increment form evaluates to the old value, so
+        # the very first iteration would be an arithmetic expression worth 0 —
+        # a non-zero exit status, and under `set -e` the end of the script.
+        ((++i))
         ((i > KEEP)) || continue
         [[ "$name" == "$keep_ver" ]] && continue
         info "pruning old version $name"
@@ -322,7 +325,7 @@ main() {
 
     local dest="$VERSIONS_DIR/$version"
     if [[ -d "$dest" ]]; then
-        ((FORCE)) || say "Reinstalling $version"
+        say "Replacing the existing $version tree"
         rm -rf -- "$dest"
     fi
     mv -T "$tmp/tree" "$dest"
