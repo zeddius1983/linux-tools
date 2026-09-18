@@ -125,7 +125,7 @@ vllm-serve cyankiwi/Qwen3.6-27B-AWQ-INT4 \
 - **`--language-model-only`** skips the vision encoder's profiling and warmup. Leave it off if you send images.
 - **Keep the flags the same between restarts**, since they are part of the compile cache key.
 
-Even with a warm cache, a 27B model takes roughly two minutes to open its port — reading and repacking weights, a profiling run, and graph capture all happen on every start. That is the cost of vLLM's server design; `llama-cpp-rocm` opens a model of the same size in seconds. If you restart often, or only ever chat alone, llama.cpp is the better fit — vLLM earns its startup back under concurrent load.
+Even with a warm cache, a 27B model takes roughly two minutes to open its port — reading and repacking weights, a profiling run, and graph capture all happen on every start. That is the cost of vLLM's server design; [`llama-cpp`](../llama-cpp/README.md) opens a model of the same size in seconds. If you restart often, or only ever chat alone, llama.cpp is the better fit — vLLM earns its startup back under concurrent load.
 
 ### Query it
 
