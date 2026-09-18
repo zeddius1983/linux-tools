@@ -87,6 +87,7 @@ reports from other distros are welcome.
 |---|---|
 | `amdgpu_top` | AMD GPU monitor |
 | [`corefreq`](apps/corefreq/README.md) | CPU monitor with a kernel module built against your host kernel |
+| [`lact`](apps/lact/README.md) | AMD/NVIDIA/Intel GPU control: fan curves, power caps, overclocking *(host install, no container)* |
 | [`memtest_vulkan`](apps/memtest_vulkan/README.md) | GPU memory stress test (Vulkan) |
 | [`nvtop`](apps/nvtop/README.md) | GPU process monitor |
 | [`nvbandwidth`](apps/nvbandwidth/README.md) | NVIDIA GPU/NVLink bandwidth test |

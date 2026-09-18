@@ -46,6 +46,7 @@ Priority order within each section: highest first.
 - [x] `nvidia-acs-service` — host-only boot service; clears PCIe ACS redirect for switch-local GPU P2P (renumber-proof)
 - [x] `nvidia-p2p-driver` — build/install the aikitoria GeForce-P2P-patched nvidia module (corefreq-style build container, Arch/Ubuntu)
 - [x] `memtest_vulkan` — Vulkan-compute GPU memory stress test (upstream prebuilt binary pinned to v0.5.0; GPU passthrough picker: default /dev/dri or NVIDIA CDI)
+- [x] `lact` — Linux GPU Control Application: fan curves, power caps, clock/voltage offsets (host-only install with a release picker; the daemon needs root sysfs access, so it cannot be containerised)
 - [ ] `btop` — modern resource monitor
 
 ## Browsers / Web

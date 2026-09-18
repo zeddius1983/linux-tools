@@ -237,7 +237,26 @@ cmd_setup() {
     if is_hostonly_installer "$app"; then
         echo "==> '$app' is a host-only install (no container) — running install.sh on the host..."
         echo ""
-        bash "$APPS_DIR/$app/install.sh" || { echo "Error: install.sh failed for '$app'" >&2; exit 1; }
+        # .buildarg wizard answers reach a container app as --build-arg pairs via
+        # cmd_build. A host-only app never builds an image, so the same answers
+        # are handed to install.sh as environment variables instead — that is the
+        # only route they have, and without it a version picker on a host-only
+        # app would be collected and then silently discarded. wizard_build_args
+        # emits "--build-arg" and "NAME=value" on alternating lines; the flags
+        # are dropped and the assignments kept.
+        local -a wizard_env=() tok
+        while IFS= read -r tok; do
+            [[ "$tok" == "--build-arg" || -z "$tok" ]] && continue
+            wizard_env+=("$tok")
+        done < <(wizard_build_args "$app")
+        # `env` with an empty array trips `set -u` on bash 4.3 and older.
+        if ((${#wizard_env[@]})); then
+            env "${wizard_env[@]}" bash "$APPS_DIR/$app/install.sh" \
+                || { echo "Error: install.sh failed for '$app'" >&2; exit 1; }
+        else
+            bash "$APPS_DIR/$app/install.sh" \
+                || { echo "Error: install.sh failed for '$app'" >&2; exit 1; }
+        fi
         return  # dispatcher (tools.sh) calls cmd_setup_finish next
     fi
 

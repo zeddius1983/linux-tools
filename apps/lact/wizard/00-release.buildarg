@@ -1,0 +1,6 @@
+Select LACT release
+Choose which LACT release to install on the host:
+setup
+arg|LACT_VERSION
+items-cmd|{ curl -fsSL 'https://api.github.com/repos/ilya-zlobintsev/LACT/releases?per_page=30' | sed -n 's/.*"tag_name": *"\(v[0-9][^"]*\)".*/\1/p' | head -10; printf '%s\n' test-build; }
+notes-repo|ilya-zlobintsev/LACT
