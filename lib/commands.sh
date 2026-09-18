@@ -557,10 +557,14 @@ cmd_update() {
         fi
         local installer="$SCRIPT_DIR/install.sh"
         [[ -x "$installer" ]] || { echo "Error: no install.sh in $SCRIPT_DIR" >&2; return 1; }
+        # --prefix is passed explicitly rather than left to install.sh's own
+        # default: lib/release.sh has already worked out which root this tree
+        # belongs to, and an update must land in that one, not in whichever the
+        # environment would name.
         if [[ -n "$req_version" ]]; then
-            exec "$installer" --version "$req_version"
+            exec "$installer" --prefix "$LT_DATA_DIR" --version "$req_version"
         fi
-        exec "$installer"
+        exec "$installer" --prefix "$LT_DATA_DIR"
     fi
 
     # Git checkout.
