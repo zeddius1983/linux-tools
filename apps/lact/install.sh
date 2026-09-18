@@ -22,6 +22,15 @@ REPO="ilya-zlobintsev/LACT"
 API="https://api.github.com/repos/${REPO}/releases"
 VERSION="${LACT_VERSION:-latest}"
 
+# Download scratch dir, global on purpose. An EXIT trap fires after the function
+# that set it has already returned, so a `local` temp-dir variable is out of
+# scope by then and `rm -rf "$tmp"` dies on `set -u` with "tmp: unbound
+# variable" — turning a completely successful install into a non-zero exit and a
+# "install.sh failed" message, while also never deleting the directory.
+WORKDIR=""
+cleanup() { [[ -n "$WORKDIR" ]] && rm -rf "$WORKDIR"; return 0; }
+trap cleanup EXIT
+
 # ── Host → release asset ─────────────────────────────────────────────────────
 # Upstream builds a separate package per distro release. Each version ships both
 # `lact-<ver>-...` (daemon + GUI) and `lact-headless-<ver>-...` (daemon + CLI
@@ -144,9 +153,14 @@ install() {
         exit 1
     fi
 
-    local tmp file
-    tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
-    file="${tmp}/${dl##*/}"
+    local file
+    WORKDIR="$(mktemp -d)"
+    # mktemp gives 0700, but apt drops to the `_apt` user to download and cannot
+    # traverse that — it warns ("Download is performed unsandboxed as root ...
+    # couldn't be accessed by user '_apt'") and falls back to fetching as root.
+    # Harmless, but avoidable: the dir holds a public release artifact.
+    chmod 0755 "$WORKDIR"
+    file="${WORKDIR}/${dl##*/}"
     echo "==> Downloading ${dl##*/}"
     curl -fsSL -o "$file" "$dl"
 

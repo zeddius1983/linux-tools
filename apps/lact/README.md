@@ -1,8 +1,8 @@
 # lact
 
 <p>
-  <img alt="Ubuntu: untested" src="https://img.shields.io/badge/-untested-lightgrey?logo=ubuntu&logoColor=E95420">
-  <img alt="Linux Mint: untested" src="https://img.shields.io/badge/-untested-lightgrey?logo=linuxmint&logoColor=87CF3E">
+  <img alt="Ubuntu: tested" src="https://img.shields.io/badge/-tested-brightgreen?logo=ubuntu&logoColor=E95420">
+  <img alt="Linux Mint: tested" src="https://img.shields.io/badge/-tested-brightgreen?logo=linuxmint&logoColor=87CF3E">
   <img alt="CachyOS: untested" src="https://img.shields.io/badge/-untested-lightgrey?logo=cachyos&logoColor=00C2A0">
 </p>
 
@@ -115,11 +115,9 @@ reinstall or a version change. Remove it by hand for a clean slate:
   the download URL from the release's asset list rather than constructing it
   from the tag, so this works — but it is why the version you pick and the
   version you end up running can differ for this one entry.
-- **The badges are grey because the install has not been run yet.** Asset
-  resolution was verified against the live API for `latest`, a pinned tag and
-  `test-build`, but the `sudo` half — package install and `systemctl enable
-  --now lactd` — has not been executed. Flip the Ubuntu/Mint badges to
-  `-tested-brightgreen` after a successful first run.
+- **Verified on Linux Mint 22.3** (Ubuntu 24.04 base): LACT 0.10.1 installed
+  from the `ubuntu-2404.deb` asset, `lactd` enabled and running. The CachyOS
+  badge stays grey until someone runs it on an Arch-family host.
 - **Power-profiles-daemon conflict.** Upstream notes that
   `power-profiles-daemon` can fight LACT over power settings on some systems;
   see the [note in their
