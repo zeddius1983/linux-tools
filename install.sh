@@ -111,12 +111,20 @@ preflight() {
 
     # Runtime prerequisites. linux-tools installs fine without them, but it
     # cannot do anything, so say so loudly rather than at first use.
+    #
+    # This gates a *first* install only. Updating an installation that already
+    # exists is not the moment to relitigate the host's setup: `tools update`
+    # comes back through here, and refusing to move someone to a new release
+    # because distrobox is currently missing helps nobody.
+    local updating=0
+    [[ -L "$CURRENT_LINK" ]] && updating=1
+
     local missing=()
     have podman || have docker || missing+=("podman (or docker)")
     have distrobox || missing+=("distrobox")
     if ((${#missing[@]})); then
-        if ((SKIP_CHECKS)); then
-            warn "missing: ${missing[*]} — installing anyway (--skip-checks)"
+        if ((SKIP_CHECKS || updating)); then
+            warn "missing: ${missing[*]} — continuing anyway"
         else
             printf '%serror:%s linux-tools needs %s on the host.\n' \
                 "$C_ERR" "$C_OFF" "$(join_by ', ' "${missing[@]}")" >&2
