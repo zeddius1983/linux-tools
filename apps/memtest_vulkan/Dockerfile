@@ -1,6 +1,8 @@
-FROM registry.fedoraproject.org/fedora:43
+FROM docker.io/ubuntu:24.04
 
-# vulkan-loader: memtest_vulkan dlopen()s libvulkan.so.1 at runtime (it uses the
+ENV DEBIAN_FRONTEND=noninteractive
+
+# libvulkan1: memtest_vulkan dlopen()s libvulkan.so.1 at runtime (it uses the
 #   erupt bindings and links against no Vulkan library at all), so the loader is
 #   a hard runtime dependency rather than something the binary drags in itself.
 # mesa-vulkan-drivers: the RADV (AMD) and ANV (Intel) ICDs, plus lavapipe. NVIDIA
@@ -9,13 +11,14 @@ FROM registry.fedoraproject.org/fedora:43
 # vulkan-tools: vulkaninfo, for answering "which ICDs does the box actually see"
 #   when a GPU is missing from the device menu. Deliberately not exported to the
 #   host (see exports) — run it with `distrobox enter memtest_vulkan-box`.
-# tar + xz: unpack the release tarball. curl + ca-certificates: fetch it, and
-#   bootstrap host-spawn for distrobox-host-exec.
+# tar + xz-utils: unpack the release tarball. curl + ca-certificates: fetch it,
+#   and bootstrap host-spawn for distrobox-host-exec.
 # git: dotfiles run inside every box via the shared $HOME.
-RUN dnf -y --nodocs --setopt=install_weak_deps=False install \
-      vulkan-loader mesa-vulkan-drivers vulkan-tools \
-      tar xz curl ca-certificates git \
-    && dnf clean all && rm -rf /var/cache/dnf/*
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+       libvulkan1 mesa-vulkan-drivers vulkan-tools \
+       tar xz-utils curl ca-certificates git \
+    && rm -rf /var/lib/apt/lists/*
 
 # Pinned rather than wizard-picked: upstream has published three releases in four
 # years, and only these carry a Linux binary at all (the `support` release holds
@@ -32,9 +35,9 @@ RUN set -e; \
     curl -fsSL "$url" | tar -xJ -C /usr/bin memtest_vulkan; \
     chmod +x /usr/bin/memtest_vulkan
 
-# The tool parses no command-line arguments whatsoever. Verbose mode is switched
-# on by finding the string "verbose" in the name it was invoked as — so the way
-# to offer it is a second name for the same binary, not a wrapper passing a flag.
+# The tool parses no option flags. Verbose mode is switched on by finding the
+# string "verbose" in the name it was invoked as — so the way to offer it is a
+# second name for the same binary, not a wrapper passing a flag.
 RUN ln -s memtest_vulkan /usr/bin/memtest_vulkan_verbose
 
 CMD ["/bin/bash"]

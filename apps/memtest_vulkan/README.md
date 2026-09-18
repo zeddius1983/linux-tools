@@ -14,8 +14,8 @@ confirm a suspected-faulty card, or as a burn-in after a repair.
 
 Vendor-neutral: anything with a Vulkan 1.1 driver works — AMD, Intel, NVIDIA,
 and ARM SoCs. Packaged from the upstream prebuilt Linux x86_64 binary (**v0.5.0**,
-pinned) on Fedora 43, which supplies a current Mesa for the AMD (RADV) and Intel
-(ANV) ICDs.
+pinned) on Ubuntu 24.04, which supplies Mesa for the AMD (RADV) and Intel (ANV)
+ICDs.
 
 ## Install
 
@@ -98,12 +98,21 @@ This is the containerised form of [upstream's issue
 to miss because a ~80 GB allocation on a unified-memory APU shows up as ordinary
 RAM usage, not as a GPU process.
 
-If you suspect one is stranded:
+If you suspect one is stranded — list, then kill:
 
 ```bash
-ps -eo pid,etime,args | awk '$3 ~ /^\/usr\/bin\/memtest/'
-pkill -f '^/usr/bin/memtest_vulkan'
+ps -eo pid,etime,args | awk '$3 ~ /memtest_vulkan/'
+for p in $(ps -eo pid,args | awk '$2 ~ /memtest_vulkan/ {print $1}'); do kill -KILL "$p"; done
 ```
+
+Matching on the `args` column rather than with `pkill -f` is deliberate, for two
+reasons that both bite in practice:
+
+- `pkill -f memtest_vulkan` also matches the shell command line that launched it,
+  so it kills your own shell.
+- `pkill -x memtest_vulkan_verbose` silently matches nothing: `-x` compares
+  against `/proc/<pid>/comm`, which is capped at 15 characters, and that name is
+  22. (`pkill -x memtest_vulkan` does work, at 14.)
 
 Do not script this tool with `timeout` and assume the test stopped — check.
 
