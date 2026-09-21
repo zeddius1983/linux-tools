@@ -9,11 +9,23 @@ Install Linux apps into [Distrobox](https://distrobox.it/) containers and use th
 You need [Distrobox](https://distrobox.it/#installation) and [Podman](https://podman.io/docs/installation) on the host (Docker works too).
 
 ```bash
+curl -fsSL https://raw.githubusercontent.com/zeddius1983/linux-tools/main/install.sh | bash
+source ~/.bashrc     # or ~/.zshrc
+tools                # open the dashboard
+```
+
+That installs the latest release into `~/.local/share/linux-tools` and puts
+`tools` on your `PATH`. `tools update` moves you to the next release;
+`tools update --version v2026.09.1` installs (or goes back to) a specific one.
+
+Prefer a clone — which is what you want if you plan to add an app:
+
+```bash
 git clone https://github.com/zeddius1983/linux-tools.git
 cd linux-tools
 ./tools.sh install   # symlink `tools` into ~/.local/bin, add shell completion, build the dashboard
 source ~/.bashrc     # or ~/.zshrc
-tools                # open the dashboard
+tools
 ```
 
 Move with `↑`/`↓`, switch category with `tab`, press **⏎** to install the selected app, and `?` for the full key list. Prefer the command line? `tools setup claude-code` does the same thing.
@@ -110,6 +122,10 @@ tools setup <app>    # install, or reinstall from scratch
 tools list           # what is built, what is running
 tools enter <app>    # shell inside the app's container
 tools rm <app>       # remove the container and its shortcuts (the built image is kept)
+
+tools update         # move to the newest release
+tools update --check # is there a newer one? changes nothing
+tools version        # what is installed, and where it came from
 ```
 
 There is also `tools build`, `tools create` and `tools export` when you want a single step of a setup — `tools export` is the one to rerun after changing what an app exposes to the host. `make setup-<app>` and friends wrap the same commands.
@@ -122,7 +138,17 @@ There is also `tools build`, `tools create` and `tools export` when you want a s
 - **`tools rm <app>` keeps the image**, so putting the app back is fast. To reclaim the disk, remove the image with `podman rmi linux-tools/<app>:latest`.
 - **A container is a normal Distrobox**, named `<app>-box`: `distrobox enter comfyui-box` works exactly as you would expect.
 - **No Go, no dashboard, no problem.** `tools.sh install` builds the dashboard with host Go if you have it, otherwise in a throwaway container, and skips it harmlessly if neither is available — the older `whiptail` menu takes over. `LT_NO_GO_TUI=1 tools` selects that menu deliberately.
+- **Updates are versioned, and reversible.** Each release unpacks into its own
+  directory under `~/.local/share/linux-tools/versions/`, with `current`
+  pointing at the one in use, so `tools update --version <tag>` goes back to a
+  release you already have without downloading anything. The last three are
+  kept. Nothing you own lives in there — wizard answers are in
+  `~/.cache/linux-tools` — so pruning an old version loses nothing.
+- **A clone and a release install can coexist.** Exactly one of them owns
+  `~/.local/bin/tools`; `./tools.sh install --dev` hands it to the clone, and
+  re-running `install.sh` hands it back.
 - The dashboard's full key reference lives in [`tui/README.md`](tui/README.md).
+- Releasing a new version is one tag push — see [`docs/releasing.md`](docs/releasing.md).
 
 ## Adding your own app
 
