@@ -76,16 +76,11 @@ or open `chrome://gpu` in the browser and look at *Graphics Feature Status*.
 
 ## Hardware video decode (VA-API)
 
-The image ships `libva2`, `libva-drm2`, `mesa-va-drivers` and `vainfo`, and that is
-all it takes — Chrome picks VA-API up on its own, with no flag set:
+Short version: the container can decode on the GPU, but **Chrome does not use it**
+— measured, not guessed. The image ships `libva2`, `libva-drm2`,
+`mesa-va-drivers` and `vainfo` so the capability and the diagnosis are both there.
 
-```
-chrome://gpu → Video Decode: Hardware accelerated
-```
-
-Verified on this host (Chrome 148, AMD Radeon 8060S), with no
-`enabled_labs_experiments` in the profile and no `--enable-features` on the command
-line. The driver and its codec coverage:
+The driver side is fine:
 
 ```console
 $ distrobox enter chrome-box -- vainfo
@@ -97,36 +92,77 @@ vainfo: Driver version: Mesa Gallium driver 25.2.8 for Radeon 8060S Graphics (ra
       VAProfileAV1Profile0            : VAEntrypointVLD
 ```
 
-If `chrome://gpu` ever reports *Software only* instead, the fallbacks are
-`chrome://flags/#enable-accelerated-video-decode` → *Enabled*, or launching with
-`--enable-features=VaapiVideoDecodeLinuxGL`. Chrome's Linux VA-API feature names
-change between releases, so check `chrome://gpu` rather than trusting a flag name
-found online — and `vainfo` succeeding only proves the driver loads, not that
-Chrome chose to use it.
+Chrome's side is not. Playing a 1080p H.264 clip in this box, Chrome 154:
 
-**Video *encode* stays on the CPU.** Chrome disables accelerated encode on Linux by
-default (`chrome://gpu` lists it under *Problems Detected* as "disabled … via
-blocklist"), even though `vainfo` advertises `VAEntrypointEncSlice` for H.264,
-HEVC and AV1. It only affects WebRTC calls and screen sharing; enable it with
-`--enable-features=VaapiVideoEncoder` if you need it — untested here.
+| Measurement | Reading | Means |
+|---|---|---|
+| `renderer` process CPU | ~35 % | software decode |
+| `/sys/class/drm/card1/device/vcn_busy_percent` (host) | `0` throughout | the video engine never runs |
+| GPU process `/proc/<pid>/maps` | `libva.so.2` mapped, `radeonsi_drv_video.so` **not** | VA-API loaded, driver never opened |
+| GPU process log | `vaapi_wrapper.cc] GetHandle(): … failed to find a suitable render node` | Chrome's own node discovery fails |
 
-No flags are baked into the image. Google's `.deb` wrapper no longer sources
-`/etc/default/google-chrome` and honours no `*_FLAGS` variable, and the `app:`
-export reuses Chrome's own `.desktop`, so the only injection point would be
-replacing `/usr/bin/google-chrome-stable` with a wrapper script that `apt upgrade`
-inside the box would undo. Since decode works without flags, there is nothing to
-inject.
+`--enable-features=VaapiVideoDecodeLinuxGL`, `AcceleratedVideoDecodeLinuxGL`,
+`VaapiIgnoreDriverChecks` and `--disable-gpu-sandbox` changed none of those numbers.
+Root cause is unresolved: `vainfo` opens `/dev/dri/renderD128` in the same box and
+the GPU process holds six fds on that very node, so it is not a permissions
+problem.
+
+### How to check it yourself
+
+**Do not trust `chrome://gpu`.** Its *Video Decode: Hardware accelerated* line
+means "not blocklisted", not "in use" — it says that on this box while decode is
+measurably software.
+
+Two checks that do tell the truth:
+
+1. **`chrome://media-internals`** — play a video, click the player, look at
+   `video_decoder`: `VaapiVideoDecoder` (with `kIsPlatformVideoDecoder: true`) is
+   hardware; `FFmpegVideoDecoder`, `VpxVideoDecoder` or `Dav1dVideoDecoder` is
+   software.
+2. **The host's video engine counter**, while a 1080p video plays:
+
+   ```bash
+   watch -n0.5 cat /sys/class/drm/card1/device/vcn_busy_percent   # AMD; 0 = software
+   ps -eo pcpu,args | grep '[t]ype=renderer'                      # ~35% at 1080p = software
+   ```
+
+   `amdgpu_top` shows the same engine load if you prefer a UI.
+
+Two traps when testing this, both of which produce confident nonsense:
+
+- **Headless is not a test bed.** `--headless=new` (and `--no-sandbox`) log the
+  VA-API render-node warning unconditionally, whether or not decode works in a real
+  window.
+- **Make sure the video is actually playing.** A paused or failed `<video>` reads
+  exactly like perfect hardware decode: 0 % engine load, no CPU. Confirm playback
+  before believing a number — e.g. a page whose script writes `currentTime` into
+  `document.title`, read from the host with `wmctrl -l`. (Google's old
+  `gtv-videos-bucket` sample URLs now return 403, which is an easy way to measure
+  nothing at all for half an hour.)
+
+Video *encode* is software too, and separately so: Chrome blocklists accelerated
+encode on Linux regardless of the `VAEntrypointEncSlice` support `vainfo`
+advertises.
+
+No flags are baked into the image, and there would be nowhere good to put them:
+Google's `.deb` wrapper no longer sources `/etc/default/google-chrome` and honours
+no `*_FLAGS` variable, and the `app:` export reuses Chrome's own `.desktop`, so the
+only injection point is replacing `/usr/bin/google-chrome-stable` with a wrapper
+that `apt upgrade` inside the box would undo. Since no flag combination helped,
+there is nothing worth injecting. The VA packages stay because they cost ~5 MB, are
+the prerequisite for the day Chrome's discovery works, and `vainfo` is what tells
+you where the problem is.
 
 ### The rest of `chrome://gpu`
 
-For reference, so a future reader does not mistake a Linux default for a container
-problem: `Vulkan`, `Skia Graphite`, `Direct Rendering Display Compositor`,
-`Raw Draw` and `WebNN` are all *Disabled* on a healthy box — Chrome renders through
-ANGLE/GL on Linux — while `Canvas`, `Compositing`, `Rasterization`, `WebGL` and
-`WebGPU` report *Hardware accelerated*. The *Problems Detected* list is generic
-Mesa workarounds (partial swaps, `KHR_blend_equation_advanced`,
-`GL_MESA_framebuffer_flip_y`, `exit_on_context_lost`); a host-installed Chrome on
-the same GPU prints the same list.
+So a future reader does not chase a Linux default as a container bug: `Vulkan`,
+`Skia Graphite`, `Direct Rendering Display Compositor`, `Raw Draw` and `WebNN` are
+*Disabled* on a healthy box — Chrome renders through ANGLE/GL on Linux — while
+`Canvas`, `Compositing`, `Rasterization`, `WebGL` and `WebGPU` report *Hardware
+accelerated*. The *Problems Detected* list is generic Mesa workarounds (partial
+swaps, `KHR_blend_equation_advanced`, `GL_MESA_framebuffer_flip_y`,
+`exit_on_context_lost`); a host-installed Chrome on the same GPU prints the same
+list.
 
 ## Audio
 
