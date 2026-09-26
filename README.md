@@ -110,7 +110,7 @@ reports from other distros are welcome.
 
 | App | What it is |
 |---|---|
-| `chrome` | Google Chrome |
+| [`chrome`](apps/chrome/README.md) | Google Chrome |
 | `telegram` | Telegram Desktop |
 | [`shell-toolbox`](apps/shell-toolbox/README.md) | Zsh, Starship and friends *(host install, no container)* |
 

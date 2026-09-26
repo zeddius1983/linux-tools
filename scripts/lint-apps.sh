@@ -23,7 +23,6 @@ APPS_DIR="$ROOT/apps"
 LEGACY_NO_README=(
     amdgpu_top
     antigravity
-    chrome
     copilot-cli
     opencode
     telegram
@@ -34,7 +33,6 @@ LEGACY_NO_README=(
 # one set up (CLAUDE.md, "Known pitfalls").
 LEGACY_UNQUALIFIED_FROM=(
     antigravity
-    chrome
     claude-code
     copilot-cli
     telegram
