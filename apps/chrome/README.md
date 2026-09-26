@@ -76,11 +76,14 @@ or open `chrome://gpu` in the browser and look at *Graphics Feature Status*.
 
 ## Hardware video decode (VA-API)
 
-Short version: the container can decode on the GPU, but **Chrome does not use it**
-— measured, not guessed. The image ships `libva2`, `libva-drm2`,
-`mesa-va-drivers` and `vainfo` so the capability and the diagnosis are both there.
+**Chrome cannot do hardware video decode on this hardware, in a container or
+out.** That was established by running the same Chrome 154 build natively on the
+host and in the box: both refuse VA-API with the same message, both fall back to
+the CPU. The container is not the problem, so there is nothing here to fix.
 
-The driver side is fine:
+The hardware and the driver are fine. `vainfo` in the box opens the Mesa VA driver
+and lists exactly what `amdgpu_top -d` promises (VCN 4.0: AVC, HEVC, VP9 and AV1
+decode up to 8K):
 
 ```console
 $ distrobox enter chrome-box -- vainfo
@@ -92,20 +95,43 @@ vainfo: Driver version: Mesa Gallium driver 25.2.8 for Radeon 8060S Graphics (ra
       VAProfileAV1Profile0            : VAEntrypointVLD
 ```
 
-Chrome's side is not. Playing a 1080p H.264 clip in this box, Chrome 154:
+Chrome refuses it anyway:
 
-| Measurement | Reading | Means |
-|---|---|---|
-| `renderer` process CPU | ~35 % | software decode |
-| `/sys/class/drm/card1/device/vcn_busy_percent` (host) | `0` throughout | the video engine never runs |
-| GPU process `/proc/<pid>/maps` | `libva.so.2` mapped, `radeonsi_drv_video.so` **not** | VA-API loaded, driver never opened |
-| GPU process log | `vaapi_wrapper.cc] GetHandle(): … failed to find a suitable render node` | Chrome's own node discovery fails |
+```
+media/gpu/vaapi/vaapi_wrapper.cc] GetHandle(): VAAPI has been disabled due to
+a detected driver bug.
+```
+
+Chrome 154 blocklists this Mesa/radeonsi combination, and
+`--enable-features=VaapiIgnoreDriverChecks` does not override it. Playing a 1080p
+H.264 clip costs ~35 % of one core with `vcn_busy_percent` flat at `0`, whether
+Chrome runs on the host or in the box. Firefox uses a different VA-API path and may
+well do better; that has not been tested here.
+
+### What the container *was* getting wrong: `libpci3`
+
+Before that, the box failed one step earlier, with a different message —
+`GetHandle(): … failed to find a suitable render node` — because `libpci.so.3` was
+missing. Chrome dlopens libpci to read the GPU's PCI IDs, and without it
+`chrome://gpu` reports:
+
+```
+GPU0: VENDOR = 0x0000 [Google Inc. (AMD)], DEVICE = 0x0000 [ANGLE (AMD, Radeon 8060S …)]
+```
+
+`0x0000` for both. Chrome then has nothing to match a DRM render node against, so
+its VA-API setup gives up before it ever opens a driver. Installing `libpci3`
+advanced the failure to the driver-bug message above — the same one the host
+produces — which is how the container was cleared as the cause. `libpci3` is in the
+Dockerfile now: PCI IDs feed Chrome's GPU identification and its blocklist matching
+generally, so a box reporting `VENDOR=0x0000` is worth avoiding regardless of
+VA-API.
 
 ### Flags that do not help
 
 The popular flag set for this problem was measured, not guessed. Every one of
-these produced an identical reading — VA driver never mapped, `vcn_busy_percent`
-`0`, ~35 % CPU:
+these left the reading unchanged — VA driver never mapped, `vcn_busy_percent` `0`,
+~35 % CPU:
 
 ```
 --enable-features=VaapiVideoDecodeLinuxGL,VaapiVideoEncoder
@@ -117,19 +143,11 @@ these produced an identical reading — VA driver never mapped, `vcn_busy_percen
 ```
 
 Three of them have nothing to do: `chrome://gpu` already reports *Rasterization:
-Hardware accelerated*, and the only blocklisted item `--ignore-gpu-blocklist`
-could unblock is video **encode**, which needs the same VA-API that is failing.
+Hardware accelerated*, and the only blocklisted item `--ignore-gpu-blocklist` could
+unblock is video **encode**, which needs the same VA-API Chrome is refusing.
 
-Ruled out as causes:
-
-- **Permissions** — `vainfo` opens `/dev/dri/renderD128` in the same box, and the
-  GPU process holds six fds on that very node.
-- **A missing udev database** — the container sees all 587 host entries under
-  `/run/udev/data`, and Chrome's `libudev.so.1` is present.
-- **The GL backend** — ANGLE on Vulkan fails identically to ANGLE on GL.
-
-Root cause remains unresolved: Chrome's own render-node discovery gives up before
-it ever opens the driver.
+Video *encode* is doubly unavailable: Chrome blocklists accelerated encode on Linux
+in general, on top of the VA-API refusal.
 
 ### How to check it yourself
 

@@ -10,13 +10,16 @@ ENV DEBIAN_FRONTEND=noninteractive
 # shared $HOME dotfiles (zsh + starship) run inside this box too.
 # The fonts matter: Chrome's own dependencies only pull fonts-liberation, so
 # without these emoji render as tofu and CJK pages fall back to nothing.
-# libva + mesa-va-drivers make VA-API video decode available (it still needs a
-# Chrome flag to be used — see README); vainfo is here to diagnose that.
+# libpci3 is not optional: without it Chrome cannot read the GPU's PCI IDs and
+# chrome://gpu reports VENDOR=0x0000 DEVICE=0x0000, which breaks the render-node
+# matching its VA-API setup depends on (see README).
+# libva + mesa-va-drivers make VA-API video decode available; vainfo diagnoses it.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     git \
     gnupg \
+    libpci3 \
     libpulse0 \
     libasound2t64 \
     libva2 \
