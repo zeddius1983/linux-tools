@@ -4,10 +4,6 @@
 # Run this ON THE HOST while a video is actually PLAYING (not paused, not in a
 # hidden tab -- Chrome suspends decode for both, and a stopped video reads
 # exactly like flawless hardware decode).
-#
-# chrome://gpu is not evidence: its "Video Decode: Hardware accelerated" line
-# means "not blocklisted", and it says that even when decode is measurably
-# software.
 
 set -uo pipefail
 
@@ -20,43 +16,80 @@ if [[ -z "$pids" ]]; then
     exit 1
 fi
 
-# 1. The flag. Chrome refuses VA-API on this Mesa/radeonsi combination unless it
-#    is present, so without it the answer is software, full stop. The image's
-#    wrapper adds it from /etc/chrome-flags.conf, so it should show up here even
-#    though nothing typed it on the command line.
+# 1. Per-engine GPU time from DRM fdinfo -- the ground truth, and independent of
+#    resolution and codec.
+#
+#    Do not expect drm-engine-dec: on VCN 4.x the decoder rides the *unified*
+#    VCN queue, which the kernel accounts to drm-engine-enc, so hardware DECODE
+#    shows up under "enc" (plus "vpe" for the scaling/colour-conversion block).
+#    Measured here: enc ~22%, vpe ~27% decoding 1080p; both absent entirely in
+#    software. This is also why amdgpu_top's Media row and
+#    /sys/class/drm/card*/device/vcn_busy_percent both read 0 on gfx1151 during
+#    confirmed hardware decode -- they do not track that queue.
+sample_engines() {
+    awk '/^drm-engine-/ { gsub(":", "", $1); sums[$1] += $2 }
+         END { for (k in sums) print k, sums[k] }' \
+        /proc/"$1"/fdinfo/* 2>/dev/null
+}
+
+declare -A e0 e1
+for p in $pids; do
+    while read -r name ns; do
+        [[ -n "${name:-}" ]] && e0[$name]=$(( ${e0[$name]:-0} + ns ))
+    done < <(sample_engines "$p")
+done
+
+# 2. Total Chrome CPU, as the cross-check: ~35% of one core at 1080p is the CPU
+#    doing the decoding, ~7% is the VCN block doing it.
+hz=$(getconf CLK_TCK)
+cpu_ticks() {
+    awk '{ for (i = 1; i <= NF; i++) if ($i ~ /\)$/) { print $(i+12) + $(i+13); exit } }' \
+        "/proc/$1/stat" 2>/dev/null || echo 0
+}
+declare -A t0
+for p in $pids; do t0[$p]=$(cpu_ticks "$p"); done
+
+sleep "$SECS"
+
+for p in $pids; do
+    while read -r name ns; do
+        [[ -n "${name:-}" ]] && e1[$name]=$(( ${e1[$name]:-0} + ns ))
+    done < <(sample_engines "$p")
+done
+total_cpu=0
+for p in $pids; do
+    t1=$(cpu_ticks "$p")
+    total_cpu=$(( total_cpu + 100 * (t1 - ${t0[$p]:-0}) / hz / SECS ))
+done
+
+# 3. Was the flag actually applied? The image's wrapper adds it from
+#    /etc/chrome-flags.conf, so it shows up here even though nothing typed it.
 has_flag=no
 for p in $pids; do
     tr '\0' ' ' < "/proc/$p/cmdline" 2>/dev/null | grep -q -- "--$FLAG" && { has_flag=yes; break; }
 done
 
-# 2. Total Chrome CPU. At 1080p the two states are far apart: ~35% of one core
-#    for software, ~7% for hardware.
-#
-# Deliberately NOT checked: whether a *_drv_video.so is mapped into the process.
-# On Ubuntu's Mesa 25 the VA driver is a symlink to libgallium-<ver>.so and
-# /proc/<pid>/maps shows the resolved name, so that grep reports "no" even during
-# confirmed hardware decode -- and libgallium is mapped anyway for GL.
-# Also unreliable here: /sys/class/drm/card*/device/vcn_busy_percent, which reads
-# 0 on gfx1151 even while the VCN block is demonstrably decoding.
-hz=$(getconf CLK_TCK)
-declare -A t0
-for p in $pids; do
-    t0[$p]=$(awk '{ for (i=1; i<=NF; i++) if ($i ~ /\)$/) { print $(i+12) + $(i+13); exit } }' \
-        "/proc/$p/stat" 2>/dev/null || echo 0)
-done
-sleep "$SECS"
-total=0
-for p in $pids; do
-    t1=$(awk '{ for (i=1; i<=NF; i++) if ($i ~ /\)$/) { print $(i+12) + $(i+13); exit } }' \
-        "/proc/$p/stat" 2>/dev/null || echo 0)
-    total=$(( total + 100 * (t1 - ${t0[$p]:-0}) / hz / SECS ))
-done
-
+video_busy=0
 echo "--$FLAG : $has_flag"
-echo "Total Chrome CPU over ${SECS}s              : ${total}% of one core"
+echo "Total Chrome CPU over ${SECS}s              : ${total_cpu}% of one core"
+echo "GPU engine time over ${SECS}s:"
+for name in "${!e1[@]}"; do
+    pct=$(( (e1[$name] - ${e0[$name]:-0}) / 10000000 / SECS ))
+    (( pct == 0 )) && continue
+    printf '  %-22s %3d%%\n' "$name" "$pct"
+    case "$name" in
+        drm-engine-dec|drm-engine-enc|drm-engine-vpe|drm-engine-jpeg)
+            (( pct > video_busy )) && video_busy=$pct ;;
+    esac
+done
+(( video_busy == 0 )) && echo "  (no video-engine time)"
 echo
 
-if (( total < 3 )); then
+if (( video_busy >= 3 )); then
+    echo "VERDICT: hardware decode — the video engines are doing the work."
+    echo "         Chrome's own confirmation: chrome://media-internals should say"
+    echo "         \"Selected VaapiVideoDecoder for video decoding\"."
+elif (( total_cpu < 3 )); then
     echo "VERDICT: nothing was decoding — the video is paused, muted-and-hidden, or"
     echo "         never loaded. A stopped video looks exactly like perfect hardware"
     echo "         decode. Start playback and run this again."
@@ -64,9 +97,6 @@ elif [[ "$has_flag" == no ]]; then
     echo "VERDICT: software decode. Chrome disabled VA-API (\"detected driver bug\")"
     echo "         because the flag is missing. Rebuild with 'tools setup chrome',"
     echo "         or add it to ~/.config/chrome-flags.conf inside the box."
-elif (( total < 15 )); then
-    echo "VERDICT: hardware decode. Confirm in chrome://media-internals if you want"
-    echo "         it from Chrome's own mouth: video_decoder = VaapiVideoDecoder."
 else
     echo "VERDICT: software decode despite the flag. Check 'vainfo' inside the box,"
     echo "         and whether this clip's codec is one the VCN block supports"

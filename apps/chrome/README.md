@@ -151,27 +151,52 @@ means libpci is missing in that container** — a useful check for any GUI box h
 $ ./apps/chrome/chrome-decode-check
 --disable-gpu-driver-bug-workarounds : yes
 Total Chrome CPU over 8s              : 7% of one core
+GPU engine time over 8s:
+  drm-engine-gfx           2%
+  drm-engine-enc          23%
+  drm-engine-vpe          28%
 
-VERDICT: hardware decode. Confirm in chrome://media-internals if you want
-         it from Chrome's own mouth: video_decoder = VaapiVideoDecoder.
+VERDICT: hardware decode — the video engines are doing the work.
 ```
 
-It checks whether the flag reached Chrome, and measures total Chrome CPU — ~35 %
-of one core at 1080p is the CPU decoding, ~7 % is the VCN block doing it. Under
-3 % means nothing was playing, and it says so rather than calling that a pass.
+It reads per-engine GPU time from the Chrome processes' DRM `fdinfo`, which is
+ground truth and independent of codec and resolution, and cross-checks total
+Chrome CPU (~35 % of one core at 1080p = software, ~7 % = hardware). Under 3 %
+CPU means nothing was playing, and it says so rather than calling that a pass.
 
-In the browser: `chrome://media-internals` → play something → click the player →
-`video_decoder`. `VaapiVideoDecoder` is hardware; `FFmpegVideoDecoder`,
-`VpxVideoDecoder` or `Dav1dVideoDecoder` is software.
+In the browser: `chrome://media-internals` → play something → click the player.
+Hardware decode says, in as many words:
 
-**Three signals that lie on this machine**, all of which cost time during the
-investigation:
+```
+Selected VaapiVideoDecoder for video decoding, config: codec: av1, …
+```
+
+### Why `amdgpu_top` shows 0 % media
+
+Because it is looking at a counter the decoder does not touch on this chip. **On
+VCN 4.x the decoder rides the *unified* VCN queue, which the kernel accounts to
+`drm-engine-enc`** — so hardware *decode* shows up under "enc", alongside
+`drm-engine-vpe` for the scaling/colour-conversion block. Measured on a 1080p
+clip, hardware vs software:
+
+| Engine | Hardware decode | Software decode |
+|---|---|---|
+| `drm-engine-enc` | 23 % | absent |
+| `drm-engine-vpe` | 28 % | absent |
+| `drm-engine-gfx` | 2 % | 2 % |
+
+Meanwhile `/sys/class/drm/card*/device/vcn_busy_percent` — which is what
+`amdgpu_top`'s Media row reflects — reads `0` throughout both. So on gfx1151, a
+`0 %` media reading says nothing about whether decode is on the GPU. Use `fdinfo`
+(or `chrome-decode-check`, which does it for you); `nvtop` and `amdgpu_top`'s
+per-process view read the same fdinfo counters and will show the `enc`/`vpe`
+activity too.
+
+**Three signals that lie on this machine**, all of which cost time here:
 
 - **`chrome://gpu`'s *Video Decode: Hardware accelerated*** is a blocklist status,
   not a fact about playback. It says that even while decode is measurably software.
-- **`/sys/class/drm/card*/device/vcn_busy_percent`** reads `0` on gfx1151 even
-  while the VCN block is demonstrably decoding. Do not conclude anything from it
-  here, whatever the CachyOS wiki's `amdgpu_top` advice suggests.
+- **`vcn_busy_percent` / `amdgpu_top`'s Media row** — see above.
 - **Grepping `/proc/<pid>/maps` for `*_drv_video.so`** never matches on Ubuntu's
   Mesa 25: the VA driver is a symlink to `libgallium-<ver>.so` and maps shows the
   resolved name.
