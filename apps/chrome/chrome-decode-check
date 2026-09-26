@@ -2,70 +2,73 @@
 # Is chrome-box's Chrome decoding video on the GPU, or on the CPU?
 #
 # Run this ON THE HOST while a video is actually PLAYING (not paused, not in a
-# hidden tab — Chrome suspends decode for both). chrome://gpu is not evidence:
-# its "Video Decode: Hardware accelerated" line means "not blocklisted", and it
-# says that while decode is measurably software.
+# hidden tab -- Chrome suspends decode for both, and a stopped video reads
+# exactly like flawless hardware decode).
+#
+# chrome://gpu is not evidence: its "Video Decode: Hardware accelerated" line
+# means "not blocklisted", and it says that even when decode is measurably
+# software.
 
 set -uo pipefail
 
 SECS="${1:-8}"
+FLAG="disable-gpu-driver-bug-workarounds"
+
 pids=$(pgrep -f '/opt/google/chrome/chrome' || true)
 if [[ -z "$pids" ]]; then
     echo "No Chrome processes found. Is chrome-box's Chrome running?" >&2
     exit 1
 fi
 
-# 1. The decisive one: VA-API decoding cannot happen without the Mesa VA driver
-#    being mapped into the GPU process. It loads lazily, on the first hardware
-#    decode -- which is why the video has to be playing when you run this.
-driver=""
+# 1. The flag. Chrome refuses VA-API on this Mesa/radeonsi combination unless it
+#    is present, so without it the answer is software, full stop. The image's
+#    wrapper adds it from /etc/chrome-flags.conf, so it should show up here even
+#    though nothing typed it on the command line.
+has_flag=no
 for p in $pids; do
-    d=$(grep -oE '/[^ ]*_drv_video\.so' "/proc/$p/maps" 2>/dev/null | sort -u) || true
-    [[ -n "$d" ]] && driver+="  pid $p: $d"$'\n'
+    tr '\0' ' ' < "/proc/$p/cmdline" 2>/dev/null | grep -q -- "--$FLAG" && { has_flag=yes; break; }
 done
 
-# 2. AMD's video engine counter. 0 the whole time = the VCN block never ran.
-vcn_path=$(ls /sys/class/drm/card*/device/vcn_busy_percent 2>/dev/null | head -1)
-vcn_max=0
-# 3. Busiest renderer, as a share of one core. ~35% at 1080p means the CPU is
-#    doing the decoding; single digits with a video playing means it is not.
+# 2. Total Chrome CPU. At 1080p the two states are far apart: ~35% of one core
+#    for software, ~7% for hardware.
+#
+# Deliberately NOT checked: whether a *_drv_video.so is mapped into the process.
+# On Ubuntu's Mesa 25 the VA driver is a symlink to libgallium-<ver>.so and
+# /proc/<pid>/maps shows the resolved name, so that grep reports "no" even during
+# confirmed hardware decode -- and libgallium is mapped anyway for GL.
+# Also unreliable here: /sys/class/drm/card*/device/vcn_busy_percent, which reads
+# 0 on gfx1151 even while the VCN block is demonstrably decoding.
+hz=$(getconf CLK_TCK)
 declare -A t0
 for p in $pids; do
     t0[$p]=$(awk '{ for (i=1; i<=NF; i++) if ($i ~ /\)$/) { print $(i+12) + $(i+13); exit } }' \
         "/proc/$p/stat" 2>/dev/null || echo 0)
 done
-
-end=$((SECONDS + SECS))
-while (( SECONDS < end )); do
-    if [[ -n "$vcn_path" ]]; then
-        v=$(cat "$vcn_path" 2>/dev/null || echo 0)
-        (( v > vcn_max )) && vcn_max=$v
-    fi
-    sleep 0.5
-done
-
-hz=$(getconf CLK_TCK)
-busiest=0
+sleep "$SECS"
+total=0
 for p in $pids; do
     t1=$(awk '{ for (i=1; i<=NF; i++) if ($i ~ /\)$/) { print $(i+12) + $(i+13); exit } }' \
         "/proc/$p/stat" 2>/dev/null || echo 0)
-    pct=$(( 100 * (t1 - ${t0[$p]:-0}) / hz / SECS ))
-    (( pct > busiest )) && busiest=$pct
+    total=$(( total + 100 * (t1 - ${t0[$p]:-0}) / hz / SECS ))
 done
 
-echo "VA driver mapped into a Chrome process : ${driver:+yes}${driver:-no}"
-[[ -n "$driver" ]] && printf '%s' "$driver"
-[[ -n "$vcn_path" ]] && echo "Peak ${vcn_path##*/}          : ${vcn_max}%"
-echo "Busiest Chrome process over ${SECS}s        : ${busiest}% of one core"
+echo "--$FLAG : $has_flag"
+echo "Total Chrome CPU over ${SECS}s              : ${total}% of one core"
 echo
 
-if (( busiest < 5 )); then
+if (( total < 3 )); then
     echo "VERDICT: nothing was decoding — the video is paused, muted-and-hidden, or"
     echo "         never loaded. A stopped video looks exactly like perfect hardware"
     echo "         decode. Start playback and run this again."
-elif [[ -n "$driver" ]] || (( vcn_max > 0 )); then
-    echo "VERDICT: hardware decode is in use."
+elif [[ "$has_flag" == no ]]; then
+    echo "VERDICT: software decode. Chrome disabled VA-API (\"detected driver bug\")"
+    echo "         because the flag is missing. Rebuild with 'tools setup chrome',"
+    echo "         or add it to ~/.config/chrome-flags.conf inside the box."
+elif (( total < 15 )); then
+    echo "VERDICT: hardware decode. Confirm in chrome://media-internals if you want"
+    echo "         it from Chrome's own mouth: video_decoder = VaapiVideoDecoder."
 else
-    echo "VERDICT: software decode. The CPU is doing the work; the VA driver was"
-    echo "         never loaded and the video engine stayed idle."
+    echo "VERDICT: software decode despite the flag. Check 'vainfo' inside the box,"
+    echo "         and whether this clip's codec is one the VCN block supports"
+    echo "         ('amdgpu_top -d' lists them)."
 fi

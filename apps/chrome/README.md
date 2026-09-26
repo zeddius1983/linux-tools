@@ -76,130 +76,109 @@ or open `chrome://gpu` in the browser and look at *Graphics Feature Status*.
 
 ## Hardware video decode (VA-API)
 
-**Chrome cannot do hardware video decode on this hardware, in a container or
-out.** That was established by running the same Chrome 154 build natively on the
-host and in the box: both refuse VA-API with the same message, both fall back to
-the CPU. The container is not the problem, so there is nothing here to fix.
+**Works, out of the box, since this app installs one flag for you.** A 1080p H.264
+clip costs ~7 % of one core instead of ~35 %.
 
-The hardware and the driver are fine. `vainfo` in the box opens the Mesa VA driver
-and lists exactly what `amdgpu_top -d` promises (VCN 4.0: AVC, HEVC, VP9 and AV1
-decode up to 8K):
-
-```console
-$ distrobox enter chrome-box -- vainfo
-libva info: Trying to open /usr/lib/x86_64-linux-gnu/dri/radeonsi_drv_video.so
-vainfo: Driver version: Mesa Gallium driver 25.2.8 for Radeon 8060S Graphics (radeonsi, gfx1151)
-      VAProfileH264High               : VAEntrypointVLD
-      VAProfileHEVCMain10             : VAEntrypointVLD
-      VAProfileVP9Profile0            : VAEntrypointVLD
-      VAProfileAV1Profile0            : VAEntrypointVLD
-```
-
-Chrome refuses it anyway:
+It takes exactly one flag — `--disable-gpu-driver-bug-workarounds`. Without it
+Chrome refuses VA-API on this Mesa/radeonsi combination:
 
 ```
 media/gpu/vaapi/vaapi_wrapper.cc] GetHandle(): VAAPI has been disabled due to
 a detected driver bug.
 ```
 
-Chrome 154 blocklists this Mesa/radeonsi combination, and
-`--enable-features=VaapiIgnoreDriverChecks` does not override it. Playing a 1080p
-H.264 clip costs ~35 % of one core with `vcn_busy_percent` flat at `0`, whether
-Chrome runs on the host or in the box. Firefox uses a different VA-API path and may
-well do better; that has not been tested here.
+No feature flags, no `LIBVA_DRIVER_NAME`, no Vulkan backend, no Wayland — all
+tested, none needed. **The trade-off is real though:** that flag disables *all* of
+Chrome's GPU driver bug workarounds, not just the VA-API one. If you ever see
+rendering glitches in this browser, that is the first thing to blame.
 
-### What the container *was* getting wrong: `libpci3`
+### Changing the flags: `~/.config/chrome-flags.conf`
 
-Before that, the box failed one step earlier, with a different message —
-`GetHandle(): … failed to find a suitable render node` — because `libpci.so.3` was
-missing. Chrome dlopens libpci to read the GPU's PCI IDs, and without it
-`chrome://gpu` reports:
+`/usr/bin/google-chrome-stable` in the image is a wrapper (the real binary is
+diverted to `.real` with `dpkg-divert`, so an `apt upgrade` inside the box cannot
+clobber it). It reads flags, one per line with `#` comments, from the first file
+that exists:
+
+| File | Role |
+|---|---|
+| `~/.config/chrome-flags.conf` | yours — if it exists, it wins outright |
+| `/etc/chrome-flags.conf` | the image default: just the flag above |
+
+Same file name CachyOS uses, so flag lists from its wiki paste straight in. The
+wrapper sits on the `.desktop`'s `Exec` path, so flags apply to every entry point:
+the menu icon, `google-chrome` inside the box, and the app-mode windows
+`openclaw-dashboard` and `comfyui-open` open.
+
+To turn the override off without touching the image, write your own file omitting
+that line — verified: Chrome then goes back to ~45 % CPU and software decode.
+
+Video *encode* stays on the CPU: Chrome blocklists accelerated encode on Linux
+separately, whatever `VAEntrypointEncSlice` support `vainfo` advertises.
+
+### Flags that do nothing here
+
+Measured against a playing 1080p clip, each left decode in software — including
+both flag sets from the CachyOS wiki:
 
 ```
-GPU0: VENDOR = 0x0000 [Google Inc. (AMD)], DEVICE = 0x0000 [ANGLE (AMD, Radeon 8060S …)]
+--enable-features=VaapiVideoDecoder,AcceleratedVideoDecodeLinuxGL,
+                  AcceleratedVideoDecodeLinuxZeroCopyGL,AcceleratedVideoEncoder,
+                  VaapiIgnoreDriverChecks,UseMultiPlaneFormatForHardwareVideo
+--enable-features=Vulkan,VulkanFromANGLE,DefaultANGLEVulkan   --use-angle=vulkan
+--ignore-gpu-blocklist --enable-gpu-rasterization --enable-zero-copy
+--disable-gpu-sandbox   LIBVA_DRIVER_NAME=radeonsi
 ```
 
-`0x0000` for both. Chrome then has nothing to match a DRM render node against, so
-its VA-API setup gives up before it ever opens a driver. Installing `libpci3`
-advanced the failure to the driver-bug message above — the same one the host
-produces — which is how the container was cleared as the cause. `libpci3` is in the
-Dockerfile now: PCI IDs feed Chrome's GPU identification and its blocklist matching
-generally, so a box reporting `VENDOR=0x0000` is worth avoiding regardless of
-VA-API.
+`--ozone-platform=wayland` does not apply on an X11 session (this one is
+`XDG_SESSION_TYPE=x11`); the wiki's note is about the reverse case. And
+`--enable-gpu-rasterization` has nothing to do — `chrome://gpu` already reports
+*Rasterization: Hardware accelerated*.
 
-### Flags that do not help
+### The `libpci3` prerequisite
 
-The popular flag set for this problem was measured, not guessed. Every one of
-these left the reading unchanged — VA driver never mapped, `vcn_busy_percent` `0`,
-~35 % CPU:
-
-```
---enable-features=VaapiVideoDecodeLinuxGL,VaapiVideoEncoder
---enable-gpu-rasterization --enable-zero-copy --ignore-gpu-blocklist
---enable-features=AcceleratedVideoDecodeLinuxGL,AcceleratedVideoDecodeLinuxZeroCopyGL
---enable-features=VaapiIgnoreDriverChecks
---disable-gpu-sandbox
---use-angle=vulkan
-```
-
-Three of them have nothing to do: `chrome://gpu` already reports *Rasterization:
-Hardware accelerated*, and the only blocklisted item `--ignore-gpu-blocklist` could
-unblock is video **encode**, which needs the same VA-API Chrome is refusing.
-
-Video *encode* is doubly unavailable: Chrome blocklists accelerated encode on Linux
-in general, on top of the VA-API refusal.
+Before `libpci3` was added to the image, the box failed one step *earlier* than
+this, with a different message — `GetHandle(): … failed to find a suitable render
+node` — because Chrome dlopens libpci to read the GPU's PCI IDs and without it
+`chrome://gpu` reports `GPU0: VENDOR = 0x0000, DEVICE = 0x0000`. Chrome then has
+nothing to match a DRM render node against. **`VENDOR=0x0000` in `chrome://gpu`
+means libpci is missing in that container** — a useful check for any GUI box here.
 
 ### How to check it yourself
 
-`apps/chrome/chrome-decode-check` does all of it. Run it **on the host, while a
-video is actually playing**:
+`apps/chrome/chrome-decode-check`, on the host, while a video is actually playing:
 
 ```console
 $ ./apps/chrome/chrome-decode-check
-VA driver mapped into a Chrome process : no
-Peak vcn_busy_percent                  : 0%
-Busiest Chrome process over 8s         : 34% of one core
+--disable-gpu-driver-bug-workarounds : yes
+Total Chrome CPU over 8s              : 7% of one core
 
-VERDICT: software decode. The CPU is doing the work; the VA driver was
-         never loaded and the video engine stayed idle.
+VERDICT: hardware decode. Confirm in chrome://media-internals if you want
+         it from Chrome's own mouth: video_decoder = VaapiVideoDecoder.
 ```
 
-It reports three things, in descending order of how much they prove:
+It checks whether the flag reached Chrome, and measures total Chrome CPU — ~35 %
+of one core at 1080p is the CPU decoding, ~7 % is the VCN block doing it. Under
+3 % means nothing was playing, and it says so rather than calling that a pass.
 
-1. **Is a `*_drv_video.so` mapped into a Chrome process?** VA-API decoding cannot
-   happen without the Mesa VA driver being loaded into the GPU process, and it
-   loads lazily on the first hardware decode. Codec-independent and decisive —
-   which is why the video has to be playing when you look.
-2. **Peak `vcn_busy_percent`** (AMD's video engine). `0` throughout means the VCN
-   block never ran. `amdgpu_top` shows the same engine if you prefer a UI, and
-   `amdgpu_top -d` lists what the block can do — here VCN 4.0, decode for
-   AVC/HEVC/VP9/AV1 up to 8K.
-3. **Busiest Chrome process, as a share of one core.** ~35 % at 1080p is the CPU
-   decoding. Under 5 % means nothing was decoding at all, and the script says so
-   rather than calling it a pass.
-
-**`gpu_busy_percent` is not one of the signals, and neither is "the GPU looks
-busy".** The graphics engine works hard during *any* video playback — uploading
-frames, colour-converting, compositing, scaling — whether the decode happened on
-the VCN block or on the CPU. Only `vcn_busy_percent` is about decoding.
-
-In the browser, the equivalent is `chrome://media-internals`: play a video, click
-the player, and read `video_decoder`. `VaapiVideoDecoder` (with
-`kIsPlatformVideoDecoder: true`) is hardware; `FFmpegVideoDecoder`,
+In the browser: `chrome://media-internals` → play something → click the player →
+`video_decoder`. `VaapiVideoDecoder` is hardware; `FFmpegVideoDecoder`,
 `VpxVideoDecoder` or `Dav1dVideoDecoder` is software.
 
-Three traps, all of which manufacture confident nonsense:
+**Three signals that lie on this machine**, all of which cost time during the
+investigation:
 
-- **A stopped video looks exactly like perfect hardware decode** — 0 % engine, no
-  CPU. Paused, muted-in-a-hidden-tab, or failed to load all read the same. The
-  script's under-5 % verdict exists for this. (Google's old
-  `gtv-videos-bucket/sample/*.mp4` URLs now return **403**, and YouTube blocks a
-  fresh throwaway profile with "Sign in to confirm you're not a bot", so a scripted
-  test can easily measure a blank page.)
-- **Headless is not a test bed.** `--headless=new` and `--no-sandbox` log the
-  VA-API render-node warning unconditionally, whether or not decode works in a real
-  window.
-- **`chrome://gpu` is a blocklist status, not a fact about playback** — see above.
+- **`chrome://gpu`'s *Video Decode: Hardware accelerated*** is a blocklist status,
+  not a fact about playback. It says that even while decode is measurably software.
+- **`/sys/class/drm/card*/device/vcn_busy_percent`** reads `0` on gfx1151 even
+  while the VCN block is demonstrably decoding. Do not conclude anything from it
+  here, whatever the CachyOS wiki's `amdgpu_top` advice suggests.
+- **Grepping `/proc/<pid>/maps` for `*_drv_video.so`** never matches on Ubuntu's
+  Mesa 25: the VA driver is a symlink to `libgallium-<ver>.so` and maps shows the
+  resolved name.
+
+And two ways to measure nothing and believe it: a stopped video reads exactly like
+flawless hardware decode, and `--headless=new` logs the VA-API warning
+unconditionally, so it is not a test bed.
 
 ### The rest of `chrome://gpu`
 

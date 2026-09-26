@@ -39,3 +39,17 @@ RUN curl -fsSL https://dl-ssl.google.com/linux/linux_signing_key.pub \
     && apt-get update \
     && apt-get install -y --no-install-recommends google-chrome-stable \
     && rm -rf /var/lib/apt/lists/*
+
+# Chrome refuses VA-API on this Mesa/radeonsi combination ("VAAPI has been
+# disabled due to a detected driver bug") and only
+# --disable-gpu-driver-bug-workarounds overrides it. Google's launcher honours no
+# *_FLAGS variable and reads no config file, and the app: export reuses Chrome's
+# own .desktop, so a wrapper on the .desktop's Exec path is the only place a flag
+# can be added for every entry point. dpkg-divert keeps it across an apt upgrade
+# of google-chrome-stable inside the box.
+COPY google-chrome-wrapper /tmp/google-chrome-wrapper
+COPY chrome-flags.conf /etc/chrome-flags.conf
+RUN dpkg-divert --divert /usr/bin/google-chrome-stable.real --rename \
+        /usr/bin/google-chrome-stable \
+    && mv /tmp/google-chrome-wrapper /usr/bin/google-chrome-stable \
+    && chmod +x /usr/bin/google-chrome-stable

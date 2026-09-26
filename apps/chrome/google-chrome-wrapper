@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Installed as /usr/bin/google-chrome-stable, with the real binary diverted to
+# google-chrome-stable.real (dpkg-divert, so an apt upgrade of Chrome inside the
+# box does not clobber this).
+#
+# Why a wrapper exists at all: Google's .deb launcher honours no *_FLAGS variable
+# and reads no config file, and the app: export reuses Chrome's own .desktop --
+# so this is the only place a flag can be added for every way Chrome gets started
+# (menu entry, `google-chrome` on the box's PATH, openclaw-dashboard,
+# comfyui-open).
+#
+# Flags come from the first readable file, one per line, # for comments:
+#   ${XDG_CONFIG_HOME:-$HOME/.config}/chrome-flags.conf   -- yours, wins outright
+#   /etc/chrome-flags.conf                                -- the image default
+# The same file name CachyOS uses, so its wiki's flag lists paste straight in.
+set -uo pipefail
+
+conf="${XDG_CONFIG_HOME:-$HOME/.config}/chrome-flags.conf"
+[[ -r "$conf" ]] || conf=/etc/chrome-flags.conf
+
+flags=()
+if [[ -r "$conf" ]]; then
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line="${line%%#*}"
+        # shellcheck disable=SC2206  # deliberate word splitting: one flag per word
+        [[ -n "${line// /}" ]] && flags+=($line)
+    done < "$conf"
+fi
+
+exec /usr/bin/google-chrome-stable.real ${flags[@]+"${flags[@]}"} "$@"
