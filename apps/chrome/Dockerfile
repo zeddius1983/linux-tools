@@ -10,6 +10,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 # shared $HOME dotfiles (zsh + starship) run inside this box too.
 # The fonts matter: Chrome's own dependencies only pull fonts-liberation, so
 # without these emoji render as tofu and CJK pages fall back to nothing.
+# libva + mesa-va-drivers make VA-API video decode available (it still needs a
+# Chrome flag to be used — see README); vainfo is here to diagnose that.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
@@ -17,6 +19,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gnupg \
     libpulse0 \
     libasound2t64 \
+    libva2 \
+    libva-drm2 \
+    mesa-va-drivers \
+    vainfo \
     fonts-noto-core \
     fonts-noto-color-emoji \
     fonts-noto-cjk \

@@ -74,9 +74,43 @@ distrobox enter chrome-box -- bash -c 'ls -l /dev/dri; test -w /dev/dri/renderD1
 
 or open `chrome://gpu` in the browser and look at *Graphics Feature Status*.
 
-Hardware **video** decode (VA-API) is *not* set up: the image has no `libva` /
-`mesa-va-drivers`, so video decoding is on the CPU. Rendering and WebGL are
-accelerated either way.
+## Hardware video decode (VA-API)
+
+The image ships `libva2`, `libva-drm2`, `mesa-va-drivers` and `vainfo`, so the
+VA-API driver is available inside the box. Verified on this host:
+
+```console
+$ distrobox enter chrome-box -- vainfo
+libva info: Trying to open /usr/lib/x86_64-linux-gnu/dri/radeonsi_drv_video.so
+vainfo: Driver version: Mesa Gallium driver 25.2.8 for Radeon 8060S Graphics (radeonsi, gfx1151)
+      VAProfileH264High               : VAEntrypointVLD
+      VAProfileHEVCMain10             : VAEntrypointVLD
+      VAProfileVP9Profile0            : VAEntrypointVLD
+      VAProfileAV1Profile0            : VAEntrypointVLD
+```
+
+Chrome does **not** use it by default on Linux — you have to turn it on, either
+per profile:
+
+- `chrome://flags/#enable-accelerated-video-decode` → *Enabled*, then relaunch,
+
+or per launch, which is what you want for the scripted app-mode windows:
+
+```bash
+distrobox enter chrome-box -- google-chrome --enable-features=VaapiVideoDecodeLinuxGL
+```
+
+Check the result on `chrome://gpu` under *Video Decode* (it should say *Hardware
+accelerated*), and watch a decode actually happen on `chrome://media-internals`
+while a video plays — `vainfo` proving the driver loads is not the same as Chrome
+choosing to use it, and Chrome's Linux VA-API feature names change between
+releases.
+
+No flags are baked into the image: Google's `.deb` wrapper no longer sources
+`/etc/default/google-chrome`, so there is no injection point short of replacing
+`/usr/bin/google-chrome-stable` with a wrapper script — which `apt upgrade` inside
+the box would undo. Leaving it to a flag keeps the decision per profile, which
+also matters because forcing VA-API can produce black frames on some drivers.
 
 ## Audio
 
@@ -131,6 +165,8 @@ sharing one profile is how profiles get corrupted.
   which rewrites `Exec=` to go through `distrobox-enter`. `tools export chrome`
   does not do this for you — it only handles `google-chrome` itself, and its
   duplicate cleanup keys on the entry's `Name=`, so PWA entries are left alone.
+- **`vainfo` is in the image on purpose** — it is the only way to tell "the
+  container cannot see the GPU" apart from "Chrome chose not to use VA-API".
 - **The Noto fonts are ~140 MB of the image** (`fonts-noto-cjk` alone is 89 MB).
   That is the price of a browser that can render arbitrary pages; drop
   `fonts-noto-cjk` from the Dockerfile if you never open CJK content and want the
