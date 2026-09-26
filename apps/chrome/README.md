@@ -76,8 +76,16 @@ or open `chrome://gpu` in the browser and look at *Graphics Feature Status*.
 
 ## Hardware video decode (VA-API)
 
-The image ships `libva2`, `libva-drm2`, `mesa-va-drivers` and `vainfo`, so the
-VA-API driver is available inside the box. Verified on this host:
+The image ships `libva2`, `libva-drm2`, `mesa-va-drivers` and `vainfo`, and that is
+all it takes — Chrome picks VA-API up on its own, with no flag set:
+
+```
+chrome://gpu → Video Decode: Hardware accelerated
+```
+
+Verified on this host (Chrome 148, AMD Radeon 8060S), with no
+`enabled_labs_experiments` in the profile and no `--enable-features` on the command
+line. The driver and its codec coverage:
 
 ```console
 $ distrobox enter chrome-box -- vainfo
@@ -89,28 +97,36 @@ vainfo: Driver version: Mesa Gallium driver 25.2.8 for Radeon 8060S Graphics (ra
       VAProfileAV1Profile0            : VAEntrypointVLD
 ```
 
-Chrome does **not** use it by default on Linux — you have to turn it on, either
-per profile:
+If `chrome://gpu` ever reports *Software only* instead, the fallbacks are
+`chrome://flags/#enable-accelerated-video-decode` → *Enabled*, or launching with
+`--enable-features=VaapiVideoDecodeLinuxGL`. Chrome's Linux VA-API feature names
+change between releases, so check `chrome://gpu` rather than trusting a flag name
+found online — and `vainfo` succeeding only proves the driver loads, not that
+Chrome chose to use it.
 
-- `chrome://flags/#enable-accelerated-video-decode` → *Enabled*, then relaunch,
+**Video *encode* stays on the CPU.** Chrome disables accelerated encode on Linux by
+default (`chrome://gpu` lists it under *Problems Detected* as "disabled … via
+blocklist"), even though `vainfo` advertises `VAEntrypointEncSlice` for H.264,
+HEVC and AV1. It only affects WebRTC calls and screen sharing; enable it with
+`--enable-features=VaapiVideoEncoder` if you need it — untested here.
 
-or per launch, which is what you want for the scripted app-mode windows:
+No flags are baked into the image. Google's `.deb` wrapper no longer sources
+`/etc/default/google-chrome` and honours no `*_FLAGS` variable, and the `app:`
+export reuses Chrome's own `.desktop`, so the only injection point would be
+replacing `/usr/bin/google-chrome-stable` with a wrapper script that `apt upgrade`
+inside the box would undo. Since decode works without flags, there is nothing to
+inject.
 
-```bash
-distrobox enter chrome-box -- google-chrome --enable-features=VaapiVideoDecodeLinuxGL
-```
+### The rest of `chrome://gpu`
 
-Check the result on `chrome://gpu` under *Video Decode* (it should say *Hardware
-accelerated*), and watch a decode actually happen on `chrome://media-internals`
-while a video plays — `vainfo` proving the driver loads is not the same as Chrome
-choosing to use it, and Chrome's Linux VA-API feature names change between
-releases.
-
-No flags are baked into the image: Google's `.deb` wrapper no longer sources
-`/etc/default/google-chrome`, so there is no injection point short of replacing
-`/usr/bin/google-chrome-stable` with a wrapper script — which `apt upgrade` inside
-the box would undo. Leaving it to a flag keeps the decision per profile, which
-also matters because forcing VA-API can produce black frames on some drivers.
+For reference, so a future reader does not mistake a Linux default for a container
+problem: `Vulkan`, `Skia Graphite`, `Direct Rendering Display Compositor`,
+`Raw Draw` and `WebNN` are all *Disabled* on a healthy box — Chrome renders through
+ANGLE/GL on Linux — while `Canvas`, `Compositing`, `Rasterization`, `WebGL` and
+`WebGPU` report *Hardware accelerated*. The *Problems Detected* list is generic
+Mesa workarounds (partial swaps, `KHR_blend_equation_advanced`,
+`GL_MESA_framebuffer_flip_y`, `exit_on_context_lost`); a host-installed Chrome on
+the same GPU prints the same list.
 
 ## Audio
 
