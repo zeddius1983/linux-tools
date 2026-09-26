@@ -101,11 +101,35 @@ Chrome's side is not. Playing a 1080p H.264 clip in this box, Chrome 154:
 | GPU process `/proc/<pid>/maps` | `libva.so.2` mapped, `radeonsi_drv_video.so` **not** | VA-API loaded, driver never opened |
 | GPU process log | `vaapi_wrapper.cc] GetHandle(): … failed to find a suitable render node` | Chrome's own node discovery fails |
 
-`--enable-features=VaapiVideoDecodeLinuxGL`, `AcceleratedVideoDecodeLinuxGL`,
-`VaapiIgnoreDriverChecks` and `--disable-gpu-sandbox` changed none of those numbers.
-Root cause is unresolved: `vainfo` opens `/dev/dri/renderD128` in the same box and
-the GPU process holds six fds on that very node, so it is not a permissions
-problem.
+### Flags that do not help
+
+The popular flag set for this problem was measured, not guessed. Every one of
+these produced an identical reading — VA driver never mapped, `vcn_busy_percent`
+`0`, ~35 % CPU:
+
+```
+--enable-features=VaapiVideoDecodeLinuxGL,VaapiVideoEncoder
+--enable-gpu-rasterization --enable-zero-copy --ignore-gpu-blocklist
+--enable-features=AcceleratedVideoDecodeLinuxGL
+--enable-features=VaapiIgnoreDriverChecks
+--disable-gpu-sandbox
+--use-angle=vulkan
+```
+
+Three of them have nothing to do: `chrome://gpu` already reports *Rasterization:
+Hardware accelerated*, and the only blocklisted item `--ignore-gpu-blocklist`
+could unblock is video **encode**, which needs the same VA-API that is failing.
+
+Ruled out as causes:
+
+- **Permissions** — `vainfo` opens `/dev/dri/renderD128` in the same box, and the
+  GPU process holds six fds on that very node.
+- **A missing udev database** — the container sees all 587 host entries under
+  `/run/udev/data`, and Chrome's `libudev.so.1` is present.
+- **The GL backend** — ANGLE on Vulkan fails identically to ANGLE on GL.
+
+Root cause remains unresolved: Chrome's own render-node discovery gives up before
+it ever opens the driver.
 
 ### How to check it yourself
 
