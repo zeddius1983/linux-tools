@@ -110,7 +110,7 @@ these produced an identical reading — VA driver never mapped, `vcn_busy_percen
 ```
 --enable-features=VaapiVideoDecodeLinuxGL,VaapiVideoEncoder
 --enable-gpu-rasterization --enable-zero-copy --ignore-gpu-blocklist
---enable-features=AcceleratedVideoDecodeLinuxGL
+--enable-features=AcceleratedVideoDecodeLinuxGL,AcceleratedVideoDecodeLinuxZeroCopyGL
 --enable-features=VaapiIgnoreDriverChecks
 --disable-gpu-sandbox
 --use-angle=vulkan
