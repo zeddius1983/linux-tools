@@ -109,49 +109,55 @@ problem.
 
 ### How to check it yourself
 
-**Do not trust `chrome://gpu`.** Its *Video Decode: Hardware accelerated* line
-means "not blocklisted", not "in use" — it says that on this box while decode is
-measurably software.
+`apps/chrome/chrome-decode-check` does all of it. Run it **on the host, while a
+video is actually playing**:
 
-Two checks that do tell the truth:
+```console
+$ ./apps/chrome/chrome-decode-check
+VA driver mapped into a Chrome process : no
+Peak vcn_busy_percent                  : 0%
+Busiest Chrome process over 8s         : 34% of one core
 
-1. **`chrome://media-internals`** — play a video, click the player, look at
-   `video_decoder`: `VaapiVideoDecoder` (with `kIsPlatformVideoDecoder: true`) is
-   hardware; `FFmpegVideoDecoder`, `VpxVideoDecoder` or `Dav1dVideoDecoder` is
-   software.
-2. **The host's video engine counter**, while a 1080p video plays:
+VERDICT: software decode. The CPU is doing the work; the VA driver was
+         never loaded and the video engine stayed idle.
+```
 
-   ```bash
-   watch -n0.5 cat /sys/class/drm/card1/device/vcn_busy_percent   # AMD; 0 = software
-   ps -eo pcpu,args | grep '[t]ype=renderer'                      # ~35% at 1080p = software
-   ```
+It reports three things, in descending order of how much they prove:
 
-   `amdgpu_top` shows the same engine load if you prefer a UI.
+1. **Is a `*_drv_video.so` mapped into a Chrome process?** VA-API decoding cannot
+   happen without the Mesa VA driver being loaded into the GPU process, and it
+   loads lazily on the first hardware decode. Codec-independent and decisive —
+   which is why the video has to be playing when you look.
+2. **Peak `vcn_busy_percent`** (AMD's video engine). `0` throughout means the VCN
+   block never ran. `amdgpu_top` shows the same engine if you prefer a UI, and
+   `amdgpu_top -d` lists what the block can do — here VCN 4.0, decode for
+   AVC/HEVC/VP9/AV1 up to 8K.
+3. **Busiest Chrome process, as a share of one core.** ~35 % at 1080p is the CPU
+   decoding. Under 5 % means nothing was decoding at all, and the script says so
+   rather than calling it a pass.
 
-Two traps when testing this, both of which produce confident nonsense:
+**`gpu_busy_percent` is not one of the signals, and neither is "the GPU looks
+busy".** The graphics engine works hard during *any* video playback — uploading
+frames, colour-converting, compositing, scaling — whether the decode happened on
+the VCN block or on the CPU. Only `vcn_busy_percent` is about decoding.
 
-- **Headless is not a test bed.** `--headless=new` (and `--no-sandbox`) log the
+In the browser, the equivalent is `chrome://media-internals`: play a video, click
+the player, and read `video_decoder`. `VaapiVideoDecoder` (with
+`kIsPlatformVideoDecoder: true`) is hardware; `FFmpegVideoDecoder`,
+`VpxVideoDecoder` or `Dav1dVideoDecoder` is software.
+
+Three traps, all of which manufacture confident nonsense:
+
+- **A stopped video looks exactly like perfect hardware decode** — 0 % engine, no
+  CPU. Paused, muted-in-a-hidden-tab, or failed to load all read the same. The
+  script's under-5 % verdict exists for this. (Google's old
+  `gtv-videos-bucket/sample/*.mp4` URLs now return **403**, and YouTube blocks a
+  fresh throwaway profile with "Sign in to confirm you're not a bot", so a scripted
+  test can easily measure a blank page.)
+- **Headless is not a test bed.** `--headless=new` and `--no-sandbox` log the
   VA-API render-node warning unconditionally, whether or not decode works in a real
   window.
-- **Make sure the video is actually playing.** A paused or failed `<video>` reads
-  exactly like perfect hardware decode: 0 % engine load, no CPU. Confirm playback
-  before believing a number — e.g. a page whose script writes `currentTime` into
-  `document.title`, read from the host with `wmctrl -l`. (Google's old
-  `gtv-videos-bucket` sample URLs now return 403, which is an easy way to measure
-  nothing at all for half an hour.)
-
-Video *encode* is software too, and separately so: Chrome blocklists accelerated
-encode on Linux regardless of the `VAEntrypointEncSlice` support `vainfo`
-advertises.
-
-No flags are baked into the image, and there would be nowhere good to put them:
-Google's `.deb` wrapper no longer sources `/etc/default/google-chrome` and honours
-no `*_FLAGS` variable, and the `app:` export reuses Chrome's own `.desktop`, so the
-only injection point is replacing `/usr/bin/google-chrome-stable` with a wrapper
-that `apt upgrade` inside the box would undo. Since no flag combination helped,
-there is nothing worth injecting. The VA packages stay because they cost ~5 MB, are
-the prerequisite for the day Chrome's discovery works, and `vainfo` is what tells
-you where the problem is.
+- **`chrome://gpu` is a blocklist status, not a fact about playback** — see above.
 
 ### The rest of `chrome://gpu`
 
