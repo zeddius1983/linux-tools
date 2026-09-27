@@ -1,0 +1,148 @@
+#!/usr/bin/env bash
+# Is chrome-box's Chrome decoding video on the GPU, or on the CPU?
+#
+# Run this ON THE HOST while a video is actually PLAYING (not paused, not in a
+# hidden tab -- Chrome suspends decode for both, and a stopped video reads
+# exactly like flawless hardware decode).
+
+set -uo pipefail
+
+SECS="${1:-8}"
+FLAG="disable-gpu-driver-bug-workarounds"
+
+pids=$(pgrep -f '/opt/google/chrome/chrome' || true)
+if [[ -z "$pids" ]]; then
+    echo "No Chrome processes found. Is chrome-box's Chrome running?" >&2
+    exit 1
+fi
+
+# 1. Per-engine GPU time from DRM fdinfo -- the ground truth, and independent of
+#    resolution and codec.
+#
+#    Do not expect drm-engine-dec: on VCN 4.x the decoder rides the *unified*
+#    VCN queue, which the kernel accounts to drm-engine-enc, so hardware DECODE
+#    shows up under "enc" (plus "vpe" for the scaling/colour-conversion block).
+#    Measured here: enc ~22%, vpe ~27% decoding 1080p; both absent entirely in
+#    software. This is also why amdgpu_top's Media row and
+#    /sys/class/drm/card*/device/vcn_busy_percent both read 0 on gfx1151 during
+#    confirmed hardware decode -- they do not track that queue.
+#    Printed with %.0f, not print: these are cumulative nanoseconds since the
+#    process started, so they pass INT32_MAX after ~2 seconds of engine time, and
+#    older mawk renders such values through OFMT as "3.5e+09" -- which bash
+#    arithmetic cannot parse, losing the sample and reporting software decode
+#    while the counters are plainly climbing.
+sample_engines() {
+    awk '/^drm-engine-/ { gsub(":", "", $1); sums[$1] += $2 }
+         END { for (k in sums) printf "%s %.0f\n", k, sums[k] }' \
+        /proc/"$1"/fdinfo/* 2>/dev/null
+}
+
+declare -A e0 e1
+for p in $pids; do
+    while read -r name ns; do
+        [[ -n "${name:-}" ]] && e0[$name]=$(( ${e0[$name]:-0} + ns ))
+    done < <(sample_engines "$p")
+done
+
+# 2. Total Chrome CPU, as the cross-check: ~35% of one core at 1080p is the CPU
+#    doing the decoding, ~7% is the VCN block doing it.
+hz=$(getconf CLK_TCK)
+#    Prints nothing when the process is gone, which the delta loop below treats
+#    as "skip this pid" rather than as zero: a tab closed mid-measurement would
+#    otherwise subtract its entire lifetime CPU from the total and make it
+#    negative, turning live software decode into "nothing was decoding".
+cpu_ticks() {
+    awk '{ for (i = 1; i <= NF; i++) if ($i ~ /\)$/) { printf "%.0f\n", $(i+12) + $(i+13); exit } }' \
+        "/proc/$1/stat" 2>/dev/null
+}
+declare -A t0
+for p in $pids; do t0[$p]=$(cpu_ticks "$p"); done
+
+sleep "$SECS"
+
+for p in $pids; do
+    while read -r name ns; do
+        [[ -n "${name:-}" ]] && e1[$name]=$(( ${e1[$name]:-0} + ns ))
+    done < <(sample_engines "$p")
+done
+total_cpu=0
+busiest_pid=""
+busiest_ticks=0
+for p in $pids; do
+    t1=$(cpu_ticks "$p")
+    # Gone, never sampled, or a counter that went backwards: no usable delta.
+    [[ -z "$t1" || -z "${t0[$p]:-}" ]] && continue
+    (( t1 < t0[$p] )) && continue
+    delta_ticks=$(( t1 - t0[$p] ))
+    total_cpu=$(( total_cpu + 100 * delta_ticks / hz / SECS ))
+    (( delta_ticks > busiest_ticks )) && { busiest_ticks=$delta_ticks; busiest_pid=$p; }
+done
+
+# 3. Was the flag actually applied? The image's wrapper adds it from
+#    /etc/chrome-flags.conf, so it shows up here even though nothing typed it.
+#
+#    Scoped to the browser instance doing the work, by walking up from the
+#    busiest process to its browser process -- that is the one the wrapper put
+#    the flags on. Two things that do NOT work: checking "any Chrome process"
+#    reports a flag belonging to an unrelated window, and grouping by
+#    --user-data-dir fails because renderers do not carry it.
+browser_of() {
+    local pid="$1" ppid
+    while :; do
+        ppid=$(awk '/^PPid:/ { print $2 }' "/proc/$pid/status" 2>/dev/null)
+        [[ -z "$ppid" || "$ppid" == 0 ]] && break
+        tr '\0' ' ' < "/proc/$ppid/cmdline" 2>/dev/null \
+            | grep -q '/opt/google/chrome/chrome' || break
+        pid="$ppid"
+    done
+    echo "$pid"
+}
+
+has_flag=no
+flag_scope="(no busy process found)"
+if [[ -n "$busiest_pid" ]]; then
+    browser_pid=$(browser_of "$busiest_pid")
+    flag_scope="pid $browser_pid"
+    tr '\0' ' ' < "/proc/$browser_pid/cmdline" 2>/dev/null \
+        | grep -q -- "--$FLAG" && has_flag=yes
+fi
+
+video_ns=0
+echo "--$FLAG : $has_flag   [browser $flag_scope]"
+echo "Total Chrome CPU over ${SECS}s              : ${total_cpu}% of one core"
+echo "GPU engine time over ${SECS}s:"
+for name in "${!e1[@]}"; do
+    delta=$(( e1[$name] - ${e0[$name]:-0} ))
+    (( delta <= 0 )) && continue
+    printf '  %-22s %4d ms  (%2d%%)\n' \
+        "$name" "$(( delta / 1000000 ))" "$(( delta / 10000000 / SECS ))"
+    case "$name" in
+        drm-engine-dec|drm-engine-enc|drm-engine-vpe|drm-engine-jpeg)
+            (( delta > video_ns )) && video_ns=$delta ;;
+    esac
+done
+(( video_ns == 0 )) && echo "  (no video-engine time)"
+echo
+
+# 1 ms of engine time over the whole window: enough to rule out a stray blip,
+# low enough that any real decode clears it (1080p60 spends ~2 seconds).
+if (( video_ns > 1000000 )); then
+    echo "VERDICT: hardware decode — the video engines are doing the work."
+    echo "         Chrome's own confirmation: chrome://media-internals should say"
+    echo "         \"Selected VaapiVideoDecoder for video decoding\"."
+elif (( video_ns > 0 )); then
+    echo "VERDICT: inconclusive — a trace of video-engine time (${video_ns} ns), too"
+    echo "         little to call. Play something longer or larger and re-run."
+elif (( total_cpu < 3 )); then
+    echo "VERDICT: nothing was decoding — the video is paused, muted-and-hidden, or"
+    echo "         never loaded. A stopped video looks exactly like perfect hardware"
+    echo "         decode. Start playback and run this again."
+elif [[ "$has_flag" == no ]]; then
+    echo "VERDICT: software decode. Chrome disabled VA-API (\"detected driver bug\")"
+    echo "         because the flag is missing. Rebuild with 'tools setup chrome',"
+    echo "         or add it to ~/.config/chrome-flags.conf inside the box."
+else
+    echo "VERDICT: software decode despite the flag. Check 'vainfo' inside the box,"
+    echo "         and whether this clip's codec is one the VCN block supports"
+    echo "         ('amdgpu_top -d' lists them)."
+fi
