@@ -149,20 +149,29 @@ means libpci is missing in that container** — a useful check for any GUI box h
 
 ```console
 $ ./apps/chrome/chrome-decode-check
---disable-gpu-driver-bug-workarounds : yes
+--disable-gpu-driver-bug-workarounds : yes   [browser pid 457083]
 Total Chrome CPU over 8s              : 7% of one core
 GPU engine time over 8s:
-  drm-engine-gfx           2%
-  drm-engine-enc          23%
-  drm-engine-vpe          28%
+  drm-engine-gfx          175 ms  ( 2%)
+  drm-engine-enc         1786 ms  (22%)
+  drm-engine-compute        2 ms  ( 0%)
+  drm-engine-vpe         2178 ms  (27%)
 
 VERDICT: hardware decode — the video engines are doing the work.
 ```
 
 It reads per-engine GPU time from the Chrome processes' DRM `fdinfo`, which is
 ground truth and independent of codec and resolution, and cross-checks total
-Chrome CPU (~35 % of one core at 1080p = software, ~7 % = hardware). Under 3 %
-CPU means nothing was playing, and it says so rather than calling that a pass.
+Chrome CPU (~35 % of one core at 1080p = software, ~7 % = hardware).
+
+The verdict turns on *any* video-engine time rather than a utilisation
+percentage — in software those engines are absent from `fdinfo` entirely, while a
+480p or low-frame-rate stream can decode in hardware using well under 1 % of the
+engine. Below 1 ms of engine time it says "inconclusive" instead of guessing, and
+under 3 % CPU it reports that nothing was playing rather than calling an idle
+browser a pass. The flag is read from the browser process of whichever instance
+is busiest (shown in brackets), so a second Chrome window cannot lend its flag to
+the one you are measuring.
 
 In the browser: `chrome://media-internals` → play something → click the player.
 Hardware decode says, in as many words:
@@ -253,9 +262,15 @@ sharing one profile is how profiles get corrupted.
 ## Notes
 
 - **Chrome updates itself via APT inside the box**, not through the host package
-  manager. `distrobox enter chrome-box -- sudo apt-get update && sudo apt-get
-  upgrade` bumps it in place; `tools setup chrome` rebuilds the image from the
-  current stable `.deb` and keeps your profile.
+  manager. Both halves have to run inside the box — a bare `&& sudo apt-get
+  upgrade` would upgrade the *host* and leave Chrome untouched:
+
+  ```bash
+  distrobox enter chrome-box -- bash -c 'sudo apt-get update && sudo apt-get upgrade'
+  ```
+
+  `tools setup chrome` rebuilds the image from the current stable `.deb` instead,
+  and keeps your profile.
 - **"Install as app" (PWA) shortcuts need a re-export to work from the host
   menu.** Chrome writes them into the shared `~/.local/share/applications/` as
   `chrome-<app-id>-Default.desktop` with `Exec=/opt/google/chrome/google-chrome
