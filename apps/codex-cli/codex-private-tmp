@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Work around Codex's Btrfs socket-device mismatch (openai/codex#47415).
+# The mount namespace lasts for this launch; the host's /tmp stays intact.
+set -euo pipefail
+
+bwrap_args=(--bind / / --tmpfs /tmp)
+
+# Distrobox exposes the host root at /run/host. Bazzite also backs /tmp
+# with /var/lib/system-tmp. Hide these alternate views of the old sockets.
+for tmp_alias in /run/host/tmp /var/lib/system-tmp /run/host/var/lib/system-tmp; do
+    if [[ -d "$tmp_alias" ]]; then
+        bwrap_args+=(--tmpfs "$tmp_alias")
+    fi
+done
+
+exec /usr/bin/bwrap "${bwrap_args[@]}" \
+    --unshare-user --unshare-pid --proc /proc --dev-bind /dev /dev \
+    -- /usr/bin/codex --no-daemon "$@"

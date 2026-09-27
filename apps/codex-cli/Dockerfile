@@ -47,7 +47,8 @@ RUN echo "==> Installing Codex ${CODEX_RELEASE} (cache-bust: ${CACHE_BUST})" \
 # `command -pv` (used to resolve exports) does not search /usr/local/bin.
 COPY codex-cli-install /usr/bin/codex-cli-install
 COPY codex-tmux /usr/bin/codex-tmux
+COPY codex-private-tmp /usr/bin/codex-private-tmp
 COPY codex-statusline.sh codex-tmux.conf /usr/share/codex-cli/
-RUN chmod +x /usr/bin/codex-cli-install /usr/bin/codex-tmux \
+RUN chmod +x /usr/bin/codex-cli-install /usr/bin/codex-tmux /usr/bin/codex-private-tmp \
     && chmod 0644 /usr/share/codex-cli/codex-tmux.conf \
     && chmod 0755 /usr/share/codex-cli/codex-statusline.sh

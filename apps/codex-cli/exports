@@ -1,2 +1,3 @@
 bin:codex
+bin:codex-private-tmp
 desktop:codex:Codex CLI

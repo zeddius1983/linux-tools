@@ -25,6 +25,33 @@ done
 
 command -v tmux >/dev/null 2>&1 || { echo "codex-tmux: tmux not found" >&2; exit 1; }
 
+codex_command=codex
+case ${CODEX_PRIVATE_TMP:-auto} in
+    1)
+        codex_command=codex-private-tmp
+        ;;
+    0)
+        ;;
+    auto)
+        # Exercise the ordinary launcher (including its daemon) without
+        # starting a billed session. If upstream fixes the mount check, this
+        # succeeds and the private-/tmp workaround is no longer used.
+        if probe_output=$(codex sandbox -- /usr/bin/true 2>&1); then
+            :
+        elif [[ $probe_output == *'cannot establish app-server socket mount isolation'* ]]; then
+            codex_command=codex-private-tmp
+            echo 'codex-tmux: sandbox socket isolation failed; using private /tmp' >&2
+        else
+            echo 'codex-tmux: sandbox check failed unexpectedly; launching normal Codex:' >&2
+            printf '%s\n' "$probe_output" >&2
+        fi
+        ;;
+    *)
+        echo 'codex-tmux: CODEX_PRIVATE_TMP must be auto, 1, or 0' >&2
+        exit 2
+        ;;
+esac
+
 # A dedicated socket (-L codex) so this never joins, restyles, or is killed
 # alongside the user's own tmux server.
 #
@@ -39,4 +66,4 @@ exec tmux -L codex -f "$CONF" \
     -e "CODEX_STATUSLINE_SINCE=$(date +%s)" \
     -e "CODEX_STATUSLINE_CWD=$PWD" \
     -c "$PWD" \
-    -- codex "$@"
+    -- "$codex_command" "$@"

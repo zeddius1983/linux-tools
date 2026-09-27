@@ -86,7 +86,7 @@ reports from other distros are welcome.
 | App | What it is |
 |---|---|
 | [`claude-code`](apps/claude-code/README.md) | Anthropic's Claude Code CLI |
-| [`codex-cli`](apps/codex-cli/README.md) | OpenAI Codex CLI |
+| [`codex-cli`](apps/codex-cli/README.md) | OpenAI Codex CLI, with automatic `codex-tmux` fallback for Btrfs sandbox failures |
 | `copilot-cli` | GitHub Copilot CLI |
 | `opencode` | OpenCode agent CLI |
 | `antigravity` | Antigravity CLI (`agy`) |
