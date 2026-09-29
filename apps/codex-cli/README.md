@@ -39,7 +39,6 @@ keep `~/.codex/` untouched.
 | Export | Type | Description |
 |---|---|---|
 | `codex` | `bin` | Codex CLI on the host `PATH` |
-| `codex-private-tmp` | `bin` | Codex with a private tmpfs `/tmp`, for the [Btrfs sandbox workaround](#btrfs-sandbox-workaround) |
 | `codex-tmux` | `bin` | *Optional.* Codex with the [powerline status bar](#powerline-status-bar-optional). Added only if you tick **tmux-statusline** in the wizard, and removed if you untick it |
 | `Codex CLI` | `desktop` | Codex in a terminal from the app menu |
 
@@ -59,61 +58,12 @@ codex resume
 codex --version
 ```
 
-## Btrfs sandbox workaround
+## Btrfs sandbox note
 
-Codex 0.156.0 and 0.157.1 can fail before running a sandboxed command with
-`cannot establish app-server socket mount isolation`. On affected Btrfs mounts,
-the socket directory's device number differs from its `/proc/self/mountinfo`
-entry. See [upstream issue #47415](https://github.com/openai/codex/issues/47415).
-
-Use the included workaround command:
-
-```bash
-codex-private-tmp resume --last
-codex-private-tmp sandbox -- /usr/bin/true
-
-# With the optional powerline status bar, detection is automatic
-codex-tmux resume --last
-```
-
-`codex-tmux` checks the ordinary Codex sandbox at startup. If it encounters
-this exact socket-isolation error, it starts Codex with the private-`/tmp`
-launcher. Once the check succeeds in a fixed Codex release, it starts ordinary
-Codex instead. The check runs `/usr/bin/true` inside the sandbox and does not
-start a billed agent session. Set `CODEX_PRIVATE_TMP=1` to force the workaround,
-or `CODEX_PRIVATE_TMP=0` to force ordinary Codex and skip the check. Direct
-`codex` launches are unchanged; use `codex-private-tmp` for those when needed.
-
-Each launch mounts a fresh tmpfs at `/tmp` in its own mount and PID namespaces.
-Existing alternate views at `/run/host/tmp`, `/var/lib/system-tmp`, and
-`/run/host/var/lib/system-tmp` are hidden with tmpfs too, keeping old privileged
-daemon sockets inaccessible through those paths.
-It passes `--no-daemon` to keep the session in that namespace rather than reuse
-the shared background server. Codex's filesystem and network sandbox policies
-remain enabled; authentication, configuration, and session history still use
-the shared `~/.codex/` directory.
-
-Temporary files and sockets from the normal `/tmp` are unavailable to this
-session, and files written to its private `/tmp` disappear when it exits.
-Save anything you want to retain under your home or project directory.
-Use ordinary `codex` for shared daemon management.
-
-To try it in an existing box before rebuilding, run this from a host terminal
-in your project directory:
-
-```bash
-distrobox enter codex-cli-box -- bwrap \
-    --bind / / --tmpfs /tmp --tmpfs /run/host/tmp \
-    --unshare-user --unshare-pid \
-    --proc /proc --dev-bind /dev /dev \
-    -- /usr/bin/codex --no-daemon resume --last
-```
-
-This affects only the new launch. The host's `/tmp` and any existing Codex
-daemon remain in place. The workaround requires a Codex version supporting
-`--no-daemon` and Bubblewrap/user namespaces, provided by the current image.
-On hosts where `/tmp` is backed by `/var/lib/system-tmp`, use the packaged
-launcher so those alternate paths are hidden as well.
+Codex 0.156.0–0.157.1 could fail on affected Btrfs mounts with
+`cannot establish app-server socket mount isolation`. The fix shipped in
+[Codex CLI 0.158.0](https://learn.chatgpt.com/docs/changelog). If you pin a
+release, choose 0.158.0 or newer; `latest` already includes the fix.
 
 ## Status line (optional)
 
