@@ -50,22 +50,46 @@ RUN apt-get update \
        libvulkan-dev glslc spirv-headers \
     && rm -rf /var/lib/apt/lists/*
 
-# Release tag (b####) to build. "latest" resolves the newest tag at build
-# time; the interactive setup wizard offers the last 10 releases (LLAMA_REF).
+# Release to build: a vX.Y.Z release, a b#### build tag, or "latest" for the
+# newest b#### build. The interactive setup wizard offers "latest" plus the 10
+# newest vX.Y.Z releases (LLAMA_REF).
+#
+# The build number goes to cmake explicitly: a --depth 1 clone would otherwise
+# report "build 1". A vX.Y.Z tag sits on the same commit as a b#### tag, so its
+# build number is that tag's; it also builds with LLAMA_BUILD_IS_DEV=OFF so
+# --version says "0.6.0" rather than "0.6.0-dev", as upstream's release does.
+#
 # CACHE_BUST is passed fresh by tools.sh on every build, forcing this layer to
 # re-run instead of reusing a stale cached clone; the apt layers above stay
 # cached.
 ARG CACHE_BUST=0
 ARG LLAMA_REF=latest
 RUN set -e; \
+    repo=https://github.com/ggml-org/llama.cpp; \
     ref="$LLAMA_REF"; \
     if [ "$ref" = "latest" ]; then \
-        ref="b$(git ls-remote --tags --refs https://github.com/ggml-org/llama.cpp 'b*' \
+        ref="b$(git ls-remote --tags --refs "$repo" 'b*' \
             | sed 's|.*refs/tags/b||' | grep -E '^[0-9]+$' | sort -n | tail -1)"; \
     fi; \
-    echo "==> Building llama.cpp release ${ref} for ${LLAMA_GPU} (cache-bust: ${CACHE_BUST})"; \
-    git clone --depth 1 --branch "${ref}" https://github.com/ggml-org/llama.cpp /src; \
-    echo "${ref#b}" > /src/.build-number
+    case "$ref" in \
+        b[0-9]*) build="${ref#b}"; dev=ON ;; \
+        v[0-9]*) \
+            commit="$(git ls-remote --tags "$repo" "refs/tags/${ref}^{}" "refs/tags/${ref}" \
+                | sort -k2 -r | head -1 | cut -f1)"; \
+            build="$(git ls-remote --tags --refs "$repo" 'b*' \
+                | awk -v c="$commit" '$1 == c { sub(".*refs/tags/b", "", $2); print $2 }' \
+                | grep -E '^[0-9]+$' | sort -n | tail -1 || true)"; \
+            dev=OFF; \
+            if [ -z "$build" ]; then \
+                echo "WARNING: no b#### tag on ${ref}'s commit; --version will report build 0" >&2; \
+                build=0; \
+            fi ;; \
+        *) echo "Unknown LLAMA_REF '${ref}' (want latest, vX.Y.Z or b####)" >&2; exit 1 ;; \
+    esac; \
+    echo "==> Building llama.cpp ${ref} (build ${build}) for ${LLAMA_GPU} (cache-bust: ${CACHE_BUST})"; \
+    git clone --depth 1 --branch "${ref}" "$repo" /src; \
+    echo "$build" > /src/.build-number; \
+    echo "$dev" > /src/.build-is-dev
 
 WORKDIR /src
 
@@ -88,6 +112,7 @@ RUN set -e; \
     esac; \
     cmake -S . -B build \
         -DLLAMA_BUILD_NUMBER="$(cat .build-number)" \
+        -DLLAMA_BUILD_IS_DEV="$(cat .build-is-dev)" \
         "$@" \
         -DGGML_VULKAN=ON \
         -DGGML_BACKEND_DL=ON \

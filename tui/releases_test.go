@@ -13,6 +13,11 @@ import (
 func releaseServer(t *testing.T, body string) string {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Single-tag lookups (attachNotes' fallback) find nothing here.
+		if strings.Contains(r.URL.Path, "/releases/tags/") {
+			http.NotFound(w, r)
+			return
+		}
 		if !strings.HasSuffix(r.URL.Path, "/releases") {
 			t.Errorf("unexpected path %q", r.URL.Path)
 		}
@@ -170,6 +175,43 @@ func TestLatestRespectsTheTagTemplate(t *testing.T) {
 	attachNotes(context.Background(), Page{NotesRepo: "openai/codex", NotesTag: "rust-v%s"}, items)
 	if items[0].Notes != "cli notes" || !strings.Contains(items[0].NotesTitle, "rust-v0.153.0") {
 		t.Errorf("latest = %+v, want the newest rust-v release", items[0])
+	}
+}
+
+// A value the bulk list is too shallow to reach is fetched by its own tag, and
+// "latest" can resolve within a different train than the listed values:
+// llama.cpp lists vX.Y.Z releases while its "latest" is the newest b#### build.
+func TestAttachNotesFetchesMissesAndLatestTag(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/repos/ggml-org/llama.cpp/releases":
+			_, _ = w.Write([]byte(`[
+			 {"tag_name":"b11455","body":"nightly notes","prerelease":true},
+			 {"tag_name":"v0.6.0","body":"v0.6.0 notes"}
+			]`))
+		case "/repos/ggml-org/llama.cpp/releases/tags/v0.5.0":
+			_, _ = w.Write([]byte(`{"tag_name":"v0.5.0","body":"v0.5.0 notes"}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	old := ghAPIBase
+	ghAPIBase = srv.URL
+	defer func() { ghAPIBase = old }()
+
+	items := []Item{{Name: "latest"}, {Name: "v0.6.0"}, {Name: "v0.5.0"}, {Name: "v0.4.0"}}
+	attachNotes(context.Background(), Page{NotesRepo: "ggml-org/llama.cpp", LatestTag: "b%s"}, items)
+
+	if items[0].Notes != "nightly notes" || !strings.Contains(items[0].NotesTitle, "b11455") {
+		t.Errorf("latest = %+v, want the newest b#### build", items[0])
+	}
+	if items[1].Notes != "v0.6.0 notes" || items[2].Notes != "v0.5.0 notes" {
+		t.Errorf("notes = %q, %q", items[1].Notes, items[2].Notes)
+	}
+	if items[3].Notes != "" {
+		t.Errorf("missing release got notes: %+v", items[3])
 	}
 }
 

@@ -93,6 +93,9 @@ func TestBuildargItemsCmdSurvivesPipes(t *testing.T) {
 	if p.NotesRepo != "ggml-org/llama.cpp" {
 		t.Errorf("NotesRepo = %q", p.NotesRepo)
 	}
+	if p.LatestTag != "b%s" {
+		t.Errorf("LatestTag = %q, want b%%s", p.LatestTag)
+	}
 	if len(p.Items) != 0 {
 		t.Errorf("buildarg body should yield no items, got %d", len(p.Items))
 	}

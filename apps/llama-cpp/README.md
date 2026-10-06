@@ -8,7 +8,7 @@
 
 llama.cpp LLM inference engine, compiled from source for the GPU stack you pick at install time — **ROCm 7.2**, **ROCm 10.0** or **NVIDIA CUDA** — with the Vulkan backend built alongside in every variant, packaged as a Distrobox container.
 
-Backends are dynamically loaded plugins (`GGML_BACKEND_DL`), so one GPU shows up once per backend and you pick per run with `--device`. Each install builds an upstream [release tag](https://github.com/ggml-org/llama.cpp/releases) (`llama-server --version` reports it). Supports GGUF models for chat, HTTP API serving, quantization, and HuggingFace model conversion — all via a single `llama` dispatcher command.
+Backends are dynamically loaded plugins (`GGML_BACKEND_DL`), so one GPU shows up once per backend and you pick per run with `--device`. Each install builds an upstream [release](https://github.com/ggml-org/llama.cpp/releases) — a `vX.Y.Z` version or the newest nightly `b####` build (`llama-server --version` reports it). Supports GGUF models for chat, HTTP API serving, quantization, and HuggingFace model conversion — all via a single `llama` dispatcher command.
 
 ## Install
 
@@ -26,7 +26,9 @@ Run interactively, the wizard asks two questions:
    | **ROCm 10.0** | `rocm/dev-ubuntu-24.04:10.0.0-full` | `ROCm0` + `Vulkan0` (Mesa RADV) | `/dev/kfd` + `/dev/dri` |
    | **CUDA 12** | `nvidia/cuda:12.8.1-devel` → `-runtime` | `CUDA0` + `Vulkan0` (NVIDIA driver) | CDI `nvidia.com/gpu=all` |
 
-2. **Release** — one of the 10 latest upstream tags (default: the newest), with each tag's release notes shown beside the list (`PgDn`/`PgUp` scrolls them). llama.cpp marks nearly every build as a pre-release, so that label next to the date is normal.
+2. **Release** — `latest` (default) or one of the 10 newest `vX.Y.Z` releases, with each one's release notes shown beside the list (`PgDn`/`PgUp` scrolls them).
+   - `latest` is the newest nightly build tag (`b####`) at build time — llama.cpp cuts one for nearly every commit, so it is effectively `master`. Upstream marks these as pre-releases, hence the label beside it.
+   - `vX.Y.Z` are upstream's versioned releases, cut every week or two. `--version` reports them as e.g. `version: 0.6.0 (build 11429, …)` — the build number is that of the `b####` tag on the same commit. (`v0.1.0` has no such tag and reports build 0.)
 
 Both answers are baked in at build time: re-run `tools setup llama-cpp` to switch runtime or release. Models live wherever you keep them in `$HOME`, so they survive the rebuild. `cat /etc/llama-cpp-gpu` inside the box shows which runtime it was built as.
 
@@ -36,20 +38,20 @@ This app used to be called `llama-cpp-rocm`. The first `tools setup llama-cpp` r
 
 ### Non-interactive install
 
-With no wizard (a scripted `tools setup llama-cpp`, or a non-tty shell) you get **ROCm 7.2 at the newest release**. To pin either answer, hand `tools` a wizard state file:
+With no wizard (a scripted `tools setup llama-cpp`, or a non-tty shell) you get **ROCm 7.2 at `latest`** (the newest `b####` build). To pin either answer, hand `tools` a wizard state file:
 
 ```bash
 cat > /tmp/llama-cpp.state <<'EOF'
 APP="llama-cpp"
 ACTION="setup"
-BUILD_ARGS="--build-arg LLAMA_GPU=cuda12 --build-arg LLAMA_REF=b10948"
+BUILD_ARGS="--build-arg LLAMA_GPU=cuda12 --build-arg LLAMA_REF=v0.6.0"
 VARIANT="cuda12"
 EOF
 
 LT_SKIP_WIZARD=1 LT_WIZARD_STATE=/tmp/llama-cpp.state tools setup llama-cpp
 ```
 
-`BUILD_ARGS` and `VARIANT` must agree: `LLAMA_GPU` picks the image, `VARIANT` picks `create_flags.<variant>`. A CUDA image created with the default (AMD) flags has no GPU at all. `rocm10` has no flags file of its own and uses the default `create_flags`, same as `rocm`.
+`LLAMA_REF` takes `latest`, a `vX.Y.Z` release, or a specific `b####` build tag. `BUILD_ARGS` and `VARIANT` must agree: `LLAMA_GPU` picks the image, `VARIANT` picks `create_flags.<variant>`. A CUDA image created with the default (AMD) flags has no GPU at all. `rocm10` has no flags file of its own and uses the default `create_flags`, same as `rocm`.
 
 To cut build time while testing, limit the architectures: `--build-arg ROCM_DOCKER_ARCH=gfx1151` (ROCm) or `--build-arg CUDA_DOCKER_ARCH=89` (CUDA).
 

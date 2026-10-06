@@ -51,7 +51,11 @@ type Page struct {
 	NotesRepo     string
 	NotesTag      string // tag template, "%s" = the item value
 	NotesLimit    int
-	Extra         []string // literal values appended after the fetched releases
+	// LatestTag is the tag template "latest" resolves within, when that is not
+	// the train the items come from: llama.cpp offers vX.Y.Z releases, but its
+	// "latest" builds the newest b#### tag. Empty means NotesTag.
+	LatestTag string
+	Extra     []string // literal values appended after the fetched releases
 }
 
 // AppliesTo mirrors the action gate in _wizard_run_page.
@@ -143,6 +147,8 @@ func parsePage(path string) (Page, error) {
 					if len(fields) > 3 {
 						p.NotesLimit = atoiOr(fields[3], 0)
 					}
+				case "latest-tag":
+					p.LatestTag = strings.TrimSpace(fields[1])
 				case "extra":
 					if v := strings.TrimSpace(fields[1]); v != "" {
 						p.Extra = append(p.Extra, v)

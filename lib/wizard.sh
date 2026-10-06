@@ -25,6 +25,11 @@
 #                                     tag; "%s" in the template is the item
 #                                     value (e.g. "rust-v%s"). Dashboard-only —
 #                                     ignored here.
+#                 latest-tag|<tag-template>
+#                                     the tags a "latest" item resolves within
+#                                     for its notes, when they differ from the
+#                                     listed ones (llama.cpp lists vX.Y.Z but
+#                                     "latest" builds b####). Dashboard-only.
 #   .runtime  → radiolist; picks a create-time variant (consumed by cmd_create
 #               via wizard_create_variant, no post-action apply step). Body lines
 #               are items: Label|value|description (first line = default). The
@@ -219,7 +224,7 @@ _wizard_run_buildarg_page() {
             releases)   rel_repo="${val%%|*}"
                         [[ "$val" == *"|"* ]] && rel_count="${val#*|}" ;;
             extra)      extras+=("${val%%|*}") ;;
-            notes-repo) : ;;  # notes have nowhere to go in whiptail
+            notes-repo|latest-tag) : ;;  # notes have nowhere to go in whiptail
         esac
     done < <(tail -n +4 "$page")
 

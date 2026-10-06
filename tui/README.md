@@ -178,6 +178,7 @@ Two optional lines go with it:
 | Line | Effect |
 |---|---|
 | `extra\|master` | a literal choice listed after the releases — a branch is not a release, and gets no notes (`apps/comfyui`) |
+| `latest-tag\|tag-template` | the tags a `latest` value resolves within for its notes, when they are not the listed ones: `apps/llama-cpp` lists `vX.Y.Z` releases but its `latest` builds the newest `b####` tag, so it says `b%s` |
 | `notes-repo\|owner/repo[\|tag-template[\|count]]` | notes for a page that keeps its own `items-cmd`: each value is matched to a release tag, with `%s` in the template standing for the value (`rust-v%s` for `apps/codex-cli`, whose values are bare versions of a `rust-v` tag) |
 
 `notes-repo` is decoration on a list that already works, so a rate-limited or
@@ -186,14 +187,16 @@ into the feed than a `releases|` page does (50 vs 10), because a repo that
 publishes several trains from one repo interleaves them and the newest ten
 releases may contain barely any of the tags being offered. A value of `latest`
 is not a tag: it resolves to the newest release the template can name, labelled
-with the tag it resolved to.
+with the tag it resolved to. Values the 50 entries do not reach are looked up
+one tag at a time (a request each) — llama.cpp publishes a `b####` build per
+commit, so its `vX.Y.Z` releases sit hundreds of entries apart.
 
 `GITHUB_TOKEN` or `GH_TOKEN`, when set, is sent as a bearer token — anonymous
 API calls are limited to 60 per hour per address. Nothing prompts for one.
 
 The whiptail fallback understands `releases|` and `extra|` too, deriving the
 same tag list with `curl`; it has nowhere to put notes, so it ignores
-`notes-repo`.
+`notes-repo` and `latest-tag`.
 
 Ticked state is what will exist *after* the run, not what to add: unticking an
 already-installed tool removes it. The review screen before the run spells that
