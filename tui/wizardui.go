@@ -45,10 +45,18 @@ type wizardSession struct {
 	app    App
 	action string
 	pages  []wizPage
-	idx    int
-	cursor int
 	stage  wizStage
 	home   string
+
+	// steps are what the tab bar shows and ←/→ walk: usually one page each,
+	// but .buildarg pages that set the same build arg are alternative views of
+	// one step (llama.cpp's Release and Build lists both answer LLAMA_REF), and
+	// [/] switch between them. Each entry holds indexes into pages, in file
+	// order; alt is the view showing per step, and only it answers.
+	steps  [][]int
+	alt    []int
+	idx    int // current step
+	cursor int
 
 	// Release-notes panel: scroll offset for the highlighted item, and the
 	// rendered markdown cached per (tag, width) — glamour is slow enough that
@@ -117,6 +125,8 @@ func newWizardSession(a App, action, home string) (*wizardSession, tea.Cmd) {
 	if len(w.pages) == 0 {
 		return nil, nil
 	}
+	w.steps = groupSteps(w.pages)
+	w.alt = make([]int, len(w.steps))
 	return w, tea.Batch(cmds...)
 }
 
@@ -187,11 +197,70 @@ func (m *model) resolveWizardItems() {
 	}
 }
 
+// groupSteps folds .buildarg pages that set the same build arg into one step.
+// One build arg can only take one value, so two pages naming it can only be
+// alternatives; treating them as consecutive steps would ask the question
+// twice and pass the arg twice, with the last silently winning. A step sits
+// where its first page does.
+func groupSteps(pages []wizPage) [][]int {
+	var steps [][]int
+	byArg := map[string]int{}
+	for i, p := range pages {
+		if p.Type == "buildarg" && p.ArgName != "" {
+			if s, ok := byArg[p.ArgName]; ok {
+				steps[s] = append(steps[s], i)
+				continue
+			}
+			byArg[p.ArgName] = len(steps)
+		}
+		steps = append(steps, []int{i})
+	}
+	return steps
+}
+
+// pageIndex is the index into pages of the view showing on the current step,
+// or -1 when there is none.
+func (w *wizardSession) pageIndex() int {
+	if w.idx < 0 || w.idx >= len(w.steps) {
+		return -1
+	}
+	return w.steps[w.idx][w.alt[w.idx]]
+}
+
 func (w *wizardSession) page() *wizPage {
-	if w.idx < 0 || w.idx >= len(w.pages) {
+	i := w.pageIndex()
+	if i < 0 {
 		return nil
 	}
-	return &w.pages[w.idx]
+	return &w.pages[i]
+}
+
+// active reports whether page i answers its step: it is the only view of its
+// step, or the one currently showing.
+func (w *wizardSession) active(i int) bool {
+	for s, step := range w.steps {
+		for _, pi := range step {
+			if pi == i {
+				return step[w.alt[s]] == i
+			}
+		}
+	}
+	return false
+}
+
+// switchView moves the current step to its next (delta 1) or previous (-1)
+// alternative view, wrapping. Each view keeps its own selection, so switching
+// back and forth loses nothing; the answer is whichever view is showing.
+func (w *wizardSession) switchView(delta int) {
+	if w.idx < 0 || w.idx >= len(w.steps) {
+		return
+	}
+	n := len(w.steps[w.idx])
+	if n < 2 {
+		return
+	}
+	w.alt[w.idx] = (w.alt[w.idx] + delta + n) % n
+	w.focus()
 }
 
 // window is the slice of the current page's items to draw for a viewport of
@@ -293,8 +362,11 @@ func (w *wizardSession) diff() (install, remove []string) {
 // would silently turn "remove all of these" into "change nothing".
 func (w *wizardSession) state() State {
 	st := State{App: w.app.Name, Action: w.action, Pages: map[string][]string{}}
-	for _, p := range w.pages {
+	for i, p := range w.pages {
 		switch {
+		case !w.active(i):
+			// An alternative view that is not showing answers nothing: its
+			// step's build arg comes from the view that is.
 		case p.multi():
 			sel := []string{}
 			for i, it := range p.items {
@@ -455,6 +527,10 @@ func (m *model) wizardKey(k string) (tea.Model, tea.Cmd) {
 		w.cursor, w.notesTop = 0, 0
 	case "end":
 		w.cursor, w.notesTop = maxInt(n-1, 0), 0
+	case "[":
+		w.switchView(-1)
+	case "]":
+		w.switchView(1)
 	case "pgdown":
 		// The notes are the only scrollable thing on a wizard page; the list
 		// itself follows the cursor, so these keys never fight over focus.
@@ -500,7 +576,7 @@ func (m *model) wizardKey(k string) (tea.Model, tea.Cmd) {
 		if p != nil && !p.multi() && n > 0 {
 			p.radio = w.cursor
 		}
-		if w.idx+1 < len(w.pages) {
+		if w.idx+1 < len(w.steps) {
 			w.idx++
 			w.focus()
 		} else {
@@ -606,13 +682,18 @@ func (m *model) wizardTabsView() string {
 		return ""
 	}
 	var tabs []string
-	for i, p := range w.pages {
-		label := wizTabLabel(p.Name)
-		if w.stage == stagePages && i == w.idx {
-			tabs = append(tabs, styTabOn.Render(label))
-		} else {
-			tabs = append(tabs, styTabOff.Render(label))
+	for s, step := range w.steps {
+		on := w.stage == stagePages && s == w.idx
+		if len(step) == 1 {
+			label := wizTabLabel(w.pages[step[0]].Name)
+			if on {
+				tabs = append(tabs, styTabOn.Render(label))
+			} else {
+				tabs = append(tabs, styTabOff.Render(label))
+			}
+			continue
 		}
+		tabs = append(tabs, w.altTab(step, w.alt[s], on))
 	}
 	review := "Review"
 	if w.stage == stageConfirm {
@@ -621,6 +702,31 @@ func (m *model) wizardTabsView() string {
 		tabs = append(tabs, styTabOff.Render(review))
 	}
 	return lipgloss.JoinHorizontal(lipgloss.Top, tabs...)
+}
+
+// altTab draws a step with alternative views as one tab naming all of them,
+// "Release/Build", the showing view underlined and the others faint. Each
+// segment is styled on its own rather than nested: an inner style's reset
+// would end the outer tab's background part-way through.
+func (w *wizardSession) altTab(step []int, alt int, on bool) string {
+	base := styTabOff
+	if on {
+		base = styTabOn
+	}
+	seg := base.Padding(0)
+	out := seg.Render(" ")
+	for i, pi := range step {
+		if i > 0 {
+			out += seg.Bold(false).Faint(true).Render("/")
+		}
+		label := wizTabLabel(w.pages[pi].Name)
+		if i == alt {
+			out += seg.Underline(true).Render(label)
+		} else {
+			out += seg.Bold(false).Faint(true).Render(label)
+		}
+	}
+	return out + seg.Render(" ")
 }
 
 func (m *model) wizardPageBody() string {
@@ -794,7 +900,7 @@ func (m *model) wizardNotesView(width int) string {
 func (w *wizardSession) renderNotes(it Item, width int) string {
 	// Keyed by page as well as value: two pages of one wizard can offer the
 	// same version string and mean different releases.
-	key := fmt.Sprintf("%d/%s@%d", w.idx, it.Name, width)
+	key := fmt.Sprintf("%d/%s@%d", w.pageIndex(), it.Name, width)
 	if v, ok := w.notesCache[key]; ok {
 		return v
 	}
@@ -856,8 +962,34 @@ func (m *model) wizardConfirmBody() string {
 		}
 	}
 	if len(st.BuildArgs) > 0 {
-		b.WriteString("\n  " + styDesc.Render("Build arg:") + " " +
-			styRow.Render(strings.Join(st.BuildArgs[1:], " ")) + "\n")
+		// BuildArgs alternates "--build-arg", "NAME=value"; only the values are
+		// worth reading. A value chosen in one of several views says which,
+		// since "latest" in a Release view and in a Build view are different
+		// builds.
+		views := map[string]string{}
+		for _, step := range w.steps {
+			if len(step) < 2 {
+				continue
+			}
+			for _, pi := range step {
+				if w.active(pi) {
+					views[w.pages[pi].ArgName] = wizTabLabel(w.pages[pi].Name)
+				}
+			}
+		}
+		var args []string
+		for i := 1; i < len(st.BuildArgs); i += 2 {
+			a := styRow.Render(st.BuildArgs[i])
+			if name, _, _ := strings.Cut(st.BuildArgs[i], "="); views[name] != "" {
+				a += styDesc.Render(" (" + views[name] + ")")
+			}
+			args = append(args, a)
+		}
+		label := "Build arg: "
+		if len(args) > 1 {
+			label = "Build args:"
+		}
+		b.WriteString("\n  " + styDesc.Render(label) + " " + strings.Join(args, styDesc.Render(", ")) + "\n")
 	}
 	if st.Variant != "" {
 		// The label is what was chosen; the value is what bash acts on, and
@@ -922,15 +1054,22 @@ func (m *model) wizardKeys() string {
 			parts = append(parts, styKey.Render("space")+styDesc.Render(" select"))
 		}
 		next := " next"
-		if w.idx+1 == len(w.pages) {
+		if w.idx+1 == len(w.steps) {
 			next = " review"
 		}
 		parts = append(parts,
 			styKey.Render("↑/↓")+styDesc.Render(" move"))
+		if w.idx < len(w.steps) && len(w.steps[w.idx]) > 1 {
+			var views []string
+			for _, pi := range w.steps[w.idx] {
+				views = append(views, strings.ToLower(wizTabLabel(w.pages[pi].Name)))
+			}
+			parts = append(parts, styKey.Render("[/]")+styDesc.Render(" "+strings.Join(views, "/")))
+		}
 		if _, notesW := m.wizardPaneWidths(); notesW > 0 {
 			parts = append(parts, styKey.Render("PgDn/PgUp")+styDesc.Render(" notes"))
 		}
-		if len(w.pages) > 1 {
+		if len(w.steps) > 1 {
 			parts = append(parts, styKey.Render("←/→")+styDesc.Render(" page"))
 		}
 		parts = append(parts, styKey.Render("⏎")+styDesc.Render(next))

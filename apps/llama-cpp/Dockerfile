@@ -2,9 +2,10 @@
 #
 # Both build args come from the setup wizard:
 #   wizard/00-gpu.runtime      -> LLAMA_GPU  (also selects create_flags.<value>)
-#   wizard/01-release.buildarg -> LLAMA_REF
-# Both have defaults, so a non-interactive `tools setup llama-cpp` still builds
-# ROCm 7.2.4 at the latest release exactly as it did before the wizard existed.
+#   wizard/01-release.buildarg -> LLAMA_REF  (vX.Y.Z releases)
+#   wizard/02-build.buildarg   -> LLAMA_REF  (b#### builds; same step, [/] view)
+# Both have defaults, so a non-interactive `tools setup llama-cpp` builds
+# ROCm 7.2.4 at the newest vX.Y.Z release.
 #
 #   rocm    ROCm 7.2.4 (HIP) + Vulkan (Mesa RADV)
 #   rocm10  ROCm 10.0  (HIP) + Vulkan (Mesa RADV)
@@ -50,9 +51,10 @@ RUN apt-get update \
        libvulkan-dev glslc spirv-headers \
     && rm -rf /var/lib/apt/lists/*
 
-# Release to build: a vX.Y.Z release, a b#### build tag, or "latest" for the
-# newest b#### build. The interactive setup wizard offers "latest" plus the 10
-# newest vX.Y.Z releases (LLAMA_REF).
+# Release to build: "latest" (the newest vX.Y.Z release, the default),
+# "nightly" (the newest b#### build), or a specific vX.Y.Z or b#### tag. The
+# setup wizard offers both lists as two views of one step: Release (latest +
+# the 10 newest vX.Y.Z) and Build (nightly + the 10 newest b####).
 #
 # The build number goes to cmake explicitly: a --depth 1 clone would otherwise
 # report "build 1". A vX.Y.Z tag sits on the same commit as a b#### tag, so its
@@ -67,10 +69,14 @@ ARG LLAMA_REF=latest
 RUN set -e; \
     repo=https://github.com/ggml-org/llama.cpp; \
     ref="$LLAMA_REF"; \
-    if [ "$ref" = "latest" ]; then \
-        ref="b$(git ls-remote --tags --refs "$repo" 'b*' \
-            | sed 's|.*refs/tags/b||' | grep -E '^[0-9]+$' | sort -n | tail -1)"; \
-    fi; \
+    case "$ref" in \
+        latest) \
+            ref="$(git ls-remote --tags --refs "$repo" 'v*' | sed 's|.*refs/tags/||' \
+                | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)" ;; \
+        nightly) \
+            ref="b$(git ls-remote --tags --refs "$repo" 'b*' \
+                | sed 's|.*refs/tags/b||' | grep -E '^[0-9]+$' | sort -n | tail -1)" ;; \
+    esac; \
     case "$ref" in \
         b[0-9]*) build="${ref#b}"; dev=ON ;; \
         v[0-9]*) \
@@ -84,7 +90,7 @@ RUN set -e; \
                 echo "WARNING: no b#### tag on ${ref}'s commit; --version will report build 0" >&2; \
                 build=0; \
             fi ;; \
-        *) echo "Unknown LLAMA_REF '${ref}' (want latest, vX.Y.Z or b####)" >&2; exit 1 ;; \
+        *) echo "Unknown LLAMA_REF '${ref}' (want latest, nightly, vX.Y.Z or b####)" >&2; exit 1 ;; \
     esac; \
     echo "==> Building llama.cpp ${ref} (build ${build}) for ${LLAMA_GPU} (cache-bust: ${CACHE_BUST})"; \
     git clone --depth 1 --branch "${ref}" "$repo" /src; \

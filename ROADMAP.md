@@ -14,7 +14,7 @@ Priority order within each section: highest first.
 - [ ] `aider` — AI pair programmer CLI
 - [ ] `sgpt` — ShellGPT: AI shell assistant; OpenAI + Ollama backends (https://github.com/TheR1D/shell_gpt)
 - [x] `unsloth` — fast LLM fine-tuning (https://unsloth.ai/docs)
-- [x] `llama-cpp` — llama.cpp LLM inference engine (setup-time GPU runtime picker: ROCm 7.2, ROCm 10.0, or NVIDIA CUDA via CDI — Vulkan built into every variant; `--device` selection, release picker over `vX.Y.Z` releases plus `latest` nightly build, `llama` dispatcher). Renamed back from `llama-cpp-rocm` when CUDA was added
+- [x] `llama-cpp` — llama.cpp LLM inference engine (setup-time GPU runtime picker: ROCm 7.2, ROCm 10.0, or NVIDIA CUDA via CDI — Vulkan built into every variant; `--device` selection, release picker with Release (`latest` + `vX.Y.Z`) and Build (`nightly` + `b####`) views switched by `[`/`]`, `llama` dispatcher). Renamed back from `llama-cpp-rocm` when CUDA was added
 - [x] `fastflowlm` — Ollama-style LLM runtime running fully on the AMD Ryzen AI NPU (XDNA2); XRT userspace from the lemonade PPA, release-picker wizard, `flm-doctor` host prerequisite check
 - [x] `openclaw` — personal AI assistant CLI + gateway; routes across AI providers, persistent memory, messaging integrations (release-picker wizard; `openclaw-service [gateway|node]` runs either role as a host systemd user unit, driven by `systemctl --user` straight from the box, so one box can be the mesh's gateway or a paired node)
 

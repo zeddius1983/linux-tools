@@ -179,9 +179,9 @@ func TestLatestRespectsTheTagTemplate(t *testing.T) {
 }
 
 // A value the bulk list is too shallow to reach is fetched by its own tag, and
-// "latest" can resolve within a different train than the listed values:
-// llama.cpp lists vX.Y.Z releases while its "latest" is the newest b#### build.
-func TestAttachNotesFetchesMissesAndLatestTag(t *testing.T) {
+// alias items resolve within their own tag template: llama.cpp's "latest" is
+// the newest vX.Y.Z release, its "nightly" the newest b#### build.
+func TestAttachNotesFetchesMissesAndAliases(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
@@ -201,11 +201,15 @@ func TestAttachNotesFetchesMissesAndLatestTag(t *testing.T) {
 	ghAPIBase = srv.URL
 	defer func() { ghAPIBase = old }()
 
-	items := []Item{{Name: "latest"}, {Name: "v0.6.0"}, {Name: "v0.5.0"}, {Name: "v0.4.0"}}
-	attachNotes(context.Background(), Page{NotesRepo: "ggml-org/llama.cpp", LatestTag: "b%s"}, items)
+	items := []Item{{Name: "latest"}, {Name: "v0.6.0"}, {Name: "v0.5.0"}, {Name: "v0.4.0"}, {Name: "nightly"}}
+	attachNotes(context.Background(), Page{NotesRepo: "ggml-org/llama.cpp",
+		Aliases: map[string]string{"latest": "v%s", "nightly": "b%s"}}, items)
 
-	if items[0].Notes != "nightly notes" || !strings.Contains(items[0].NotesTitle, "b11455") {
-		t.Errorf("latest = %+v, want the newest b#### build", items[0])
+	if items[0].Notes != "v0.6.0 notes" || !strings.Contains(items[0].NotesTitle, "v0.6.0") {
+		t.Errorf("latest = %+v, want the newest vX.Y.Z release", items[0])
+	}
+	if items[4].Notes != "nightly notes" || !strings.Contains(items[4].NotesTitle, "b11455") {
+		t.Errorf("nightly = %+v, want the newest b#### build", items[4])
 	}
 	if items[1].Notes != "v0.6.0 notes" || items[2].Notes != "v0.5.0 notes" {
 		t.Errorf("notes = %q, %q", items[1].Notes, items[2].Notes)

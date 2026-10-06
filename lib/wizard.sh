@@ -25,11 +25,17 @@
 #                                     tag; "%s" in the template is the item
 #                                     value (e.g. "rust-v%s"). Dashboard-only —
 #                                     ignored here.
-#                 latest-tag|<tag-template>
-#                                     the tags a "latest" item resolves within
-#                                     for its notes, when they differ from the
-#                                     listed ones (llama.cpp lists vX.Y.Z but
-#                                     "latest" builds b####). Dashboard-only.
+#                 alias|<item>|<tag-template>
+#                                     an item that names no tag but the newest
+#                                     tag of that shape, for its notes:
+#                                     "alias|nightly|b%s". "latest" is one
+#                                     implicitly, within notes-repo's template.
+#                                     Dashboard-only.
+#               Two .buildarg pages with the same arg| are alternative views of
+#               one step, not two questions: the dashboard shows them as one tab
+#               and [/] switches between them, the view showing being the
+#               answer (llama-cpp's Release and Build lists). This fallback has
+#               no way to show views, so it asks only the first such page.
 #   .runtime  → radiolist; picks a create-time variant (consumed by cmd_create
 #               via wizard_create_variant, no post-action apply step). Body lines
 #               are items: Label|value|description (first line = default). The
@@ -117,9 +123,19 @@ tui_run_wizards() {
     for _k in "${!_WIZARD_SELECTIONS[@]}"; do unset '_WIZARD_SELECTIONS[$_k]'; done
     local wizard_dir="$APPS_DIR/$app/wizard"
     [[ -d "$wizard_dir" ]] || return 0
-    local page
+    local page arg
+    local -A asked_args=()
     for page in "$wizard_dir"/[0-9][0-9]-*.*; do
         [[ -f "$page" ]] || continue
+        # .buildarg pages sharing an arg| are views of one step (see the header);
+        # only the first is asked here, or the build would get the arg twice.
+        if [[ "$page" == *.buildarg ]]; then
+            arg="$(sed -n 's/^arg|//p' "$page" | tr -d '\r' | head -1)"
+            if [[ -n "$arg" ]]; then
+                [[ -n "${asked_args[$arg]:-}" ]] && continue
+                asked_args[$arg]=1
+            fi
+        fi
         _wizard_run_page "$app" "$action" "$page" || return 1
     done
 }
@@ -224,7 +240,7 @@ _wizard_run_buildarg_page() {
             releases)   rel_repo="${val%%|*}"
                         [[ "$val" == *"|"* ]] && rel_count="${val#*|}" ;;
             extra)      extras+=("${val%%|*}") ;;
-            notes-repo|latest-tag) : ;;  # notes have nowhere to go in whiptail
+            notes-repo|alias) : ;;  # notes have nowhere to go in whiptail
         esac
     done < <(tail -n +4 "$page")
 

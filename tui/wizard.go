@@ -51,11 +51,13 @@ type Page struct {
 	NotesRepo     string
 	NotesTag      string // tag template, "%s" = the item value
 	NotesLimit    int
-	// LatestTag is the tag template "latest" resolves within, when that is not
-	// the train the items come from: llama.cpp offers vX.Y.Z releases, but its
-	// "latest" builds the newest b#### tag. Empty means NotesTag.
-	LatestTag string
-	Extra     []string // literal values appended after the fetched releases
+	// Aliases are items that name no tag of their own but stand for the newest
+	// tag of some shape — "latest" for the newest vX.Y.Z, "nightly" for the
+	// newest b####. Keyed by lower-cased item name, valued by tag template;
+	// from `alias|<item>|<tag-template>` lines. "latest" is an alias even
+	// without a line, resolving within NotesTag.
+	Aliases map[string]string
+	Extra   []string // literal values appended after the fetched releases
 }
 
 // AppliesTo mirrors the action gate in _wizard_run_page.
@@ -147,8 +149,13 @@ func parsePage(path string) (Page, error) {
 					if len(fields) > 3 {
 						p.NotesLimit = atoiOr(fields[3], 0)
 					}
-				case "latest-tag":
-					p.LatestTag = strings.TrimSpace(fields[1])
+				case "alias":
+					if len(fields) > 2 {
+						if p.Aliases == nil {
+							p.Aliases = map[string]string{}
+						}
+						p.Aliases[strings.ToLower(strings.TrimSpace(fields[1]))] = strings.TrimSpace(fields[2])
+					}
 				case "extra":
 					if v := strings.TrimSpace(fields[1]); v != "" {
 						p.Extra = append(p.Extra, v)

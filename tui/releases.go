@@ -217,12 +217,15 @@ func attachNotes(ctx context.Context, p Page, items []Item) {
 	}
 	// "latest" is not a tag: every installer that offers it means "whatever is
 	// newest", so it shows the newest release's notes, labelled with the tag it
-	// resolved to so the two are never confused.
-	latestTag := p.LatestTag
-	if latestTag == "" {
-		latestTag = p.NotesTag
+	// resolved to so the two are never confused. Other aliases ("nightly") work
+	// the same way within their own tag template.
+	alias := func(name string) (string, bool) {
+		name = strings.ToLower(name)
+		if t, ok := p.Aliases[name]; ok {
+			return t, true
+		}
+		return p.NotesTag, name == "latest"
 	}
-	newest := newestStable(rels, latestTag)
 
 	// Tags the list is too shallow to reach are looked up one by one. llama.cpp
 	// publishes a b#### release for nearly every commit, so its vX.Y.Z releases
@@ -234,7 +237,10 @@ func attachNotes(ctx context.Context, p Page, items []Item) {
 	)
 	for _, it := range items {
 		tag := notesTag(p.NotesTag, it.Name)
-		if _, ok := byTag[tag]; ok || strings.EqualFold(it.Name, "latest") {
+		if _, ok := byTag[tag]; ok {
+			continue
+		}
+		if _, ok := alias(it.Name); ok {
 			continue
 		}
 		wg.Add(1)
@@ -251,13 +257,18 @@ func attachNotes(ctx context.Context, p Page, items []Item) {
 
 	for i := range items {
 		r, ok := byTag[notesTag(p.NotesTag, items[i].Name)]
-		switch {
-		case ok:
+		if ok {
 			items[i].Notes, items[i].NotesTitle = r.Body, releaseTitle(r, p.NotesRepo)
 			if items[i].Desc == "" {
 				items[i].Desc = releaseDesc(r)
 			}
-		case strings.EqualFold(items[i].Name, "latest") && newest != nil:
+			continue
+		}
+		tmpl, isAlias := alias(items[i].Name)
+		if !isAlias {
+			continue
+		}
+		if newest := newestStable(rels, tmpl); newest != nil {
 			items[i].Notes = newest.Body
 			items[i].NotesTitle = strings.TrimSpace(newest.TagName + " " + releaseTitle(*newest, p.NotesRepo))
 			if items[i].Desc == "" {

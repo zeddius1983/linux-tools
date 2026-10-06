@@ -1,7 +1,7 @@
 Select llama.cpp release
-Choose a llama.cpp release, or latest for the newest nightly build:
+Choose a versioned llama.cpp release, or latest for the newest one:
 setup,build
 arg|LLAMA_REF
 items-cmd|{ printf '%s\n' latest; git ls-remote --tags --refs https://github.com/ggml-org/llama.cpp 'v*' | sed 's@.*refs/tags/@@' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -10 | tac; }
 notes-repo|ggml-org/llama.cpp
-latest-tag|b%s
+alias|latest|v%s
