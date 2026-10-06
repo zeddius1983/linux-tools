@@ -219,6 +219,40 @@ func TestAttachNotesFetchesMissesAndAliases(t *testing.T) {
 	}
 }
 
+// When the newest releases are all of another shape — a couple of days of
+// llama.cpp nightlies push the last vX.Y.Z out of the bulk list — an alias
+// resolves through the listed tags instead, which were fetched one by one.
+func TestAliasResolvesThroughListedTagsBeyondTheBulkList(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/repos/ggml-org/llama.cpp/releases":
+			_, _ = w.Write([]byte(`[
+			 {"tag_name":"b11500","body":"nightly notes","prerelease":true},
+			 {"tag_name":"b11499","body":"older nightly","prerelease":true}
+			]`))
+		case "/repos/ggml-org/llama.cpp/releases/tags/v0.6.0":
+			_, _ = w.Write([]byte(`{"tag_name":"v0.6.0","body":"v0.6.0 notes"}`))
+		case "/repos/ggml-org/llama.cpp/releases/tags/v0.5.0":
+			_, _ = w.Write([]byte(`{"tag_name":"v0.5.0","body":"v0.5.0 notes"}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	old := ghAPIBase
+	ghAPIBase = srv.URL
+	defer func() { ghAPIBase = old }()
+
+	items := []Item{{Name: "latest"}, {Name: "v0.6.0"}, {Name: "v0.5.0"}}
+	attachNotes(context.Background(), Page{NotesRepo: "ggml-org/llama.cpp",
+		Aliases: map[string]string{"latest": "v%s"}}, items)
+
+	if items[0].Notes != "v0.6.0 notes" || !strings.Contains(items[0].NotesTitle, "v0.6.0") {
+		t.Errorf("latest = %+v, want v0.6.0's notes via the listed tags", items[0])
+	}
+}
+
 func TestMatchesTemplate(t *testing.T) {
 	cases := []struct {
 		template, tag string

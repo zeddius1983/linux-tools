@@ -255,6 +255,21 @@ func attachNotes(ctx context.Context, p Page, items []Item) {
 	}
 	wg.Wait()
 
+	// The listed tags' releases, in the page's order — newest first, as every
+	// items-cmd prints them. An alias falls back to these when the bulk list
+	// holds nothing of its shape: llama.cpp cuts ~25 b#### releases a day, so a
+	// couple of days after a vX.Y.Z release the newest 50 are all builds, and
+	// "latest" would otherwise lose its notes while v0.6.0 sits right below it.
+	var listed []ghRelease
+	for _, it := range items {
+		if _, ok := alias(it.Name); ok {
+			continue
+		}
+		if r, ok := byTag[notesTag(p.NotesTag, it.Name)]; ok {
+			listed = append(listed, r)
+		}
+	}
+
 	for i := range items {
 		r, ok := byTag[notesTag(p.NotesTag, items[i].Name)]
 		if ok {
@@ -268,7 +283,11 @@ func attachNotes(ctx context.Context, p Page, items []Item) {
 		if !isAlias {
 			continue
 		}
-		if newest := newestStable(rels, tmpl); newest != nil {
+		newest := newestStable(rels, tmpl)
+		if newest == nil {
+			newest = newestStable(listed, tmpl)
+		}
+		if newest != nil {
 			items[i].Notes = newest.Body
 			items[i].NotesTitle = strings.TrimSpace(newest.TagName + " " + releaseTitle(*newest, p.NotesRepo))
 			if items[i].Desc == "" {
