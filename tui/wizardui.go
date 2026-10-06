@@ -1064,7 +1064,10 @@ func (m *model) wizardKeys() string {
 			for _, pi := range w.steps[w.idx] {
 				views = append(views, strings.ToLower(wizTabLabel(w.pages[pi].Name)))
 			}
-			parts = append(parts, styKey.Render("[/]")+styDesc.Render(" "+strings.Join(views, "/")))
+			// The brackets are the keys and the slash only separates them, so
+			// they are styled apart: an all-key "[/]" reads as a bracketed "/".
+			parts = append(parts, styKey.Render("[")+styDesc.Render("/")+styKey.Render("]")+
+				styDesc.Render(" "+strings.Join(views, "/")))
 		}
 		if _, notesW := m.wizardPaneWidths(); notesW > 0 {
 			parts = append(parts, styKey.Render("PgDn/PgUp")+styDesc.Render(" notes"))
