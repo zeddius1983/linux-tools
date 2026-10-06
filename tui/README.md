@@ -192,7 +192,9 @@ one tag at a time (a request each) — llama.cpp publishes a `b####` build per
 commit, so its `vX.Y.Z` releases sit hundreds of entries apart.
 
 `GITHUB_TOKEN` or `GH_TOKEN`, when set, is sent as a bearer token — anonymous
-API calls are limited to 60 per hour per address. Nothing prompts for one.
+API calls are limited to 60 per hour per address. Nothing prompts for one, and
+it needs no permissions: `export GH_TOKEN=$(gh auth token)` is enough. The
+bash side does the same through `github_curl` (`lib/helpers.sh`).
 
 The whiptail fallback understands `releases|` and `extra|` too, deriving the
 same tag list with `curl`; it has nowhere to put notes, so it ignores

@@ -30,6 +30,19 @@ done
 has_tool() { [[ " $TOOLS " == *" $1 "* ]]; }
 step() { printf '\n==> %s\n' "$*"; }
 
+# GitHub API GET. Anonymous calls are limited to 60/hour per address; with
+# GITHUB_TOKEN or GH_TOKEN set (e.g. `export GH_TOKEN=$(gh auth token)`) the
+# limit is the account's 5000/hour. The header is read from a file descriptor
+# so the token never appears in the process list. No permissions are needed.
+gh_api() {
+    local tok="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
+    if [[ -n "$tok" ]]; then
+        curl -fsSL -H @<(printf 'Authorization: Bearer %s\n' "$tok") "https://api.github.com/$1"
+    else
+        curl -fsSL "https://api.github.com/$1"
+    fi
+}
+
 # Firecrawl is distributed through npm and needs the managed Node.js runtime.
 if has_tool firecrawl && ! has_tool node; then
     TOOLS="${TOOLS:+$TOOLS }node"
@@ -234,7 +247,7 @@ if has_tool kotlin-lsp; then
 
     tmp_dir=$(mktemp -d)
     trap 'rm -rf "${tmp_dir:-}"' EXIT
-    kotlin_release_tag=$(curl -fsSL https://api.github.com/repos/Kotlin/kotlin-lsp/releases/latest \
+    kotlin_release_tag=$(gh_api repos/Kotlin/kotlin-lsp/releases/latest \
         | jq -r '.tag_name // ""')
     kotlin_version=$(printf '%s\n' "$kotlin_release_tag" \
         | sed -E 's|.*/||; s/^v//')

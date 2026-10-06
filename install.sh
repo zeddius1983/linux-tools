@@ -194,9 +194,17 @@ resolve_latest_tag() {
 }
 
 # Best-effort, purely for the error message when a pinned tag does not exist.
+# Sends GITHUB_TOKEN/GH_TOKEN when set, through a file descriptor so it stays
+# out of the process list; wget cannot read a header that way, so it goes
+# anonymous.
 recent_tags() {
-    local json
-    json="$(fetch "https://api.github.com/repos/$REPO/releases?per_page=5" /dev/stdout 2>/dev/null)" || return 1
+    local json url="https://api.github.com/repos/$REPO/releases?per_page=5"
+    local tok="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
+    if [[ "$DOWNLOADER" == "curl" && -n "$tok" ]]; then
+        json="$(curl -fsSL -H @<(printf 'Authorization: Bearer %s\n' "$tok") "$url" 2>/dev/null)" || return 1
+    else
+        json="$(fetch "$url" /dev/stdout 2>/dev/null)" || return 1
+    fi
     printf '%s' "$json" | grep -o '"tag_name":[[:space:]]*"[^"]*"' | cut -d'"' -f4
 }
 

@@ -72,3 +72,4 @@ All utilities are downloaded as static musl binaries from their GitHub release p
 - **No plugin manager** — plugins are plain `git clone`s sourced directly.
 - Re-run `tools setup shell-toolbox` (or `shell-toolbox-install --tools "…"`) any time to add/remove tools or pull updated binaries.
 - `zsh-install` remains available as a compatibility alias for the renamed installer.
+- **GitHub rate limit**: the installer resolves the latest releases through the GitHub API, which allows 60 anonymous requests per hour per address. With `GITHUB_TOKEN` or `GH_TOKEN` set on the host (e.g. `export GH_TOKEN=$(gh auth token)` in `~/.zshrc`) it authenticates and gets 5000/hour; the variable passes into the box through `distrobox enter`. The token needs no permissions.

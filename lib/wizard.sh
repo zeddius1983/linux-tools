@@ -228,15 +228,18 @@ _wizard_run_buildarg_page() {
         esac
     done < <(tail -n +4 "$page")
 
-    # A releases| page has no items-cmd of its own: derive the same tag list the
-    # dashboard shows, minus the notes it has no room for.
-    if [[ -z "$items_cmd" && -n "$rel_repo" ]]; then
-        items_cmd="curl -fsSL 'https://api.github.com/repos/${rel_repo}/releases?per_page=${rel_count:-10}' | grep -o '\"tag_name\": *\"[^\"]*\"' | sed 's/.*\"\\([^\"]*\\)\"\$/\\1/'"
-    fi
-    [[ -z "$arg_name" || -z "$items_cmd" ]] && return 0
+    [[ -z "$arg_name" || ( -z "$items_cmd" && -z "$rel_repo" ) ]] && return 0
 
     local -a values=()
-    mapfile -t values < <(bash -c "$items_cmd" 2>/dev/null)
+    if [[ -n "$items_cmd" ]]; then
+        mapfile -t values < <(bash -c "$items_cmd" 2>/dev/null)
+    else
+        # A releases| page has no items-cmd of its own: derive the same tag list
+        # the dashboard shows, minus the notes it has no room for.
+        mapfile -t values < <(github_curl \
+            "https://api.github.com/repos/${rel_repo}/releases?per_page=${rel_count:-10}" 2>/dev/null \
+            | grep -o '"tag_name": *"[^"]*"' | sed 's/.*"\([^"]*\)"$/\1/')
+    fi
     # Bash 4.3 and older choke on expanding an empty array under `set -u`.
     if ((${#extras[@]})); then values+=("${extras[@]}"); fi
     if [[ ${#values[@]} -eq 0 ]]; then
