@@ -25,6 +25,17 @@
 #                                     tag; "%s" in the template is the item
 #                                     value (e.g. "rust-v%s"). Dashboard-only —
 #                                     ignored here.
+#                 alias|<item>|<tag-template>
+#                                     an item that names no tag but the newest
+#                                     tag of that shape, for its notes:
+#                                     "alias|nightly|b%s". "latest" is one
+#                                     implicitly, within notes-repo's template.
+#                                     Dashboard-only.
+#               Two .buildarg pages with the same arg| are alternative views of
+#               one step, not two questions: the dashboard shows them as one tab
+#               and [/] switches between them, the view showing being the
+#               answer (llama-cpp's Release and Build lists). This fallback has
+#               no way to show views, so it asks only the first such page.
 #   .runtime  → radiolist; picks a create-time variant (consumed by cmd_create
 #               via wizard_create_variant, no post-action apply step). Body lines
 #               are items: Label|value|description (first line = default). The
@@ -112,9 +123,19 @@ tui_run_wizards() {
     for _k in "${!_WIZARD_SELECTIONS[@]}"; do unset '_WIZARD_SELECTIONS[$_k]'; done
     local wizard_dir="$APPS_DIR/$app/wizard"
     [[ -d "$wizard_dir" ]] || return 0
-    local page
+    local page arg
+    local -A asked_args=()
     for page in "$wizard_dir"/[0-9][0-9]-*.*; do
         [[ -f "$page" ]] || continue
+        # .buildarg pages sharing an arg| are views of one step (see the header);
+        # only the first is asked here, or the build would get the arg twice.
+        if [[ "$page" == *.buildarg ]]; then
+            arg="$(sed -n 's/^arg|//p' "$page" | tr -d '\r' | head -1)"
+            if [[ -n "$arg" ]]; then
+                [[ -n "${asked_args[$arg]:-}" ]] && continue
+                asked_args[$arg]=1
+            fi
+        fi
         _wizard_run_page "$app" "$action" "$page" || return 1
     done
 }
@@ -219,19 +240,22 @@ _wizard_run_buildarg_page() {
             releases)   rel_repo="${val%%|*}"
                         [[ "$val" == *"|"* ]] && rel_count="${val#*|}" ;;
             extra)      extras+=("${val%%|*}") ;;
-            notes-repo) : ;;  # notes have nowhere to go in whiptail
+            notes-repo|alias) : ;;  # notes have nowhere to go in whiptail
         esac
     done < <(tail -n +4 "$page")
 
-    # A releases| page has no items-cmd of its own: derive the same tag list the
-    # dashboard shows, minus the notes it has no room for.
-    if [[ -z "$items_cmd" && -n "$rel_repo" ]]; then
-        items_cmd="curl -fsSL 'https://api.github.com/repos/${rel_repo}/releases?per_page=${rel_count:-10}' | grep -o '\"tag_name\": *\"[^\"]*\"' | sed 's/.*\"\\([^\"]*\\)\"\$/\\1/'"
-    fi
-    [[ -z "$arg_name" || -z "$items_cmd" ]] && return 0
+    [[ -z "$arg_name" || ( -z "$items_cmd" && -z "$rel_repo" ) ]] && return 0
 
     local -a values=()
-    mapfile -t values < <(bash -c "$items_cmd" 2>/dev/null)
+    if [[ -n "$items_cmd" ]]; then
+        mapfile -t values < <(bash -c "$items_cmd" 2>/dev/null)
+    else
+        # A releases| page has no items-cmd of its own: derive the same tag list
+        # the dashboard shows, minus the notes it has no room for.
+        mapfile -t values < <(github_curl \
+            "https://api.github.com/repos/${rel_repo}/releases?per_page=${rel_count:-10}" 2>/dev/null \
+            | grep -o '"tag_name": *"[^"]*"' | sed 's/.*"\([^"]*\)"$/\1/')
+    fi
     # Bash 4.3 and older choke on expanding an empty array under `set -u`.
     if ((${#extras[@]})); then values+=("${extras[@]}"); fi
     if [[ ${#values[@]} -eq 0 ]]; then

@@ -25,6 +25,7 @@ func TestParseRealPages(t *testing.T) {
 		{"lmstudio", "00-runtime", "runtime", 2},
 		{"llama-cpp", "00-gpu", "runtime", 3},
 		{"llama-cpp", "01-release", "buildarg", 0},
+		{"llama-cpp", "02-build", "buildarg", 0},
 		{"fastflowlm", "00-release", "buildarg", 0},
 		{"codex-cli", "00-release", "buildarg", 0},
 		{"codex-cli", "01-statusline", "packages", 1},
@@ -92,6 +93,12 @@ func TestBuildargItemsCmdSurvivesPipes(t *testing.T) {
 	}
 	if p.NotesRepo != "ggml-org/llama.cpp" {
 		t.Errorf("NotesRepo = %q", p.NotesRepo)
+	}
+	if got := p.Aliases["latest"]; got != "v%s" {
+		t.Errorf(`Aliases["latest"] = %q, want v%%s`, got)
+	}
+	if b := loadPage(t, "llama-cpp", "02-build"); b.ArgName != "LLAMA_REF" || b.Aliases["nightly"] != "b%s" {
+		t.Errorf("02-build: ArgName = %q, Aliases = %v", b.ArgName, b.Aliases)
 	}
 	if len(p.Items) != 0 {
 		t.Errorf("buildarg body should yield no items, got %d", len(p.Items))

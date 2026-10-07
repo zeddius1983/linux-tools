@@ -8,6 +8,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -56,10 +57,31 @@ func fetchReleases(ctx context.Context, repo string, limit int) ([]ghRelease, er
 	if limit <= 0 {
 		limit = defaultReleaseLimit
 	}
-	url := fmt.Sprintf("%s/repos/%s/releases?per_page=%d", ghAPIBase, repo, limit)
+	var rels []ghRelease
+	if err := ghGet(ctx, fmt.Sprintf("%s/repos/%s/releases?per_page=%d", ghAPIBase, repo, limit), &rels); err != nil {
+		return nil, err
+	}
+	out := rels[:0]
+	for _, r := range rels {
+		if !r.Draft && r.TagName != "" {
+			out = append(out, r)
+		}
+	}
+	return out, nil
+}
+
+// fetchRelease looks up a single release by its tag.
+func fetchRelease(ctx context.Context, repo, tag string) (ghRelease, error) {
+	var r ghRelease
+	err := ghGet(ctx, fmt.Sprintf("%s/repos/%s/releases/tags/%s", ghAPIBase, repo, tag), &r)
+	return r, err
+}
+
+// ghGet decodes one GitHub API response into v.
+func ghGet(ctx context.Context, url string, v any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
@@ -73,24 +95,13 @@ func fetchReleases(ctx context.Context, repo string, limit int) ([]ghRelease, er
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("github: %s", resp.Status)
+		return fmt.Errorf("github: %s", resp.Status)
 	}
-
-	var rels []ghRelease
-	if err := json.NewDecoder(resp.Body).Decode(&rels); err != nil {
-		return nil, err
-	}
-	out := rels[:0]
-	for _, r := range rels {
-		if !r.Draft && r.TagName != "" {
-			out = append(out, r)
-		}
-	}
-	return out, nil
+	return json.NewDecoder(resp.Body).Decode(v)
 }
 
 func githubToken() string {
@@ -206,18 +217,77 @@ func attachNotes(ctx context.Context, p Page, items []Item) {
 	}
 	// "latest" is not a tag: every installer that offers it means "whatever is
 	// newest", so it shows the newest release's notes, labelled with the tag it
-	// resolved to so the two are never confused.
-	newest := newestStable(rels, p.NotesTag)
+	// resolved to so the two are never confused. Other aliases ("nightly") work
+	// the same way within their own tag template.
+	alias := func(name string) (string, bool) {
+		name = strings.ToLower(name)
+		if t, ok := p.Aliases[name]; ok {
+			return t, true
+		}
+		return p.NotesTag, name == "latest"
+	}
+
+	// Tags the list is too shallow to reach are looked up one by one. llama.cpp
+	// publishes a b#### release for nearly every commit, so its vX.Y.Z releases
+	// sit hundreds of entries apart and only the newest falls inside the list.
+	// It costs a request per miss, which is why the bulk list comes first.
+	var (
+		mu sync.Mutex
+		wg sync.WaitGroup
+	)
+	for _, it := range items {
+		tag := notesTag(p.NotesTag, it.Name)
+		if _, ok := byTag[tag]; ok {
+			continue
+		}
+		if _, ok := alias(it.Name); ok {
+			continue
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if r, err := fetchRelease(ctx, p.NotesRepo, tag); err == nil && !r.Draft && r.TagName == tag {
+				mu.Lock()
+				byTag[tag] = r
+				mu.Unlock()
+			}
+		}()
+	}
+	wg.Wait()
+
+	// The listed tags' releases, in the page's order — newest first, as every
+	// items-cmd prints them. An alias falls back to these when the bulk list
+	// holds nothing of its shape: llama.cpp cuts ~25 b#### releases a day, so a
+	// couple of days after a vX.Y.Z release the newest 50 are all builds, and
+	// "latest" would otherwise lose its notes while v0.6.0 sits right below it.
+	var listed []ghRelease
+	for _, it := range items {
+		if _, ok := alias(it.Name); ok {
+			continue
+		}
+		if r, ok := byTag[notesTag(p.NotesTag, it.Name)]; ok {
+			listed = append(listed, r)
+		}
+	}
 
 	for i := range items {
 		r, ok := byTag[notesTag(p.NotesTag, items[i].Name)]
-		switch {
-		case ok:
+		if ok {
 			items[i].Notes, items[i].NotesTitle = r.Body, releaseTitle(r, p.NotesRepo)
 			if items[i].Desc == "" {
 				items[i].Desc = releaseDesc(r)
 			}
-		case strings.EqualFold(items[i].Name, "latest") && newest != nil:
+			continue
+		}
+		tmpl, isAlias := alias(items[i].Name)
+		if !isAlias {
+			continue
+		}
+		newest := newestStable(rels, tmpl)
+		if newest == nil {
+			newest = newestStable(listed, tmpl)
+		}
+		if newest != nil {
 			items[i].Notes = newest.Body
 			items[i].NotesTitle = strings.TrimSpace(newest.TagName + " " + releaseTitle(*newest, p.NotesRepo))
 			if items[i].Desc == "" {

@@ -155,6 +155,28 @@ and Enter is held while that is in flight. If nothing comes back the page is
 left unanswered and the build keeps its Dockerfile default — the same outcome as
 the bash path.
 
+### Alternative views
+
+Two `.buildarg` pages that set the same `arg|NAME` are not two questions: one
+build arg can only take one value, so they are alternative views of a single
+step. The tab bar shows them as one tab naming both, `Release/Build`, with the
+showing view underlined; `[` and `]` switch between them, wrapping. Each view
+keeps its own selection, and the answer is the view showing when you move on —
+only its `PAGE_` entry and build arg reach the state file. The first page in
+file order is the default view, and the step sits where that page does.
+
+`apps/llama-cpp` uses this for `LLAMA_REF`: `01-release.buildarg` lists
+`latest` and the `vX.Y.Z` releases, `02-build.buildarg` lists `nightly` and the
+`b####` builds. The review screen names the view the value came from
+(`LLAMA_REF=nightly (Build)`), since the same word means different builds in
+different views.
+
+The grouping is by arg name alone, with no extra page syntax, which also turns
+what used to be a latent bug — two pages passing one arg, the last silently
+winning — into a defined behaviour. Only `.buildarg` pages group; a `.runtime`
+page's `arg|` line is not considered. The whiptail fallback cannot show views,
+so it asks the first page of each group and skips the rest.
+
 ### Release notes
 
 A `.buildarg` page can name a GitHub repo instead of writing its own
@@ -178,6 +200,7 @@ Two optional lines go with it:
 | Line | Effect |
 |---|---|
 | `extra\|master` | a literal choice listed after the releases — a branch is not a release, and gets no notes (`apps/comfyui`) |
+| `alias\|item\|tag-template` | an item that names no tag of its own but the newest tag of that shape, so it gets that release's notes: `apps/llama-cpp` has `alias\|latest\|v%s` on its Release view and `alias\|nightly\|b%s` on its Build view. Without a line, `latest` is an alias within the `notes-repo` template |
 | `notes-repo\|owner/repo[\|tag-template[\|count]]` | notes for a page that keeps its own `items-cmd`: each value is matched to a release tag, with `%s` in the template standing for the value (`rust-v%s` for `apps/codex-cli`, whose values are bare versions of a `rust-v` tag) |
 
 `notes-repo` is decoration on a list that already works, so a rate-limited or
@@ -186,14 +209,18 @@ into the feed than a `releases|` page does (50 vs 10), because a repo that
 publishes several trains from one repo interleaves them and the newest ten
 releases may contain barely any of the tags being offered. A value of `latest`
 is not a tag: it resolves to the newest release the template can name, labelled
-with the tag it resolved to.
+with the tag it resolved to. Values the 50 entries do not reach are looked up
+one tag at a time (a request each) — llama.cpp publishes a `b####` build per
+commit, so its `vX.Y.Z` releases sit hundreds of entries apart.
 
 `GITHUB_TOKEN` or `GH_TOKEN`, when set, is sent as a bearer token — anonymous
-API calls are limited to 60 per hour per address. Nothing prompts for one.
+API calls are limited to 60 per hour per address. Nothing prompts for one, and
+it needs no permissions: `export GH_TOKEN=$(gh auth token)` is enough. The
+bash side does the same through `github_curl` (`lib/helpers.sh`).
 
 The whiptail fallback understands `releases|` and `extra|` too, deriving the
 same tag list with `curl`; it has nowhere to put notes, so it ignores
-`notes-repo`.
+`notes-repo` and `alias`.
 
 Ticked state is what will exist *after* the run, not what to add: unticking an
 already-installed tool removes it. The review screen before the run spells that

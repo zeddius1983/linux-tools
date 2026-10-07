@@ -106,6 +106,8 @@ These paths and project directories are shared with the host by Distrobox.
 
 ## Notes
 
+- **GitHub rate limit**: the installer resolves the latest Kotlin LSP release through the GitHub API, which allows 60 anonymous requests per hour per address. With `GITHUB_TOKEN` or `GH_TOKEN` set on the host (e.g. `export GH_TOKEN=$(gh auth token)` in `~/.zshrc`) it authenticates and gets 5000/hour; the variable passes into the box through `distrobox enter`. The token needs no permissions.
+
 - Exported commands remain on the host when a runtime is deselected. Invoking
   one prints a clear installation message instead of falling through to a host
   runtime with the same name.

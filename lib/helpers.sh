@@ -17,6 +17,21 @@ require_runtime() {
     exit 1
 }
 
+# ── GitHub ───────────────────────────────────────────────────────────────────
+
+# GitHub API GET. Anonymous calls are limited to 60/hour per address; with
+# GITHUB_TOKEN or GH_TOKEN set (e.g. `export GH_TOKEN=$(gh auth token)`) the
+# limit is the account's 5000/hour. The header is read from a file descriptor
+# so the token never appears in the process list. No permissions are needed.
+github_curl() {
+    local tok="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
+    if [[ -n "$tok" ]]; then
+        curl -fsSL -H @<(printf 'Authorization: Bearer %s\n' "$tok") "$@"
+    else
+        curl -fsSL "$@"
+    fi
+}
+
 # ── Status helpers ───────────────────────────────────────────────────────────
 
 image_exists() {

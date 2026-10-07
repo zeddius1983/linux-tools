@@ -1,0 +1,7 @@
+Select llama.cpp build
+Choose a nightly build (upstream cuts one for nearly every commit), or nightly for the newest:
+setup,build
+arg|LLAMA_REF
+items-cmd|{ printf '%s\n' nightly; git ls-remote --tags --refs https://github.com/ggml-org/llama.cpp 'b*' | sed 's@.*refs/tags/@@' | grep -E '^b[0-9]+$' | sort -t b -k 2 -n | tail -10 | tac; }
+notes-repo|ggml-org/llama.cpp
+alias|nightly|b%s

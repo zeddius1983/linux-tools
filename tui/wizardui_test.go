@@ -774,3 +774,112 @@ func TestWizardNotesPaneFitsTheScreen(t *testing.T) {
 		t.Errorf("%d lines, want at most %d", lines, m.h)
 	}
 }
+
+// llamaSession is llama-cpp's real setup wizard with its version lists filled
+// in by hand, so no test reaches the network: GPU, then Release and Build as
+// two views of one LLAMA_REF step.
+func llamaSession(t *testing.T) *model {
+	t.Helper()
+	m := newModel([]App{}, appsDir, "tools", true)
+	m.w, m.h = 100, 24
+	m.wiz, _ = newWizardSession(testApp(t, "llama-cpp"), "setup", t.TempDir())
+	if m.wiz == nil || len(m.wiz.pages) != 3 {
+		t.Fatalf("expected the GPU, Release and Build pages")
+	}
+	m.wizardUpdate(wizItemsMsg{session: m.wiz.id, page: 1, items: []Item{{Name: "latest"}, {Name: "v0.6.0"}}})
+	m.wizardUpdate(wizItemsMsg{session: m.wiz.id, page: 2, items: []Item{{Name: "nightly"}, {Name: "b11455"}}})
+	return m
+}
+
+// Pages that set the same build arg are one step with two views, not two
+// steps: one arg can only take one value.
+func TestBuildArgPagesSharingAnArgAreOneStep(t *testing.T) {
+	m := llamaSession(t)
+	if got := m.wiz.steps; len(got) != 2 || len(got[0]) != 1 || len(got[1]) != 2 {
+		t.Fatalf("steps = %v, want [[0] [1 2]]", got)
+	}
+	// Forward from GPU lands on the shared step; forward again is the review.
+	m.wizardKey("enter")
+	if p := m.wiz.page(); p == nil || p.Name != "01-release" {
+		t.Fatalf("step 1 shows %v, want 01-release first", p)
+	}
+	m.wizardKey("enter")
+	if m.wiz.stage != stageConfirm {
+		t.Errorf("stage = %v, want the review after the shared step", m.wiz.stage)
+	}
+}
+
+// [ and ] switch views and wrap; each view keeps its own selection, and only
+// the view showing reaches the build.
+func TestSwitchingViewsPicksTheBuildArg(t *testing.T) {
+	m := llamaSession(t)
+	m.wizardKey("enter") // to the Release/Build step
+
+	m.wizardKey("j") // v0.6.0 in Release
+	m.wizardKey("space")
+	m.wizardKey("]")
+	if p := m.wiz.page(); p.Name != "02-build" {
+		t.Fatalf("] showed %q, want 02-build", p.Name)
+	}
+	m.wizardKey("j") // b11455 in Build
+	m.wizardKey("space")
+
+	argsOf := func() []string { return m.wiz.state().BuildArgs }
+	if got := argsOf(); !containsArg(got, "LLAMA_REF=b11455") || containsArg(got, "LLAMA_REF=v0.6.0") {
+		t.Errorf("Build view: BuildArgs = %v, want only b11455", got)
+	}
+	if _, ok := m.wiz.state().Pages["01-release"]; ok {
+		t.Errorf("the hidden Release view still wrote a page answer")
+	}
+
+	m.wizardKey("[") // wraps back to Release, its selection intact
+	if p := m.wiz.page(); p.Name != "01-release" || m.wiz.cursor != 1 {
+		t.Fatalf("[ showed %q with cursor %d, want 01-release on v0.6.0", p.Name, m.wiz.cursor)
+	}
+	if got := argsOf(); !containsArg(got, "LLAMA_REF=v0.6.0") || containsArg(got, "LLAMA_REF=b11455") {
+		t.Errorf("Release view: BuildArgs = %v, want only v0.6.0", got)
+	}
+	m.wizardKey("[") // and wraps the other way too
+	if p := m.wiz.page(); p.Name != "02-build" {
+		t.Errorf("[ from the first view showed %q, want 02-build", p.Name)
+	}
+}
+
+// A step with one view ignores [ and ]: there is nothing to switch to.
+func TestSwitchViewOnASingleViewStepIsANoOp(t *testing.T) {
+	m := llamaSession(t)
+	m.wizardKey("]")
+	if p := m.wiz.page(); p.Name != "00-gpu" {
+		t.Errorf("] on the GPU step showed %q", p.Name)
+	}
+}
+
+// The tab bar names both views in one tab, and the footer says how to switch.
+func TestAlternativeViewsInTabsAndFooter(t *testing.T) {
+	m := llamaSession(t)
+	if bar := plain(m.wizardTabsView()); !strings.Contains(bar, "Release/Build") {
+		t.Errorf("tabs = %q, want a Release/Build tab", bar)
+	}
+	if keys := plain(m.wizardKeys()); strings.Contains(keys, "[/]") {
+		t.Errorf("the GPU step offers [/]: %q", keys)
+	}
+	m.wizardKey("enter")
+	if keys := plain(m.wizardKeys()); !strings.Contains(keys, "[/] release/build") {
+		t.Errorf("footer = %q, want the [/] hint", keys)
+	}
+	m.wizardKey("]")
+	m.wizardKey("enter")
+	if body := plain(m.wizardConfirmBody()); !strings.Contains(body, "LLAMA_REF=nightly (Build)") ||
+		strings.Contains(body, "--build-arg") {
+		t.Errorf("review = %q, want LLAMA_REF=nightly (Build) and no raw flags", body)
+	}
+}
+
+func containsArg(args []string, want string) bool {
+	for _, a := range args {
+		if a == want {
+			return true
+		}
+	}
+	return false
+}
