@@ -120,6 +120,8 @@ reports from other distros are welcome.
 ```bash
 tools                # dashboard (same as ./tools.sh)
 tools setup <app>    # install, or reinstall from scratch
+tools help <app>     # the app's setup parameters (GPU, release, tools...)
+tools setup comfyui COMFY_GPU=nvidia COMFY_REF=v0.39.0   # answer them up front
 tools list           # what is built, what is running
 tools enter <app>    # shell inside the app's container
 tools rm <app>       # remove the container and its shortcuts (the built image is kept)

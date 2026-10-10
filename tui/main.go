@@ -505,9 +505,8 @@ func (m *model) clampRow() {
 // runCmd suspends the dashboard, gives bash the terminal, then resumes.
 //
 // extraEnv carries the wizard bridge (LT_SKIP_WIZARD, LT_WIZARD_STATE) when
-// answers were collected here. Without it bash sees a real tty and asks its own
-// whiptail pages, which is still the right behaviour for an app whose wizard
-// this front-end skipped.
+// answers were collected here. Without it bash asks nothing and every page
+// takes its default.
 func (m *model) runCmd(name string, a App, extraEnv []string, bin string, args ...string) tea.Cmd {
 	c := hostCommand(bin, args...)
 	c.Env = append(os.Environ(), extraEnv...)

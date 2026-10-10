@@ -18,6 +18,14 @@ browser dashboard, and it runs on your machine with your own model provider.
 tools setup openclaw
 ```
 
+The setup questions can also be answered on the command line, which asks
+nothing and runs straight through. `tools help openclaw` lists the parameters
+and their choices; any you leave out take their defaults:
+
+```bash
+tools setup openclaw OPENCLAW_VERSION=2026.9.9
+```
+
 The setup wizard offers a release to pin (`latest`, or one of the recent tagged
 versions), with each version's GitHub release notes shown beside the list —
 `PgDn`/`PgUp` scrolls them, and `latest` shows the notes of the release it

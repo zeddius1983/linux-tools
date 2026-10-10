@@ -1,7 +1,12 @@
 # Design: replacing the whiptail TUI with a Go dashboard
 
-**Status:** complete — `tools` opens the dashboard, and the whiptail menu
-(`lib/tui.sh`) and its `LT_NO_GO_TUI` gate have been removed. See [`tui/`](../tui).
+**Status:** complete — `tools` opens the dashboard, and whiptail is gone
+entirely: the menu (`lib/tui.sh`), its `LT_NO_GO_TUI` gate, and the wizard
+dialogs a direct `tools setup` used to show. The command line now takes wizard
+answers as `KEY=value` arguments instead (see CLAUDE.md, *Wizard pages and
+command-line parameters*). See [`tui/`](../tui). The sections below describe
+the migration as it was planned and are kept for the reasoning; function names
+and line numbers in them refer to code that has since been removed.
 **Scope:** `lib/tui.sh`, `lib/wizard.sh`, `tools.sh` dispatch, `cmd_install`
 **Non-goals:** changing `lib/commands.sh` behaviour, changing what any app installs
 
@@ -209,8 +214,8 @@ in `cmd_menu` (`lib/commands.sh`): the dashboard when `tools-tui` was executable
 and `LT_NO_GO_TUI` unset, the whiptail path otherwise. Once the dashboard had
 the mileage, the gate and `lib/tui.sh` were removed. `cmd_menu` now builds a
 missing binary through the §6 ladder and, if that fails, points at
-`tools <command> <app>`. whiptail survives only for the wizard pages a direct
-`tools setup <app>` asks on a terminal.
+`tools <command> <app>`. The whiptail wizard dialogs went next: a direct
+`tools setup <app>` takes `KEY=value` parameters and asks nothing.
 
 Two environment variables reach the dashboard through `cmd_menu` rather than
 requiring the binary to be invoked by hand: `LT_TUI_ASCII` for terminals with

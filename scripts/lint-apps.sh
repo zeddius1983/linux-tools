@@ -161,9 +161,20 @@ check_app() {
         if [[ -z "${desc// /}" ]]; then
             fail "$app" "description is empty"
         elif (( ${#desc} > MAX_DESCRIPTION )); then
-            fail "$app" "description is ${#desc} chars, over the $MAX_DESCRIPTION-char `tools list` column"
+            fail "$app" "description is ${#desc} chars, over the $MAX_DESCRIPTION-char 'tools list' column"
         fi
     fi
+
+    # ── wizard pages ────────────────────────────────────────────────────────
+    # Every page needs a command-line KEY (tools setup <app> KEY=value): its
+    # arg| name, or a param| line when it has none (lib/wizard.sh).
+    local page
+    for page in "$d"/wizard/[0-9][0-9]-*.*; do
+        [[ -f "$page" ]] || continue
+        if ! grep -qE '^(param|arg)\|[A-Za-z_][A-Za-z0-9_]*' "$page"; then
+            fail "$app" "wizard page ${page##*/} has no param| or arg| line (its command-line KEY)"
+        fi
+    done
 
     # ── category ────────────────────────────────────────────────────────────
     if [[ ! -f "$d/category" ]] || [[ -z "$(head -1 "$d/category" | tr -d '[:space:]')" ]]; then

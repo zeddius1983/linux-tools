@@ -257,7 +257,24 @@ Distrobox mounts the host's `$HOME` inside the container. This means:
 
 `./tools.sh` with no arguments opens the **Go dashboard** in `tui/` (Bubble Tea v2, modelled on `gh-dash`): category tabs, an app table, a rendered-README panel, native wizard pages and a keybinding footer. `tools install` builds the binary — host Go if present, otherwise a throwaway `golang:1.25-alpine` container — and never fails the install if it cannot. See [`tui/README.md`](tui/README.md) and [`docs/tui-migration.md`](docs/tui-migration.md).
 
-There is no menu fallback any more: the old `whiptail` menu (`lib/tui.sh`) and its `LT_NO_GO_TUI` switch are gone. If the binary is missing, `tools` runs the build ladder once more and, if that fails too, points at the command-line interface (`tools <command> <app>`), which never depended on the dashboard. `whiptail` is still used for one thing: the wizard pages `tools setup <app>` asks when run directly on a terminal (`lib/wizard.sh`). The dashboard asks the same pages natively and never reaches it.
+There is no menu fallback any more: the old `whiptail` menu (`lib/tui.sh`) and its `LT_NO_GO_TUI` switch are gone. If the binary is missing, `tools` runs the build ladder once more and, if that fails too, points at the command-line interface (`tools <command> <app>`), which never depended on the dashboard. Nothing uses `whiptail` any more.
+
+### Wizard pages and command-line parameters
+
+An app's `wizard/` pages are answered in one of two ways, and `tools` never asks a question itself:
+
+- **Dashboard:** asks them natively and hands the answers to bash in a state file (`LT_SKIP_WIZARD` + `LT_WIZARD_STATE`). Its review screen prints the equivalent command.
+- **Command line:** `tools setup|build|create <app> KEY=value ...`, e.g. `tools setup comfyui COMFY_GPU=nvidia COMFY_REF=v0.39.0`. `tools help <app>` lists an app's parameters, their choices and defaults. A parameter left out takes its default, so a plain `tools setup <app>` is still the scripted default install.
+
+**Every wizard page needs a parameter name** (its `KEY`): the page's `arg|` name, or a `param|<NAME>` line for pages without one (checklists, and `.runtime` pages that feed no build arg). `scripts/lint-apps.sh` and the Go tests both enforce it. `arg` and `param` are reserved line keys, never item names. Value rules, all checked before anything is removed or built:
+
+| Page type | Value |
+|---|---|
+| `.runtime` | one of the items' *value* fields (`amd`, `nvidia`), not the label |
+| `.buildarg` | any single word (a release tag, `latest`, `master`); not checked against the list, which is fetched over the network — a wrong one fails the build |
+| `.packages` / `.mcp` | comma-separated item names, or `none`; left out, nothing is installed or removed |
+
+Two `.buildarg` pages sharing an `arg|` (llama-cpp's Release and Build views) are one parameter. The parser is `wizard_from_args` in `lib/wizard.sh`; it fills the same `BUILD_ARGS`/`VARIANT`/`_WIZARD_SELECTIONS` globals the state file does, so nothing downstream knows which front-end answered.
 
 Apps with an `unmaintained` marker are greyed out in the dashboard, sorted to the bottom of their tab, and flagged in the footer and in `tools list`. They still install normally.
 

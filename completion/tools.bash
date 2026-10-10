@@ -15,7 +15,7 @@ _tools_complete() {
     script_dir="$(dirname "$script_path")"
     apps_dir="${script_dir}/apps"
 
-    commands="install update version build-tui setup build create export enter rm list"
+    commands="install update version build-tui setup build create export enter rm list help"
 
     case "$COMP_CWORD" in
         1)
@@ -36,6 +36,23 @@ _tools_complete() {
                 apps+="${app_dir##*/} "
             done
             COMPREPLY=($(compgen -W "$apps" -- "$cur"))
+            ;;
+        *)
+            # setup/build/create take the app's wizard parameters as KEY=value:
+            # each page's param| name, or its arg| name when it has none.
+            case "${COMP_WORDS[1]}" in
+                setup|build|create) ;;
+                *) return ;;
+            esac
+            local page key params=""
+            for page in "$apps_dir/${COMP_WORDS[2]}"/wizard/[0-9][0-9]-*.*; do
+                [[ -f "$page" ]] || continue
+                key="$(sed -n 's/^param|\([A-Za-z0-9_]*\).*/\1/p' "$page" | head -1)"
+                [[ -n "$key" ]] || key="$(sed -n 's/^arg|\([A-Za-z0-9_]*\).*/\1/p' "$page" | head -1)"
+                [[ -n "$key" && " $params" != *" $key= "* ]] && params+="$key= "
+            done
+            COMPREPLY=($(compgen -W "$params" -- "$cur"))
+            compopt -o nospace 2>/dev/null
             ;;
     esac
 }

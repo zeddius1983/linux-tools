@@ -16,6 +16,14 @@ access to projects and caches in the shared home directory.
 tools setup dev-toolbox
 ```
 
+The setup questions can also be answered on the command line, which asks
+nothing and runs straight through. `tools help dev-toolbox` lists the parameters
+and their choices; any you leave out take their defaults:
+
+```bash
+tools setup dev-toolbox TOOLS=node,uv,go
+```
+
 The interactive wizard lets you install Node.js, uv, Go, Rust, SDKMAN, language
 servers, and Firecrawl CLI. Re-running setup updates selected tools and removes
 deselected tools. Selecting Firecrawl also selects its managed Node.js runtime

@@ -23,6 +23,14 @@ ICDs.
 tools setup memtest_vulkan
 ```
 
+The setup questions can also be answered on the command line, which asks
+nothing and runs straight through. `tools help memtest_vulkan` lists the parameters
+and their choices; any you leave out take their defaults:
+
+```bash
+tools setup memtest_vulkan MEMTEST_GPU=nvidia
+```
+
 Setup asks which GPU passthrough to use:
 
 | Choice | What it does | Host prerequisite |

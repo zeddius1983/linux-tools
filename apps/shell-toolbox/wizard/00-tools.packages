@@ -1,6 +1,7 @@
 Install Shell Utilities
 Select utilities to install (all pre-configured):
 setup
+param|TOOLS
 zsh-syntax-highlighting|zsh-syntax-highlighting|Syntax highlighting for zsh|on|~/.local/share/zsh/plugins/zsh-syntax-highlighting
 zsh-autosuggestions|zsh-autosuggestions|Fish-like autosuggestions|on|~/.local/share/zsh/plugins/zsh-autosuggestions
 fzf|fzf|Fuzzy finder (Ctrl-R, Ctrl-T, Alt-C)|on|fzf

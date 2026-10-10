@@ -1,12 +1,36 @@
 # shellcheck shell=bash
-# Wizard pages live in apps/<app>/wizard/NN-name.<type>
+# Wizard pages live in apps/<app>/wizard/NN-name.<type>. Each page is one
+# question an action takes an answer to. Nothing in this file asks a question:
+# the answers come from one of two front-ends.
+#
+#   - The dashboard (tui/) asks the pages natively and hands the answers over in
+#     a state file (LT_SKIP_WIZARD + LT_WIZARD_STATE, see wizard_load_state).
+#   - The command line takes them as KEY=value arguments, one per page:
+#         tools setup comfyui COMFY_GPU=amd COMFY_REF=v0.3.39
+#     wizard_from_args turns those into the same answers a state file carries,
+#     and `tools help <app>` (wizard_help) lists an app's parameters.
+#
+# A page given no answer takes its build default, so a plain `tools setup <app>`
+# behaves exactly as a scripted install always has.
+#
 # File format: line1=title  line2=prompt  line3=applicable actions (csv or *)
 #              remaining lines: name|payload|description[|on|off]  (default: off)
+#
+# Every page has a parameter name, its KEY on the command line: the page's arg|
+# name when it has one, otherwise an explicit
+#   param|<NAME>
+# line, which scripts/lint-apps.sh requires on any page without arg|. "arg" and
+# "param" are reserved line keys and cannot be item names.
 #
 # Supported types:
 #   .mcp      → checklist; applies 'claude mcp add --scope user' after action
 #   .packages → checklist; calls '<app-name-without-box>-install --tools ...'
-#   .buildarg → radiolist; passes the chosen value to the image build as
+#               On the command line both take KEY=item1,item2 (item names, the
+#               first field of each line); KEY=none clears every item, and
+#               leaving KEY out changes nothing. Optional 4th field: default
+#               on/off. Optional 5th field (.packages): detect paths, which the
+#               dashboard uses to pre-tick what is already installed.
+#   .buildarg → single choice; passes the chosen value to the image build as
 #               --build-arg <NAME>=<value> (consumed by cmd_build, no
 #               post-action apply step). Body lines are config, not items:
 #                 arg|<BUILD_ARG_NAME>
@@ -14,17 +38,14 @@
 #                            preferred value first — it becomes the default>
 #               Instead of items-cmd, a page may name a GitHub repo:
 #                 releases|<owner>/<repo>[|<count>]   (default count: 10)
-#               which lists that repo's release tags, newest first. The Go
-#               dashboard fetches the same releases through the API and shows
-#               each one's notes beside the list; whiptail has nowhere to put
-#               them, so here it is only the tag list. Two optional lines:
+#               which lists that repo's release tags, newest first. The
+#               dashboard shows each one's notes beside the list. Optional:
 #                 extra|<value>       literal choice appended after the tags
 #                                     (e.g. a branch name like "master")
 #                 notes-repo|<owner>/<repo>[|<tag-template>[|<count>]]
 #                                     notes for an items-cmd list, matched by
 #                                     tag; "%s" in the template is the item
-#                                     value (e.g. "rust-v%s"). Dashboard-only —
-#                                     ignored here.
+#                                     value (e.g. "rust-v%s"). Dashboard-only.
 #                 alias|<item>|<tag-template>
 #                                     an item that names no tag but the newest
 #                                     tag of that shape, for its notes:
@@ -34,56 +55,30 @@
 #               Two .buildarg pages with the same arg| are alternative views of
 #               one step, not two questions: the dashboard shows them as one tab
 #               and [/] switches between them, the view showing being the
-#               answer (llama-cpp's Release and Build lists). whiptail has
-#               no way to show views, so it asks only the first such page.
-#   .runtime  → radiolist; picks a create-time variant (consumed by cmd_create
-#               via wizard_create_variant, no post-action apply step). Body lines
-#               are items: Label|value|description (first line = default). The
-#               Label shows verbatim; the value selects create_flags.<value>
-#               (podman --additional-flags) and create_args.<value> (extra
+#               answer (llama-cpp's Release and Build lists). On the command
+#               line they are one parameter that takes a value from either list.
+#               The value is not checked against the list (it is fetched over
+#               the network); a wrong one fails the build.
+#   .runtime  → single choice; picks a create-time variant (consumed by
+#               cmd_create via wizard_create_variant, no post-action apply
+#               step). Body lines are items: Label|value|description (first
+#               line = default). The dashboard shows the Label; the command line
+#               takes the value, which selects create_flags.<value> (podman
+#               --additional-flags) and create_args.<value> (extra
 #               distrobox-level flags, e.g. --nvidia).
 #               An optional config line
 #                 arg|<BUILD_ARG_NAME>
 #               additionally passes the chosen *value* to the image build as
 #               --build-arg <NAME>=<value>, so a single question can drive both
 #               the base image and the GPU passthrough (see apps/comfyui).
-#               "arg" is reserved as a line key here and cannot be an item Label.
 #
 # To add a new type: add a handler function _wizard_apply_<type>() and register
-# it in the case statement inside tui_apply_wizards().
-
-# Colours for the whiptail wizard pages `tools setup <app>` asks on a terminal.
-# The dashboard asks the same pages natively and never reaches whiptail.
-setup_tui_theme() {
-    export NEWT_COLORS='
-root=white,black
-border=brown,black
-window=lightgray,black
-shadow=gray,black
-title=yellow,black
-button=yellow,brown
-actbutton=white,brown
-compactbutton=brown,black
-checkbox=lightgray,black
-actcheckbox=yellow,brown
-entry=yellow,brown
-disentry=gray,brown
-label=white,black
-listbox=gray,black
-actlistbox=black,brown
-sellistbox=lightgray,green
-actsellistbox=white,brown
-textbox=white,black
-acttextbox=black,cyan
-emptyscale=,gray
-fullscale=,brown
-helpline=white,black
-roottext=lightgrey,black
-'
-}
+# it in the case statement inside wizard_apply().
 
 declare -A _WIZARD_SELECTIONS=()
 _WIZARD_STATE_LOADED=0
+BUILD_ARGS=""
+VARIANT=""
 
 # --- Go front-end bridge -----------------------------------------------------
 # tools-tui (see tui/) collects every answer up front and writes a flat
@@ -145,359 +140,270 @@ wizard_load_state() {
     return 0
 }
 
-tui_run_wizards() {
-    local app="$1" action="$2"
-    # Clear previous selections in-place. Avoid unset+declare-gA inside a function
-    # — bash does not reliably re-create the global after unset in all versions.
-    local _k
-    for _k in "${!_WIZARD_SELECTIONS[@]}"; do unset '_WIZARD_SELECTIONS[$_k]'; done
-    local wizard_dir="$APPS_DIR/$app/wizard"
-    [[ -d "$wizard_dir" ]] || return 0
-    local page arg
-    local -A asked_args=()
-    for page in "$wizard_dir"/[0-9][0-9]-*.*; do
-        [[ -f "$page" ]] || continue
-        # .buildarg pages sharing an arg| are views of one step (see the header);
-        # only the first is asked here, or the build would get the arg twice.
-        if [[ "$page" == *.buildarg ]]; then
-            arg="$(sed -n 's/^arg|//p' "$page" | tr -d '\r' | head -1)"
-            if [[ -n "$arg" ]]; then
-                [[ -n "${asked_args[$arg]:-}" ]] && continue
-                asked_args[$arg]=1
-            fi
-        fi
-        _wizard_run_page "$app" "$action" "$page" || return 1
-    done
-}
+# --- Page helpers ------------------------------------------------------------
 
-_wizard_run_page() {
-    local app="$1" action="$2" page="$3"
-    local fname="${page##*/}"
-    local ext="${fname##*.}"
-    local pagename="${fname%.*}"
-
-    # Read header lines; strip CR so CRLF files work too.
-    local title prompt applicable
-    { IFS= read -r title; IFS= read -r prompt; IFS= read -r applicable; } < "$page"
-    title="${title%$'\r'}"
-    prompt="${prompt%$'\r'}"
-    applicable="${applicable%$'\r'}"
-
-    # Skip if this action doesn't trigger the page.
-    if [[ "$applicable" != "*" ]]; then
-        local matched=0 a
-        IFS=',' read -ra acts <<< "$applicable"
-        for a in "${acts[@]}"; do
-            [[ "${a// /}" == "$action" ]] && matched=1 && break
-        done
-        [[ $matched -eq 0 ]] && return 0
-    fi
-
-    if [[ "$ext" == "buildarg" ]]; then
-        _wizard_run_buildarg_page "$page" "$pagename" "$title" "$prompt"
-        return $?
-    fi
-
-    if [[ "$ext" == "runtime" ]]; then
-        _wizard_run_runtime_page "$page" "$pagename" "$title" "$prompt"
-        return $?
-    fi
-
-    # Build whiptail item list.
-    # Optional 4th field sets default state (on/off); omitting defaults to off.
-    # For .packages pages, optional 5th field is a detect path: a bare name is
-    # checked as ~/.local/bin/<name>; a ~/ prefix expands to $HOME/; multiple
-    # paths may be comma-separated (any match → ON). When a detect field is
-    # present it is the sole authority — default_state is ignored so that
-    # uninstalled tools always appear unchecked.
-    local -a items=()
-    local name payload desc default_state detect
-    while IFS='|' read -r name payload desc default_state detect; do
-        name="${name%$'\r'}"; payload="${payload%$'\r'}"
-        desc="${desc%$'\r'}"; default_state="${default_state%$'\r'}"
-        detect="${detect%$'\r'}"
-        [[ -z "$name" || "$name" == \#* ]] && continue
-        local state="OFF"
-        if [[ "$ext" == "packages" && -n "$detect" ]]; then
-            local -a _dpaths=()
-            IFS=',' read -ra _dpaths <<< "$detect"
-            local _dp
-            for _dp in "${_dpaths[@]}"; do
-                # Literal "~/" prefix in the page's detect list, expanded below.
-                # shellcheck disable=SC2088
-                if [[ "$_dp" == "~/"* ]]; then
-                    _dp="${HOME}/${_dp:2}"
-                else
-                    _dp="${HOME}/.local/bin/${_dp}"
-                fi
-                if [[ -e "$_dp" ]]; then
-                    state="ON"
-                    break
-                fi
-            done
-        else
-            [[ "${default_state,,}" == "on" ]] && state="ON"
-        fi
-        items+=("$name" "$desc" "$state")
-    done < <(tail -n +4 "$page")
-
-    [[ ${#items[@]} -eq 0 ]] && return 0
-
-    local selected
-    selected=$(whiptail --title "linux-tools — $title" \
-        --checklist "$prompt  (SPACE = toggle, ENTER = confirm):" \
-        20 84 10 "${items[@]}" 3>&1 1>&2 2>&3) || return 1
-
-    _WIZARD_SELECTIONS["$pagename"]="$(tr -d '"' <<< "$selected")"
-}
-
-# Single-choice radiolist for .buildarg pages. Items are produced by the
-# page's items-cmd — or by its releases| repo — at wizard time (first line =
-# default); the selection is stored for wizard_build_args to turn into a
-# --build-arg during cmd_build.
-#
-# 'val' deliberately keeps everything after the first '|' (items-cmd routinely
-# contains pipes); the multi-field keys split it themselves.
-_wizard_run_buildarg_page() {
-    local page="$1" pagename="$2" title="$3" prompt="$4"
-    local arg_name="" items_cmd="" rel_repo="" rel_count="" key val
-    local -a extras=()
+# The value of a page's first "<key>|value" body line, up to the next '|'.
+_wizard_page_key() {  # _wizard_page_key <page> <key>
+    local page="$1" want="$2" key val
     while IFS='|' read -r key val; do
         key="${key%$'\r'}"; val="${val%$'\r'}"
-        case "$key" in
-            arg)        arg_name="$val" ;;
-            items-cmd)  items_cmd="$val" ;;
-            releases)   rel_repo="${val%%|*}"
-                        [[ "$val" == *"|"* ]] && rel_count="${val#*|}" ;;
-            extra)      extras+=("${val%%|*}") ;;
-            notes-repo|alias) : ;;  # notes have nowhere to go in whiptail
-        esac
+        if [[ "$key" == "$want" ]]; then
+            printf '%s' "${val%%|*}"
+            return 0
+        fi
     done < <(tail -n +4 "$page")
+}
 
-    [[ -z "$arg_name" || ( -z "$items_cmd" && -z "$rel_repo" ) ]] && return 0
+# The page's command-line KEY: param| when present, else arg|.
+_wizard_page_param() {
+    local p
+    p="$(_wizard_page_key "$1" param)"
+    [[ -n "$p" ]] || p="$(_wizard_page_key "$1" arg)"
+    printf '%s' "$p"
+}
 
-    local -a values=()
-    if [[ -n "$items_cmd" ]]; then
-        mapfile -t values < <(bash -c "$items_cmd" 2>/dev/null)
-    else
-        # A releases| page has no items-cmd of its own: derive the same tag list
-        # the dashboard shows, minus the notes it has no room for.
-        mapfile -t values < <(github_curl \
-            "https://api.github.com/repos/${rel_repo}/releases?per_page=${rel_count:-10}" 2>/dev/null \
-            | grep -o '"tag_name": *"[^"]*"' | sed 's/.*"\([^"]*\)"$/\1/')
-    fi
-    # Bash 4.3 and older choke on expanding an empty array under `set -u`.
-    if ((${#extras[@]})); then values+=("${extras[@]}"); fi
-    if [[ ${#values[@]} -eq 0 ]]; then
-        echo "Warning: wizard page '$pagename': items-cmd produced no items, using build default" >&2
-        return 0
-    fi
+_wizard_page_actions() {
+    sed -n 3p "$1" | tr -d '\r '
+}
 
-    local -a items=()
-    local v state="ON" desc="(default)"
-    for v in "${values[@]}"; do
+_wizard_page_applies() {  # _wizard_page_applies <page> <action>
+    local applicable a
+    local -a acts=()
+    applicable="$(_wizard_page_actions "$1")"
+    [[ "$applicable" == "*" ]] && return 0
+    IFS=',' read -ra acts <<< "$applicable"
+    for a in "${acts[@]}"; do
+        [[ "$a" == "$2" ]] && return 0
+    done
+    return 1
+}
+
+# Item lines of a checklist or .runtime page: blanks, comments and the reserved
+# config keys left out.
+_wizard_items() {
+    local line
+    while IFS= read -r line; do
+        line="${line%$'\r'}"
+        [[ -z "$line" || "$line" == \#* ]] && continue
+        case "${line%%|*}" in arg|param) continue ;; esac
+        printf '%s\n' "$line"
+    done < <(tail -n +4 "$1")
+}
+
+_wizard_runtime_values() {
+    local _label value _desc
+    while IFS='|' read -r _label value _desc; do
+        printf '%s\n' "$value"
+    done < <(_wizard_items "$1")
+}
+
+_wizard_has_pages() {
+    local page
+    for page in "$APPS_DIR/$1/wizard"/[0-9][0-9]-*.*; do
+        [[ -f "$page" ]] && return 0
+    done
+    return 1
+}
+
+# --- Command-line parameters ----------------------------------------------------
+
+# A checklist value, "a,b,c" or "none", as the space-separated item names the
+# apply handlers take. Unknown names are an error rather than ignored: a typo
+# would otherwise uninstall the item it was meant to keep.
+_wizard_checklist_value() {  # _wizard_checklist_value <page> <param> <value>
+    local page="$1" param="$2" value="$3" v out=""
+    local -a names=() wanted=()
+    mapfile -t names < <(_wizard_items "$page" | cut -d'|' -f1)
+    [[ "$value" == none ]] && value=""
+    IFS=',' read -ra wanted <<< "$value"
+    for v in "${wanted[@]+"${wanted[@]}"}"; do
+        v="${v//[[:space:]]/}"
         [[ -z "$v" ]] && continue
-        items+=("$v" "$desc" "$state")
-        state="OFF"; desc=""
+        if ! printf '%s\n' "${names[@]}" | grep -qxF -- "$v"; then
+            echo "Error: $param: unknown item '$v'. Choose from: ${names[*]} (or none)." >&2
+            return 1
+        fi
+        out+=" $v"
     done
-
-    local selected
-    selected=$(whiptail --title "linux-tools — $title" \
-        --radiolist "$prompt  (SPACE = select, ENTER = confirm):" \
-        20 72 10 "${items[@]}" 3>&1 1>&2 2>&3) || return 1
-    [[ -z "$selected" ]] && return 0
-    _WIZARD_SELECTIONS["$pagename"]="$selected"
+    printf '%s' "${out# }"
 }
 
-# Single-choice radiolist for .runtime pages. Body lines are
-# "Label|value|description"; the first line is the default. The visible choice
-# is the Label exactly as written (e.g. "AMD (ROCm/Vulkan)"); the hidden value
-# is a filename-safe key (e.g. amd/nvidia). whiptail returns the Label, so the
-# selection is stored as the Label and translated to its value on demand by
-# wizard_create_variant. cmd_create uses that value to pick a
-# create_flags.<value> / create_args.<value> variant.
-_wizard_run_runtime_page() {
-    local page="$1" pagename="$2" title="$3" prompt="$4"
-    local -a items=()
-    local name value desc state="ON"
-    while IFS='|' read -r name value desc; do
-        name="${name%$'\r'}"; value="${value%$'\r'}"; desc="${desc%$'\r'}"
-        [[ -z "$name" || "$name" == \#* ]] && continue
-        # 'arg|<NAME>' is config, not an item — see wizard_build_args.
-        [[ "$name" == "arg" ]] && continue
-        items+=("$name" "$desc" "$state")
-        state="OFF"
-    done < <(tail -n +4 "$page")
-    [[ ${#items[@]} -eq 0 ]] && return 0
+# Turn KEY=value arguments into the answers a dashboard state file carries —
+# BUILD_ARGS, VARIANT and _WIZARD_SELECTIONS — and mark them loaded, so every
+# consumer downstream reads them exactly as it reads the dashboard's.
+wizard_from_args() {  # wizard_from_args <app> <action> [KEY=value...]
+    local app="$1" action="$2"; shift 2
+    local -A given=() used=()
+    local kv key
+    for kv in "$@"; do
+        key="${kv%%=*}"
+        if [[ "$kv" != *=* || ! "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+            echo "Error: '$kv' is not a KEY=value parameter. See: tools help $app" >&2
+            return 1
+        fi
+        if [[ -n "${given[$key]+set}" ]]; then
+            echo "Error: $key is given twice." >&2
+            return 1
+        fi
+        given[$key]="${kv#*=}"
+    done
+    (( ${#given[@]} )) || return 0
 
-    local selected
-    selected=$(whiptail --title "linux-tools — $title" \
-        --radiolist "$prompt  (SPACE = select, ENTER = confirm):" \
-        20 84 10 "${items[@]}" 3>&1 1>&2 2>&3) || return 1
-    [[ -z "$selected" ]] && return 0
-    _WIZARD_SELECTIONS["$pagename"]="$selected"
-}
-
-# Print the variant value for this app's .runtime selection (empty if none).
-# Translates the stored Label back to its "Label|value|desc" value field.
-wizard_create_variant() {
-    local app="$1"
-    # Go already resolved the label to its value, so no round-trip is needed.
-    if [[ $_WIZARD_STATE_LOADED -eq 1 ]]; then
-        printf '%s' "${VARIANT:-}"
-        return 0
-    fi
-    declare -p _WIZARD_SELECTIONS &>/dev/null || return 0
-    local page fname pagename selected name value _desc
-    for page in "$APPS_DIR/$app/wizard"/[0-9][0-9]-*.runtime; do
+    BUILD_ARGS="" VARIANT=""
+    local page fname pagename param value arg sel
+    for page in "$APPS_DIR/$app/wizard"/[0-9][0-9]-*.*; do
         [[ -f "$page" ]] || continue
+        param="$(_wizard_page_param "$page")"
+        [[ -n "$param" && -n "${given[$param]+set}" ]] || continue
+        # Pages sharing a parameter are views of one step (llama-cpp's Release
+        # and Build lists); the first one carries the answer.
+        [[ -n "${used[$param]:-}" ]] && continue
+        used[$param]=1
+        if ! _wizard_page_applies "$page" "$action"; then
+            echo "Error: $param does not apply to '$action' (only to: $(_wizard_page_actions "$page"))." >&2
+            return 1
+        fi
+        value="${given[$param]}"
         fname="${page##*/}"; pagename="${fname%.*}"
-        selected="${_WIZARD_SELECTIONS[$pagename]:-}"
-        [[ -n "$selected" ]] || return 0
-        while IFS='|' read -r name value _desc; do
-            name="${name%$'\r'}"; value="${value%$'\r'}"
-            [[ -z "$name" || "$name" == \#* || "$name" == "arg" ]] && continue
-            if [[ "$name" == "$selected" ]]; then
-                printf '%s' "$value"
-                return 0
-            fi
-        done < <(tail -n +4 "$page")
-        return 0
+        case "${fname##*.}" in
+            buildarg)
+                # BUILD_ARGS is split on whitespace downstream, as the
+                # dashboard's is, so a value cannot carry any.
+                if [[ -z "$value" || "$value" =~ [[:space:]] ]]; then
+                    echo "Error: $param needs a single value with no spaces (or leave it out for the default)." >&2
+                    return 1
+                fi
+                BUILD_ARGS+=" --build-arg $(_wizard_page_key "$page" arg)=$value"
+                ;;
+            runtime)
+                if ! _wizard_runtime_values "$page" | grep -qxF -- "$value"; then
+                    echo "Error: $param=$value is not one of: $(_wizard_runtime_values "$page" | paste -sd' ')." >&2
+                    return 1
+                fi
+                VARIANT="$value"
+                arg="$(_wizard_page_key "$page" arg)"
+                [[ -n "$arg" ]] && BUILD_ARGS+=" --build-arg $arg=$value"
+                ;;
+            packages|mcp)
+                sel="$(_wizard_checklist_value "$page" "$param" "$value")" || return 1
+                _WIZARD_SELECTIONS["$pagename"]="$sel"
+                ;;
+        esac
     done
+
+    for key in "${!given[@]}"; do
+        if [[ -z "${used[$key]:-}" ]]; then
+            echo "Error: '$app' has no parameter '$key'. See: tools help $app" >&2
+            return 1
+        fi
+    done
+    BUILD_ARGS="${BUILD_ARGS# }"
+    _WIZARD_STATE_LOADED=1
 }
 
-# Emit --build-arg tokens (one per line) for this app's .buildarg selections.
-# Called by cmd_build; prints nothing when no wizard ran (non-interactive).
-wizard_build_args() {
+# The values a .buildarg page offers, as the dashboard would list them. Network
+# backed (items-cmd, or the releases| repo), so it is only used by `tools help`,
+# never to validate an argument; failures just leave the list empty.
+_wizard_buildarg_values() {
+    local page="$1" items_cmd rel_val rel_repo rel_count
+    items_cmd="$(sed -n 's/^items-cmd|//p' "$page" | tr -d '\r' | head -1)"
+    rel_val="$(sed -n 's/^releases|//p' "$page" | tr -d '\r' | head -1)"
+    if [[ -n "$items_cmd" ]]; then
+        timeout 20 bash -c "$items_cmd" 2>/dev/null
+    elif [[ -n "$rel_val" ]]; then
+        rel_repo="${rel_val%%|*}"
+        [[ "$rel_val" == *"|"* ]] && rel_count="${rel_val#*|}"
+        github_curl --max-time 20 \
+            "https://api.github.com/repos/${rel_repo}/releases?per_page=${rel_count:-10}" 2>/dev/null \
+            | grep -o '"tag_name": *"[^"]*"' | sed 's/.*"\([^"]*\)"$/\1/'
+    fi
+    sed -n 's/^extra|//p' "$page" | tr -d '\r' | cut -d'|' -f1
+}
+
+# The build default for an arg: its ARG line in the app's Dockerfile(s).
+_wizard_arg_default() {  # _wizard_arg_default <app> <ARG>
+    grep -hoE "^ARG $2=[^[:space:]]+" "$APPS_DIR/$1"/Dockerfile* 2>/dev/null \
+        | head -1 | cut -d= -f2-
+}
+
+# `tools help <app>`: the app's parameters, their choices and defaults.
+wizard_help() {
     local app="$1"
-    # BUILD_ARGS arrives pre-rendered as "--build-arg NAME=value ..."; split it
-    # back into the one-token-per-line form cmd_build reads with mapfile.
-    if [[ $_WIZARD_STATE_LOADED -eq 1 ]]; then
-        local tok
-        for tok in ${BUILD_ARGS:-}; do printf '%s\n' "$tok"; done
+    if ! _wizard_has_pages "$app"; then
+        echo "Usage: tools setup $app"
+        echo
+        echo "'$app' takes no parameters."
         return 0
     fi
-    declare -p _WIZARD_SELECTIONS &>/dev/null || return 0
-    local wizard_dir="$APPS_DIR/$app/wizard"
-    local page fname pagename selection arg_name key val
-    for page in "$wizard_dir"/[0-9][0-9]-*.buildarg; do
+    echo "Usage: tools setup $app [KEY=value ...]"
+    echo
+    echo "Every parameter is optional; a parameter left out takes its default."
+    local -A shown=()
+    local page fname param title name value label desc default first
+    local -a vals=()
+    for page in "$APPS_DIR/$app/wizard"/[0-9][0-9]-*.*; do
         [[ -f "$page" ]] || continue
         fname="${page##*/}"
-        pagename="${fname%.*}"
-        selection="${_WIZARD_SELECTIONS[$pagename]:-}"
-        [[ -n "$selection" ]] || continue
-        arg_name=""
-        while IFS='|' read -r key val; do
-            [[ "${key%$'\r'}" == "arg" ]] && arg_name="${val%$'\r'}"
-        done < <(tail -n +4 "$page")
-        [[ -n "$arg_name" ]] || continue
-        printf -- '--build-arg\n%s=%s\n' "$arg_name" "$selection"
-    done
-
-    # A .runtime page carrying an 'arg|<NAME>' line feeds its chosen value to the
-    # build as well, so one question can pick both the base image and the
-    # create-time flags. The value (not the shown Label) is what is passed, which
-    # is why this goes through wizard_create_variant rather than the raw
-    # selection.
-    local variant
-    for page in "$wizard_dir"/[0-9][0-9]-*.runtime; do
-        [[ -f "$page" ]] || continue
-        arg_name=""
-        while IFS='|' read -r key val; do
-            [[ "${key%$'\r'}" == "arg" ]] && arg_name="${val%$'\r'}"
-        done < <(tail -n +4 "$page")
-        [[ -n "$arg_name" ]] || continue
-        variant="$(wizard_create_variant "$app")"
-        [[ -n "$variant" ]] || continue
-        printf -- '--build-arg\n%s=%s\n' "$arg_name" "$variant"
+        param="$(_wizard_page_param "$page")"
+        [[ -n "$param" ]] || continue
+        title="$(sed -n 1p "$page" | tr -d '\r')"
+        if [[ -z "${shown[$param]:-}" ]]; then
+            shown[$param]=1
+            echo
+            echo "  $param    $title  (for: $(_wizard_page_actions "$page"))"
+        else
+            echo "      ...or $title:"
+        fi
+        case "${fname##*.}" in
+            runtime)
+                first=1
+                while IFS='|' read -r label value desc; do
+                    default=""; (( first )) && default="  (default)"
+                    printf '      %-10s %s%s\n' "$value" "$label" "$default"
+                    first=0
+                done < <(_wizard_items "$page")
+                ;;
+            buildarg)
+                mapfile -t vals < <(_wizard_buildarg_values "$page")
+                if ((${#vals[@]})); then
+                    printf '      %s\n' "$(printf '%s ' "${vals[@]}")"
+                else
+                    echo "      (could not fetch the list of values)"
+                fi
+                default="$(_wizard_arg_default "$app" "$(_wizard_page_key "$page" arg)")"
+                [[ -n "$default" && -z "${shown[$param.default]:-}" ]] && \
+                    echo "      default: $default"
+                shown[$param.default]=1
+                ;;
+            packages|mcp)
+                while IFS='|' read -r name _ desc _ _; do
+                    printf '      %-24s %s\n' "$name" "$desc"
+                done < <(_wizard_items "$page")
+                echo "      comma-separated, or none; left out, nothing changes"
+                ;;
+        esac
     done
 }
 
-tui_confirm_wizards() {
+# --- Answers for the backend ------------------------------------------------
+# Both front-ends end in the same globals, so these read only those.
+
+# The .runtime value chosen for this run, or nothing for the plain create_flags.
+wizard_create_variant() {
+    [[ $_WIZARD_STATE_LOADED -eq 1 ]] && printf '%s' "${VARIANT:-}"
+    return 0
+}
+
+# --build-arg tokens, one per line, for cmd_build's mapfile. BUILD_ARGS arrives
+# as "--build-arg NAME=value ..."; values never contain whitespace.
+wizard_build_args() {
+    [[ $_WIZARD_STATE_LOADED -eq 1 ]] || return 0
+    local tok
+    for tok in ${BUILD_ARGS:-}; do printf '%s\n' "$tok"; done
+}
+
+wizard_apply() {
     local app="$1"
-    local wizard_dir="$APPS_DIR/$app/wizard"
-    [[ -d "$wizard_dir" ]] || return 0
-
-    local page
-    local -a to_install=() to_remove=()
-    local any_packages=0
-
-    for page in "$wizard_dir"/[0-9][0-9]-*.packages; do
-        [[ -f "$page" ]] || continue
-        any_packages=1
-        local fname="${page##*/}"
-        local pagename="${fname%.*}"
-        local selected_str="${_WIZARD_SELECTIONS[$pagename]:-}"
-        local -a selected_arr=()
-        [[ -n "$selected_str" ]] && read -ra selected_arr <<< "$selected_str"
-
-        local name _payload desc _default detect
-        while IFS='|' read -r name _payload desc _default detect; do
-            name="${name%$'\r'}"; desc="${desc%$'\r'}"; detect="${detect%$'\r'}"
-            [[ -z "$name" || "$name" == \#* ]] && continue
-
-            local installed=0
-            if [[ -n "$detect" ]]; then
-                local -a dpaths=()
-                IFS=',' read -ra dpaths <<< "$detect"
-                local dp
-                for dp in "${dpaths[@]}"; do
-                    # Literal "~/" prefix in the page's detect list, expanded below.
-                    # shellcheck disable=SC2088
-                    if [[ "$dp" == "~/"* ]]; then
-                        dp="${HOME}/${dp:2}"
-                    else
-                        dp="${HOME}/.local/bin/${dp}"
-                    fi
-                    [[ -e "$dp" ]] && { installed=1; break; }
-                done
-            fi
-
-            local is_selected=0
-            local s
-            for s in "${selected_arr[@]+"${selected_arr[@]}"}"; do
-                [[ "$s" == "$name" ]] && is_selected=1 && break
-            done
-
-            if [[ $is_selected -eq 1 && $installed -eq 0 ]]; then
-                to_install+=("$name — $desc")
-            elif [[ $is_selected -eq 0 && $installed -eq 1 ]]; then
-                to_remove+=("$name — $desc")
-            fi
-        done < <(tail -n +4 "$page")
-    done
-
-    [[ $any_packages -eq 0 ]] && return 0
-    [[ ${#to_install[@]} -eq 0 && ${#to_remove[@]} -eq 0 ]] && return 0
-
-    local msg=""
-    if [[ ${#to_install[@]} -gt 0 ]]; then
-        msg+="Installing:\n"
-        local item
-        for item in "${to_install[@]}"; do msg+="  + $item\n"; done
-    fi
-    if [[ ${#to_remove[@]} -gt 0 ]]; then
-        [[ -n "$msg" ]] && msg+="\n"
-        msg+="Removing:\n"
-        local item
-        for item in "${to_remove[@]}"; do msg+="  - $item\n"; done
-    fi
-
-    local total=$(( ${#to_install[@]} + ${#to_remove[@]} ))
-    local height=$(( total + 10 ))
-    [[ ${#to_install[@]} -gt 0 ]] && height=$(( height + 1 ))
-    [[ ${#to_remove[@]} -gt 0 ]] && height=$(( height + 1 ))
-    [[ $height -lt 12 ]] && height=12
-    [[ $height -gt 24 ]] && height=24
-
-    whiptail --title "linux-tools — $app: confirm changes" \
-        --yesno "$(printf '%b' "$msg")\nProceed?" \
-        "$height" 72 || return 1
-}
-
-tui_apply_wizards() {
-    local app="$1" action="$2"
-    # Guard against _WIZARD_SELECTIONS being unset (e.g. tui_run_wizards not called).
     declare -p _WIZARD_SELECTIONS &>/dev/null || return 0
     [[ ${#_WIZARD_SELECTIONS[@]} -eq 0 ]] && return 0
     local wizard_dir="$APPS_DIR/$app/wizard"
@@ -542,7 +448,7 @@ _wizard_apply_mcp() {
             distrobox enter "$box" -- \
                 claude mcp remove --scope user "$name" 2>/dev/null || true
         fi
-    done < <(tail -n +4 "$page")
+    done < <(_wizard_items "$page")
 }
 
 _wizard_apply_packages() {

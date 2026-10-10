@@ -1,6 +1,7 @@
 Install Development Tools
 Select tools to install (reselecting updates them):
 setup
+param|TOOLS
 node|node|Node.js runtime with npm and npx|off|~/.local/share/dev-toolbox/node/bin/node
 uv|uv|Python project manager with uvx|off|~/.local/share/dev-toolbox/uv/bin/uv
 firecrawl|firecrawl|Web scraping CLI|off|~/.local/share/dev-toolbox/firecrawl/bin/firecrawl

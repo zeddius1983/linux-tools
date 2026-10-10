@@ -34,7 +34,7 @@ func testApp(t *testing.T, name string) App {
 }
 
 // A page declaring "setup,create" must open for those actions and no others —
-// the same gate _wizard_run_page applies.
+// the same gate _wizard_page_applies applies.
 func TestSessionFiltersByAction(t *testing.T) {
 	a := testApp(t, "lmstudio")
 	for _, action := range []string{"setup", "create"} {
@@ -182,7 +182,7 @@ func TestSessionDeselectAllStillWritesPage(t *testing.T) {
 	}
 }
 
-// The confirm screen's diff mirrors tui_confirm_wizards: ticked-but-absent is an
+// The confirm screen's diff: ticked-but-absent is an
 // install, unticked-but-present is a removal, and unchanged rows say nothing.
 func TestSessionDiff(t *testing.T) {
 	home := t.TempDir()
@@ -882,4 +882,24 @@ func containsArg(args []string, want string) bool {
 		}
 	}
 	return false
+}
+
+// The review screen's command must be one `tools` accepts and that means the
+// same thing: the runtime value (not its label), and an unticked checklist as
+// "none" since the dashboard always answers it.
+func TestSessionCommandLine(t *testing.T) {
+	w, _ := newWizardSession(testApp(t, "lmstudio"), "setup", t.TempDir())
+	w.page().radio = 1
+	if got, want := w.commandLine(), "tools setup lmstudio LMSTUDIO_GPU=nvidia"; got != want {
+		t.Errorf("lmstudio: %q, want %q", got, want)
+	}
+
+	w, _ = newWizardSession(testApp(t, "claude-code"), "setup", t.TempDir())
+	if got, want := w.commandLine(), "tools setup claude-code STATUSLINE=none"; got != want {
+		t.Errorf("claude-code unticked: %q, want %q", got, want)
+	}
+	w.page().checked[0] = true
+	if got, want := w.commandLine(), "tools setup claude-code STATUSLINE=statusline"; got != want {
+		t.Errorf("claude-code ticked: %q, want %q", got, want)
+	}
 }

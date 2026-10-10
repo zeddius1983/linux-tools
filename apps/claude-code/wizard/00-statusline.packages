@@ -1,4 +1,5 @@
 Optional Claude Code Integrations
 Select host integrations to enable (reselecting updates them):
 setup
+param|STATUSLINE
 statusline|statusline|Powerline status line in ~/.claude|off|~/.claude/statusline.sh
