@@ -11,7 +11,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"sort"
 	"strings"
 	"time"
 
@@ -248,7 +247,7 @@ func (m *model) visible() []App {
 		}
 		out = append(out, a)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Label() < out[j].Label() })
+	sortApps(out)
 	return out
 }
 
@@ -718,6 +717,11 @@ func (m *model) tableView(width int) string {
 		if sel {
 			nameSty = lipgloss.NewStyle().Foreground(colAccent)
 		}
+		// Unmaintained apps are greyed out across the whole row, selected or
+		// not; the selection background still shows where the cursor is.
+		if a.Unmaintained {
+			nameSty, glyphSty, imgSty, boxSty = styDesc, styDesc, styDesc, styDesc
+		}
 
 		label := trunc(a.Label(), nameW)
 		used := 4 + nameW + 1 + imgW + colGap + boxW
@@ -803,6 +807,14 @@ func (m *model) contextLine() string {
 		img = styStatusOK.Render(a.ImageName())
 	default:
 		img = styStatusNo.Render(a.ImageName() + " (not built)")
+	}
+
+	if a.Unmaintained {
+		note := "unmaintained"
+		if a.UnmaintainedNote != "" {
+			note += ": " + a.UnmaintainedNote
+		}
+		img += styWarn.Render("   " + note)
 	}
 
 	exports := a.ExportNames()

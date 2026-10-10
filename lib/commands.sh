@@ -288,8 +288,8 @@ cmd_setup_finish() {
 # tools-tui (see tui/) is Go, and most hosts have no Go toolchain. It is built
 # through a ladder so it never becomes a hard dependency: an existing binary is
 # reused, a host toolchain is used if there is one, otherwise a throwaway
-# container does the build, and a host with none of those simply keeps the
-# whiptail menu.
+# container does the build. A host with none of those has no dashboard, but
+# every `tools <command> <app>` still works.
 #
 # The Go module and build caches live in a named volume, so only the first
 # container build pays for the 58 MB of module downloads.
@@ -340,8 +340,8 @@ tui_build_with_container() {
         go build -o /src/tools-tui .
 }
 
-# Build the dashboard binary. Never fatal: every failure mode here leaves the
-# whiptail menu working, which is the whole point of the ladder.
+# Build the dashboard binary. Never fatal: install and update must not fail
+# over it, and the command-line interface works without it.
 cmd_build_tui() {
     [[ -d "$TUI_DIR" ]] || return 0
 
@@ -352,36 +352,38 @@ cmd_build_tui() {
 
     if command -v go &>/dev/null; then
         tui_build_with_host_go || {
-            echo "Warning: host Go build failed; the whiptail menu still works." >&2
+            echo "Warning: host Go build failed; the dashboard is unavailable." >&2
             return 0
         }
     elif command -v "$RUNTIME" &>/dev/null; then
         tui_build_with_container || {
             echo "Warning: container build failed (no network on first run?);" >&2
-            echo "         the whiptail menu still works." >&2
+            echo "         the dashboard is unavailable." >&2
             return 0
         }
     else
         echo "==> No Go toolchain and no container runtime; skipping the dashboard."
-        echo "    The whiptail menu is used instead."
+        echo "    Use 'tools <command> <app>' instead; see 'tools help'."
         return 0
     fi
 
     echo "==> Built: $TUI_BIN"
 }
 
-# ── Front-end selection ──────────────────────────────────────────────────────
-# The Go dashboard when it is built and not disabled, the whiptail menu
-# otherwise. Both are kept working: a host that never builds the binary, or one
-# where it misbehaves, keeps exactly the menu it has always had.
+# ── Dashboard ────────────────────────────────────────────────────────────────
+# A missing binary is built on the spot (the same ladder `tools install` runs),
+# so a clone that was never installed still opens the dashboard.
 #
-#   LT_NO_GO_TUI=1     force the whiptail menu
 #   LT_TUI_ASCII=1     plain Unicode markers instead of Nerd Font glyphs
 #   LT_TUI_NO_MOUSE=1  no mouse reporting, so the terminal keeps text selection
 cmd_menu() {
-    if [[ ! -x "$TUI_BIN" || -n "${LT_NO_GO_TUI:-}" ]]; then
-        interactive
-        return
+    if [[ ! -x "$TUI_BIN" ]]; then
+        cmd_build_tui
+    fi
+    if [[ ! -x "$TUI_BIN" ]]; then
+        echo "Error: the dashboard could not be built (see above)." >&2
+        echo "       Every action is available as 'tools <command> <app>'; see 'tools help'." >&2
+        exit 1
     fi
 
     # --tools is the absolute script rather than the exported `tools`, so the
@@ -509,7 +511,7 @@ cmd_version() {
     if [[ -x "$TUI_BIN" ]]; then
         echo "  dashboard: built"
     else
-        echo "  dashboard: not built (the whiptail menu is used)"
+        echo "  dashboard: not built (run 'tools build-tui')"
     fi
 }
 
@@ -630,6 +632,7 @@ cmd_list() {
             image_exists "$app" && img_status="built" || img_status="--"
             box_exists   "$app" && box_status="running" || box_status="--"
         fi
+        [[ -f "$APPS_DIR/$app/unmaintained" ]] && box_status+="  (unmaintained)"
         printf "%-20s %-30s %-12s %s\n" "$app" "$desc" "$img_status" "$box_status"
     done < <(list_apps)
 }

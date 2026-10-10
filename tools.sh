@@ -23,7 +23,6 @@ source "$SCRIPT_DIR/lib/release.sh"
 source "$SCRIPT_DIR/lib/helpers.sh"
 source "$SCRIPT_DIR/lib/commands.sh"
 source "$SCRIPT_DIR/lib/wizard.sh"
-source "$SCRIPT_DIR/lib/tui.sh"
 
 # ── Usage ────────────────────────────────────────────────────────────────────
 
@@ -33,7 +32,7 @@ usage() {
     cat <<EOF
 Usage: $0 [command] [app]
 
-  (no args)        Launch the dashboard (LT_NO_GO_TUI=1 for the whiptail menu)
+  (no args)        Launch the dashboard
 
 Commands:
   install          Symlink as 'tools' in ~/.local/bin + set up completion

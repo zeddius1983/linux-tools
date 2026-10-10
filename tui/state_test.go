@@ -84,3 +84,20 @@ func TestPadCountsRunes(t *testing.T) {
 		t.Errorf("pad must not truncate, got %q", got)
 	}
 }
+
+func TestSortAppsPutsUnmaintainedLast(t *testing.T) {
+	apps := []App{
+		{Name: "a", Description: "Alpha", Unmaintained: true},
+		{Name: "z", Description: "Zulu"},
+		{Name: "m", Description: "Mike"},
+		{Name: "b", Description: "Bravo", Unmaintained: true},
+	}
+	sortApps(apps)
+	var got []string
+	for _, a := range apps {
+		got = append(got, a.Name)
+	}
+	if want := "m z a b"; strings.Join(got, " ") != want {
+		t.Fatalf("order = %v, want %s", got, want)
+	}
+}

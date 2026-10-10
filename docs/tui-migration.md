@@ -1,7 +1,7 @@
 # Design: replacing the whiptail TUI with a Go dashboard
 
-**Status:** wired in — `tools` opens the dashboard when the binary is built and
-`LT_NO_GO_TUI` is unset, and the whiptail menu otherwise. See [`tui/`](../tui).
+**Status:** complete — `tools` opens the dashboard, and the whiptail menu
+(`lib/tui.sh`) and its `LT_NO_GO_TUI` gate have been removed. See [`tui/`](../tui).
 **Scope:** `lib/tui.sh`, `lib/wizard.sh`, `tools.sh` dispatch, `cmd_install`
 **Non-goals:** changing `lib/commands.sh` behaviour, changing what any app installs
 
@@ -204,13 +204,15 @@ container-built binary runs unmodified inside the Fedora-based
 
 ## 7. Fallback and incremental migration
 
-The whiptail path stays intact and working. `cmd_menu` (`lib/commands.sh`) is
-the gate:
+*Historical:* during the migration the whiptail menu stayed intact behind a gate
+in `cmd_menu` (`lib/commands.sh`): the dashboard when `tools-tui` was executable
+and `LT_NO_GO_TUI` unset, the whiptail path otherwise. Once the dashboard had
+the mileage, the gate and `lib/tui.sh` were removed. `cmd_menu` now builds a
+missing binary through the §6 ladder and, if that fails, points at
+`tools <command> <app>`. whiptail survives only for the wizard pages a direct
+`tools setup <app>` asks on a terminal.
 
-1. `tools-tui` executable and `LT_NO_GO_TUI` unset → dashboard
-2. otherwise → the whiptail path, unchanged
-
-Two environment variables reach the dashboard through the gate rather than
+Two environment variables reach the dashboard through `cmd_menu` rather than
 requiring the binary to be invoked by hand: `LT_TUI_ASCII` for terminals with
 no patched font, and `LT_TUI_NO_MOUSE` for people who would rather keep the
 terminal's own wheel and text selection.
@@ -218,9 +220,6 @@ terminal's own wheel and text selection.
 `--tools` is passed as the absolute path to `tools.sh`, not the exported
 `tools`, so the dashboard works from a clone that has never been installed.
 
-`lib/tui.sh` stays until the dashboard has enough mileage to drop the fallback.
-It is no longer reached from the dashboard for wizards — only as a whole
-alternative front-end.
 
 ---
 
@@ -236,11 +235,11 @@ alternative front-end.
 - `apps/<name>/category` for all 23 apps
 - Go toolchain in dev-toolbox (merged)
 - `cmd_install` building the binary, through the ladder in §6
-- `tools` launching it, behind the `LT_NO_GO_TUI` gate
+- `tools` launching it
+- `lib/tui.sh` retired and the `LT_NO_GO_TUI` gate dropped; the 26-char
+  `description` rule became the 30-char `tools list` column limit
 
 **Next**
-- retire `lib/tui.sh`, drop the gate
-- drop the 26-char `description` rule from `CLAUDE.md`
 - multi-app select (`cmd_setup` is strictly single-app today)
 
 ---

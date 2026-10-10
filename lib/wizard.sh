@@ -34,7 +34,7 @@
 #               Two .buildarg pages with the same arg| are alternative views of
 #               one step, not two questions: the dashboard shows them as one tab
 #               and [/] switches between them, the view showing being the
-#               answer (llama-cpp's Release and Build lists). This fallback has
+#               answer (llama-cpp's Release and Build lists). whiptail has
 #               no way to show views, so it asks only the first such page.
 #   .runtime  → radiolist; picks a create-time variant (consumed by cmd_create
 #               via wizard_create_variant, no post-action apply step). Body lines
@@ -51,6 +51,36 @@
 #
 # To add a new type: add a handler function _wizard_apply_<type>() and register
 # it in the case statement inside tui_apply_wizards().
+
+# Colours for the whiptail wizard pages `tools setup <app>` asks on a terminal.
+# The dashboard asks the same pages natively and never reaches whiptail.
+setup_tui_theme() {
+    export NEWT_COLORS='
+root=white,black
+border=brown,black
+window=lightgray,black
+shadow=gray,black
+title=yellow,black
+button=yellow,brown
+actbutton=white,brown
+compactbutton=brown,black
+checkbox=lightgray,black
+actcheckbox=yellow,brown
+entry=yellow,brown
+disentry=gray,brown
+label=white,black
+listbox=gray,black
+actlistbox=black,brown
+sellistbox=lightgray,green
+actsellistbox=white,brown
+textbox=white,black
+acttextbox=black,cyan
+emptyscale=,gray
+fullscale=,brown
+helpline=white,black
+roottext=lightgrey,black
+'
+}
 
 declare -A _WIZARD_SELECTIONS=()
 _WIZARD_STATE_LOADED=0

@@ -88,9 +88,9 @@ reports from other distros are welcome.
 |---|---|
 | [`claude-code`](apps/claude-code/README.md) | Anthropic's Claude Code CLI |
 | [`codex-cli`](apps/codex-cli/README.md) | OpenAI Codex CLI |
-| `copilot-cli` | GitHub Copilot CLI |
+| [`copilot-cli`](apps/copilot-cli/README.md) | GitHub Copilot CLI *(unmaintained)* |
 | `opencode` | OpenCode agent CLI |
-| `antigravity` | Antigravity CLI (`agy`) |
+| [`antigravity`](apps/antigravity/README.md) | Antigravity CLI (`agy`) *(unmaintained)* |
 | [`dev-toolbox`](apps/dev-toolbox/README.md) | Node, Python, Go, Rust, JVM toolchains and language servers, pick-and-mix |
 | [`jetbrains-toolbox`](apps/jetbrains-toolbox/README.md) | JetBrains Toolbox app |
 
@@ -138,7 +138,7 @@ There is also `tools build`, `tools create` and `tools export` when you want a s
 - **App windows may not appear in the menu until you log out and back in**, the first time.
 - **`tools rm <app>` keeps the image**, so putting the app back is fast. To reclaim the disk, remove the image with `podman rmi linux-tools/<app>:latest`.
 - **A container is a normal Distrobox**, named `<app>-box`: `distrobox enter comfyui-box` works exactly as you would expect.
-- **No Go, no dashboard, no problem.** `tools.sh install` builds the dashboard with host Go if you have it, otherwise in a throwaway container, and skips it harmlessly if neither is available — the older `whiptail` menu takes over. `LT_NO_GO_TUI=1 tools` selects that menu deliberately.
+- **No Go, no dashboard, no problem.** `tools.sh install` builds the dashboard with host Go if you have it, otherwise in a throwaway container, and skips it harmlessly if neither is available. Every action is still there as `tools <command> <app>` (see `tools help`).
 - **Updates are versioned, and reversible.** Each release unpacks into its own
   directory under `~/.local/share/linux-tools/versions/`, with `current`
   pointing at the one in use, so `tools update --version <tag>` goes back to a

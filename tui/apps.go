@@ -21,6 +21,11 @@ type App struct {
 	WizardDir   string
 	Exports     []string
 	HasWizard   bool
+	// Unmaintained is set by an apps/<name>/unmaintained marker: the app still
+	// installs, but is not being kept current, so the dashboard greys it out.
+	// UnmaintainedNote is the marker's optional one-line reason.
+	Unmaintained     bool
+	UnmaintainedNote string
 }
 
 // UncategorisedLabel is used for apps with no apps/<name>/category file.
@@ -77,6 +82,17 @@ func (a App) ExportNames() []string {
 	return out
 }
 
+// sortApps orders a tab's rows by label, with unmaintained apps after all the
+// maintained ones so the greyed-out rows collect at the bottom.
+func sortApps(apps []App) {
+	sort.SliceStable(apps, func(i, j int) bool {
+		if apps[i].Unmaintained != apps[j].Unmaintained {
+			return !apps[i].Unmaintained
+		}
+		return apps[i].Label() < apps[j].Label()
+	})
+}
+
 // Categories returns the category names present, in a stable preferred order
 // with any unknown ones appended alphabetically.
 func Categories(apps []App) []string {
@@ -126,6 +142,10 @@ func LoadApps(appsDir string) ([]App, error) {
 		}
 		if _, err := os.Stat(filepath.Join(appsDir, e.Name(), "host-only")); err == nil {
 			app.HostOnly = true
+		}
+		if _, err := os.Stat(filepath.Join(appsDir, e.Name(), "unmaintained")); err == nil {
+			app.Unmaintained = true
+			app.UnmaintainedNote = readTrimmed(filepath.Join(appsDir, e.Name(), "unmaintained"))
 		}
 		if fi, err := os.Stat(app.WizardDir); err == nil && fi.IsDir() {
 			app.HasWizard = true
