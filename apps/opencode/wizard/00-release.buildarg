@@ -1,0 +1,5 @@
+Select OpenCode release
+Choose an OpenCode release to install:
+setup,build
+arg|OPENCODE_RELEASE
+releases|anomalyco/opencode

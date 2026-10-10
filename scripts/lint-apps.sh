@@ -22,7 +22,6 @@ APPS_DIR="$ROOT/apps"
 # an empty panel for that app.
 LEGACY_NO_README=(
     amdgpu_top
-    opencode
     telegram
 )
 
