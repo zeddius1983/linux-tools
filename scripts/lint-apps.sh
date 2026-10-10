@@ -22,8 +22,6 @@ APPS_DIR="$ROOT/apps"
 # an empty panel for that app.
 LEGACY_NO_README=(
     amdgpu_top
-    opencode
-    telegram
 )
 
 # Apps whose Dockerfile still has an unqualified FROM. Podman has no

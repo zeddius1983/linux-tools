@@ -89,7 +89,7 @@ reports from other distros are welcome.
 | [`claude-code`](apps/claude-code/README.md) | Anthropic's Claude Code CLI |
 | [`codex-cli`](apps/codex-cli/README.md) | OpenAI Codex CLI |
 | [`copilot-cli`](apps/copilot-cli/README.md) | GitHub Copilot CLI *(unmaintained)* |
-| `opencode` | OpenCode agent CLI |
+| [`opencode`](apps/opencode/README.md) | OpenCode agent CLI, with a release picker |
 | [`antigravity`](apps/antigravity/README.md) | Antigravity CLI (`agy`) *(unmaintained)* |
 | [`dev-toolbox`](apps/dev-toolbox/README.md) | Node, Python, Go, Rust, JVM toolchains and language servers, pick-and-mix |
 | [`jetbrains-toolbox`](apps/jetbrains-toolbox/README.md) | JetBrains Toolbox app |
@@ -112,7 +112,7 @@ reports from other distros are welcome.
 | App | What it is |
 |---|---|
 | [`chrome`](apps/chrome/README.md) | Google Chrome |
-| `telegram` | Telegram Desktop |
+| [`telegram`](apps/telegram/README.md) | Telegram Desktop |
 | [`shell-toolbox`](apps/shell-toolbox/README.md) | Zsh, Starship and friends *(host install, no container)* |
 
 ## Everyday commands

@@ -1,0 +1,17 @@
+#!/bin/sh
+# Launcher for Telegram Desktop inside telegram-box.
+#
+# On every start Telegram writes its own launcher to
+# ~/.local/share/applications/org.telegram.desktop._<hash>.desktop. $HOME is
+# shared with the host, so that file lands in the host menu with
+# Exec=/opt/Telegram/Telegram, a path that only exists in this box: a second
+# "Telegram" entry that does nothing. DESKTOPINTEGRATION=1 makes Telegram skip
+# writing it; the menu entry `tools setup telegram` exports is the one to use.
+#
+# Remove the broken copy an earlier image left behind. Only a file pointing
+# into /opt/Telegram is touched, so a launcher from a native install is safe.
+for f in "$HOME"/.local/share/applications/org.telegram.desktop._*.desktop; do
+    [ -f "$f" ] && grep -q '^Exec=/opt/Telegram/' "$f" && rm -f "$f"
+done
+
+DESKTOPINTEGRATION=1 exec /opt/Telegram/Telegram "$@"

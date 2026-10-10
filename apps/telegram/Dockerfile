@@ -15,5 +15,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN curl -fL https://telegram.org/dl/desktop/linux -o /tmp/tdesktop.tar.xz \
     && mkdir -p /opt/Telegram \
     && tar -xf /tmp/tdesktop.tar.xz -C /opt/Telegram --strip-components=1 \
-    && rm /tmp/tdesktop.tar.xz \
-    && ln -sf /opt/Telegram/Telegram /usr/bin/telegram-desktop
+    && rm /tmp/tdesktop.tar.xz
+
+# A wrapper rather than a symlink: it stops Telegram writing a host menu entry
+# that points into this box (see the script). It lives in /usr/bin because
+# `command -pv`, which resolves exports, does not search /usr/local/bin.
+COPY telegram-desktop /usr/bin/telegram-desktop
+RUN chmod 0755 /usr/bin/telegram-desktop
