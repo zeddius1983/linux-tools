@@ -7,6 +7,7 @@ Priority order within each section: highest first.
 ## AI / LLM Tools
 
 - [x] `vllm` — high-throughput OpenAI-compatible LLM inference server (setup-time GPU picker selecting both the upstream image and passthrough: AMD ROCm, or NVIDIA CUDA via CDI; plus a release picker over upstream vLLM releases, with `latest` and `nightly`)
+- [x] `chatgpt` — OpenAI ChatGPT desktop app for Linux (preview); official `.deb`, whose postinst adds OpenAI's APT repo so the box updates with `apt upgrade`
 - [ ] `open-webui` — web UI for local LLMs; works with Ollama and OpenAI-compatible APIs (https://docs.openwebui.com/)
 - [ ] `ollama` — local LLM runtime (GPU-accelerated)
 - [x] `lmstudio` — LM Studio local model runner (setup-time GPU runtime picker: AMD ROCm/Vulkan, or NVIDIA CUDA via CDI `--device nvidia.com/gpu=all`)
