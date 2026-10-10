@@ -23,7 +23,6 @@ source "$SCRIPT_DIR/lib/release.sh"
 source "$SCRIPT_DIR/lib/helpers.sh"
 source "$SCRIPT_DIR/lib/commands.sh"
 source "$SCRIPT_DIR/lib/wizard.sh"
-source "$SCRIPT_DIR/lib/tui.sh"
 
 # ── Usage ────────────────────────────────────────────────────────────────────
 
@@ -31,9 +30,9 @@ usage() {
     local apps
     apps="$(list_apps | tr '\n' ' ')"
     cat <<EOF
-Usage: $0 [command] [app]
+Usage: $0 [command] [app] [KEY=value ...]
 
-  (no args)        Launch the dashboard (LT_NO_GO_TUI=1 for the whiptail menu)
+  (no args)        Launch the dashboard
 
 Commands:
   install          Symlink as 'tools' in ~/.local/bin + set up completion
@@ -52,6 +51,11 @@ Commands:
   enter  <app>     Open shell inside box
   rm     <app>     Remove distrobox (image is kept)
   list             Show status of all apps
+  help   <app>     Show an app's parameters
+
+setup, build and create take an app's parameters as KEY=value, e.g.
+  tools setup comfyui COMFY_GPU=nvidia COMFY_REF=v0.3.39
+A parameter left out takes its default; 'tools help <app>' lists them.
 
 Available apps: ${apps:-none}
 EOF
@@ -74,44 +78,59 @@ case "$command_" in
     update)            cmd_update  "$@";               exit 0 ;;
     version|--version) cmd_version;                    exit 0 ;;
     build-tui)         cmd_build_tui;                  exit 0 ;;
-    -h|--help|help)    usage;                          exit 0 ;;
+    -h|--help|help)
+        if [[ $# -ge 1 ]]; then
+            require_app "$1"
+            wizard_help "$1"
+        else
+            usage
+        fi
+        exit 0 ;;
 esac
 
 [[ $# -ge 1 ]] || { usage; exit 1; }
 app="$1"
+shift
+require_app "$app"
 require_runtime
+
+# Answers to the app's wizard pages come from exactly one place: the
+# dashboard's state file (LT_SKIP_WIZARD, set by tui/ once it has asked
+# everything) or KEY=value arguments. With neither, every page takes its
+# default, which is the plain scripted `tools setup <app>`.
+load_answers() {  # load_answers <action> [KEY=value...]
+    if [[ -n "${LT_SKIP_WIZARD:-}" ]]; then
+        if [[ $# -gt 1 ]]; then
+            echo "Error: KEY=value parameters cannot be combined with LT_SKIP_WIZARD." >&2
+            exit 1
+        fi
+        wizard_require_state "$app" || exit 1
+    elif [[ $# -gt 1 ]]; then
+        wizard_from_args "$app" "$@" || exit 1
+    else
+        # No-op unless LT_WIZARD_STATE names a file, as it has always been.
+        wizard_load_state "$app"
+    fi
+}
+
+no_params() {
+    if [[ $# -gt 0 ]]; then
+        echo "Error: '$command_' takes no parameters (got: $*)." >&2
+        exit 1
+    fi
+}
 
 case "$command_" in
     setup)
-        # Collect wizard selections up front (interactive only) so .buildarg
-        # pages can influence the image build; other page types are applied
-        # after setup as before.
-        wizard_active=0
-        # LT_SKIP_WIZARD is set by the Go front-end, which has already asked
-        # everything and left its answers in LT_WIZARD_STATE.
-        if [[ -n "${LT_SKIP_WIZARD:-}" ]]; then
-            wizard_require_state "$app" || exit 1
-            wizard_active=1
-        elif [[ -t 0 ]] && command -v whiptail &>/dev/null \
-                       && [[ -d "$APPS_DIR/$app/wizard" ]]; then
-            wizard_active=1
-            setup_tui_theme
-            tui_run_wizards "$app" "setup" || exit 0
-            tui_confirm_wizards "$app" || exit 0
-        fi
+        load_answers setup "$@"
         cmd_setup "$app"
-        if [[ $wizard_active -eq 1 ]]; then
-            tui_apply_wizards "$app" "setup"
-        fi
+        wizard_apply "$app"
         cmd_setup_finish "$app"
         ;;
-    # These are no-ops unless LT_WIZARD_STATE points at a real file, so they
-    # stay safe for plain scripted invocations — but a front-end that promised
-    # state via LT_SKIP_WIZARD and lost it is an error, not a default build.
-    build)  wizard_require_state "$app" || exit 1; cmd_build  "$app" ;;
-    create) wizard_require_state "$app" || exit 1; cmd_create "$app" ;;
-    export) cmd_export "$app" ;;
-    enter)  cmd_enter  "$app" ;;
-    rm)     cmd_rm     "$app" ;;
+    build)  load_answers build  "$@"; cmd_build  "$app" ;;
+    create) load_answers create "$@"; cmd_create "$app" ;;
+    export) no_params "$@"; cmd_export "$app" ;;
+    enter)  no_params "$@"; cmd_enter  "$app" ;;
+    rm)     no_params "$@"; cmd_rm     "$app" ;;
     *)      usage; exit 1 ;;
 esac

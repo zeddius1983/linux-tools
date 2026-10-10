@@ -16,6 +16,14 @@ Backends are dynamically loaded plugins (`GGML_BACKEND_DL`), so one GPU shows up
 tools setup llama-cpp
 ```
 
+The setup questions can also be answered on the command line, which asks
+nothing and runs straight through. `tools help llama-cpp` lists the parameters
+and their choices; any you leave out take their defaults:
+
+```bash
+tools setup llama-cpp LLAMA_GPU=cuda12 LLAMA_REF=nightly
+```
+
 Run interactively, the wizard asks two questions:
 
 1. **GPU runtime** — picks the build toolchain, the runtime base image *and* the container's GPU passthrough:

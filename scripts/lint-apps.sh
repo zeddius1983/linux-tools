@@ -22,8 +22,6 @@ APPS_DIR="$ROOT/apps"
 # an empty panel for that app.
 LEGACY_NO_README=(
     amdgpu_top
-    antigravity
-    copilot-cli
     opencode
     telegram
 )
@@ -38,8 +36,10 @@ LEGACY_UNQUALIFIED_FROM=(
     telegram
 )
 
-# The TUI description column is 26 characters wide in the whiptail fallback.
-MAX_DESCRIPTION=26
+# `tools list` prints descriptions in a 30-character column. The dashboard sizes
+# its own columns, but a label longer than this is truncated there on a narrow
+# terminal too.
+MAX_DESCRIPTION=30
 
 STRICT=0
 declare -a ONLY=()
@@ -161,9 +161,20 @@ check_app() {
         if [[ -z "${desc// /}" ]]; then
             fail "$app" "description is empty"
         elif (( ${#desc} > MAX_DESCRIPTION )); then
-            fail "$app" "description is ${#desc} chars, over the $MAX_DESCRIPTION-char TUI column"
+            fail "$app" "description is ${#desc} chars, over the $MAX_DESCRIPTION-char 'tools list' column"
         fi
     fi
+
+    # ── wizard pages ────────────────────────────────────────────────────────
+    # Every page needs a command-line KEY (tools setup <app> KEY=value): its
+    # arg| name, or a param| line when it has none (lib/wizard.sh).
+    local page
+    for page in "$d"/wizard/[0-9][0-9]-*.*; do
+        [[ -f "$page" ]] || continue
+        if ! grep -qE '^(param|arg)\|[A-Za-z_][A-Za-z0-9_]*' "$page"; then
+            fail "$app" "wizard page ${page##*/} has no param| or arg| line (its command-line KEY)"
+        fi
+    done
 
     # ── category ────────────────────────────────────────────────────────────
     if [[ ! -f "$d/category" ]] || [[ -z "$(head -1 "$d/category" | tr -d '[:space:]')" ]]; then

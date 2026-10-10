@@ -22,6 +22,14 @@ via [CDI](https://github.com/cncf-tags/container-device-interface).
 tools setup nvtop
 ```
 
+The setup questions can also be answered on the command line, which asks
+nothing and runs straight through. `tools help nvtop` lists the parameters
+and their choices; any you leave out take their defaults:
+
+```bash
+tools setup nvtop NVTOP_GPU=nvidia
+```
+
 Setup asks which GPU passthrough to use:
 
 | Choice | What it does | Host prerequisite |

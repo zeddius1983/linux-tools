@@ -11,7 +11,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"sort"
 	"strings"
 	"time"
 
@@ -248,7 +247,7 @@ func (m *model) visible() []App {
 		}
 		out = append(out, a)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Label() < out[j].Label() })
+	sortApps(out)
 	return out
 }
 
@@ -506,9 +505,8 @@ func (m *model) clampRow() {
 // runCmd suspends the dashboard, gives bash the terminal, then resumes.
 //
 // extraEnv carries the wizard bridge (LT_SKIP_WIZARD, LT_WIZARD_STATE) when
-// answers were collected here. Without it bash sees a real tty and asks its own
-// whiptail pages, which is still the right behaviour for an app whose wizard
-// this front-end skipped.
+// answers were collected here. Without it bash asks nothing and every page
+// takes its default.
 func (m *model) runCmd(name string, a App, extraEnv []string, bin string, args ...string) tea.Cmd {
 	c := hostCommand(bin, args...)
 	c.Env = append(os.Environ(), extraEnv...)
@@ -718,6 +716,11 @@ func (m *model) tableView(width int) string {
 		if sel {
 			nameSty = lipgloss.NewStyle().Foreground(colAccent)
 		}
+		// Unmaintained apps are greyed out across the whole row, selected or
+		// not; the selection background still shows where the cursor is.
+		if a.Unmaintained {
+			nameSty, glyphSty, imgSty, boxSty = styDesc, styDesc, styDesc, styDesc
+		}
 
 		label := trunc(a.Label(), nameW)
 		used := 4 + nameW + 1 + imgW + colGap + boxW
@@ -803,6 +806,14 @@ func (m *model) contextLine() string {
 		img = styStatusOK.Render(a.ImageName())
 	default:
 		img = styStatusNo.Render(a.ImageName() + " (not built)")
+	}
+
+	if a.Unmaintained {
+		note := "unmaintained"
+		if a.UnmaintainedNote != "" {
+			note += ": " + a.UnmaintainedNote
+		}
+		img += styWarn.Render("   " + note)
 	}
 
 	exports := a.ExportNames()

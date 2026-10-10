@@ -21,6 +21,14 @@ XDNA1 and are **not** supported.
 tools setup fastflowlm
 ```
 
+The setup questions can also be answered on the command line, which asks
+nothing and runs straight through. `tools help fastflowlm` lists the parameters
+and their choices; any you leave out take their defaults:
+
+```bash
+tools setup fastflowlm FLM_REF=v1.0.7
+```
+
 The interactive setup shows a release picker (last 10 GitHub releases), with
 each release's date and notes shown beside the list — `PgDn`/`PgUp` scrolls
 them. The non-interactive CLI installs the latest release.

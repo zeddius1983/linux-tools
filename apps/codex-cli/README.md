@@ -16,6 +16,14 @@ The image also includes Git, GitHub CLI (`gh`), and Bubblewrap.
 tools setup codex-cli
 ```
 
+The setup questions can also be answered on the command line, which asks
+nothing and runs straight through. `tools help codex-cli` lists the parameters
+and their choices; any you leave out take their defaults:
+
+```bash
+tools setup codex-cli CODEX_RELEASE=latest STATUSLINE=tmux-statusline
+```
+
 Interactive setup opens a release picker. Choose `latest` (the default) to
 follow OpenAI's stable standalone-installer channel, or pin one of the ten most
 recent stable releases. The release list is read from the official

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Sets up prerequisites for linux-tools inside an Ubuntu VM (e.g. OrbStack).
-# Installs: podman, distrobox, whiptail
+# Installs: podman, distrobox
 set -euo pipefail
 
 # ── Guards ───────────────────────────────────────────────────────────────────
@@ -20,10 +20,9 @@ fi
 echo "==> Updating package lists..."
 sudo apt-get update -qq
 
-echo "==> Installing podman, whiptail, curl, uidmap..."
+echo "==> Installing podman, curl, uidmap..."
 sudo apt-get install -y --no-install-recommends \
     podman \
-    whiptail \
     curl \
     uidmap        # required for rootless podman user namespaces
 
@@ -55,7 +54,6 @@ echo ""
 echo "==> Installed versions:"
 echo -n "  podman:    "; podman --version
 echo -n "  distrobox: "; distrobox --version 2>&1 | head -1
-echo -n "  whiptail:  "; whiptail --version 2>&1 | head -1
 
 echo ""
 echo "All done. You can now run ./tools.sh from the project root."

@@ -10,13 +10,12 @@ is what the footer and every action refer to.
 
 See [`docs/tui-migration.md`](../docs/tui-migration.md) for the design.
 
-**This is what `tools` opens.** With the binary built and `LT_NO_GO_TUI` unset,
-`tools` (no arguments) launches the dashboard; otherwise it falls back to the
-whiptail menu, which is still there and still works.
+**This is what `tools` opens.** `tools` (no arguments) launches the dashboard,
+building it first if the binary is missing. There is no menu fallback any more;
+if the build fails, every action is still available as `tools <command> <app>`.
 
 | Variable | Effect |
 |---|---|
-| `LT_NO_GO_TUI=1` | force the whiptail menu |
 | `LT_TUI_ASCII=1` | plain Unicode markers instead of Nerd Font glyphs |
 | `LT_TUI_NO_MOUSE=1` | no mouse reporting, so the terminal keeps text selection |
 
@@ -31,12 +30,13 @@ never becomes a dependency of using linux-tools:
 | reuse | binary newer than every `*.go`, `go.mod`, `go.sum` | 0 |
 | host Go | `go` on PATH (e.g. exported from `dev-toolbox`) | ~0.5s |
 | container | a container runtime | 13s first ever, ~1s after |
-| skip | neither | whiptail menu, unchanged |
+| skip | neither | no dashboard; `tools <command> <app>` still works |
 
 The container rung runs `golang:1.25-alpine` (228 MB, pulled once) with
 `/go` on a named volume — `linux-tools-go-cache` — so the 58 MB of module
 downloads and the build cache survive between runs. Failures are never fatal:
-every one of them leaves the whiptail menu working.
+install and update carry on, and the command-line interface does not need the
+dashboard.
 
 To force a rebuild, delete the binary: `rm tui/tools-tui && tools build-tui`.
 
@@ -134,8 +134,12 @@ away. Answers are written to a state file and handed to bash as
 `LT_SKIP_WIZARD=1 LT_WIZARD_STATE=<path>`, which `wizard_load_state`
 (`lib/wizard.sh`) re-hydrates into `_WIZARD_SELECTIONS` so every existing
 consumer — the apply handlers, `wizard_build_args`, `wizard_create_variant` —
-works unchanged. Without those variables bash asks its own whiptail pages, so
-the old path is still there for a scripted `tools setup`.
+works unchanged. Without those variables bash asks nothing: a plain
+`tools setup <app>` takes every page's default, and `tools setup <app> KEY=value`
+answers pages on the command line. The review screen shows that command for the
+answers given (`runs: tools setup comfyui COMFY_GPU=nvidia COMFY_REF=v0.39.0`),
+so a dashboard run can be repeated from a shell. Each page's `KEY` is its
+`param|` line, or its `arg|` name when it has none (`Page.ParamName`).
 
 | Page type | Widget | Result |
 |---|---|---|
@@ -174,8 +178,8 @@ different views.
 The grouping is by arg name alone, with no extra page syntax, which also turns
 what used to be a latent bug — two pages passing one arg, the last silently
 winning — into a defined behaviour. Only `.buildarg` pages group; a `.runtime`
-page's `arg|` line is not considered. The whiptail fallback cannot show views,
-so it asks the first page of each group and skips the rest.
+page's `arg|` line is not considered. On the command line a group is one parameter
+(`LLAMA_REF=`), which takes a value from any of its views.
 
 ### Release notes
 
@@ -218,13 +222,13 @@ API calls are limited to 60 per hour per address. Nothing prompts for one, and
 it needs no permissions: `export GH_TOKEN=$(gh auth token)` is enough. The
 bash side does the same through `github_curl` (`lib/helpers.sh`).
 
-The whiptail fallback understands `releases|` and `extra|` too, deriving the
-same tag list with `curl`; it has nowhere to put notes, so it ignores
-`notes-repo` and `alias`.
+`tools help <app>` lists the same values from the bash side (`items-cmd`, or
+`releases|` through `github_curl`, plus any `extra|`); it has nowhere to put
+notes, so it ignores `notes-repo` and `alias`.
 
 Ticked state is what will exist *after* the run, not what to add: unticking an
 already-installed tool removes it. The review screen before the run spells that
-out as a `+`/`-` diff, mirroring `tui_confirm_wizards`.
+out as a `+`/`-` diff.
 
 Deselecting everything on a page is an answer, not an absence — the page is
 still written, with an empty value, so the apply handler removes what is
@@ -400,11 +404,12 @@ appended alphabetically.
 | IMAGE / BOX table columns with glyphs | done |
 | filter, help overlay, footer | done |
 | actions via `ExecProcess` + state refresh | done |
-| native wizard pages (checklist, single choice, review) | done — whiptail is no longer reached from here |
+| native wizard pages (checklist, single choice, review) | done — the review screen shows the equivalent `tools … KEY=value` command |
 | state-file bridge to bash | done, and now used by the wizard |
 | `cmd_install` building the binary | done — ladder, never fatal |
-| wiring `tools` to launch it | done — behind `LT_NO_GO_TUI` |
-| retiring `lib/tui.sh` | not yet: it is the fallback |
+| wiring `tools` to launch it | done |
+| retiring `lib/tui.sh` | done — no menu fallback, no `LT_NO_GO_TUI` |
+| greying out `unmaintained` apps | done — dimmed, sorted last, flagged in the footer |
 
 ## Files
 

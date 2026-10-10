@@ -69,6 +69,13 @@ list_apps() {
     done
 }
 
+require_app() {
+    if [[ -z "$1" || ! -d "$APPS_DIR/$1" ]]; then
+        echo "Error: no app named '$1'. Available: $(list_apps | tr '\n' ' ')" >&2
+        exit 1
+    fi
+}
+
 # ── Host detection ───────────────────────────────────────────────────────────
 
 # Used to pick between Dockerfile.ubuntu / Dockerfile.arch for apps that ship

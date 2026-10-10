@@ -102,12 +102,13 @@ Create `apps/<name>/` with the files below — `Dockerfile`, `exports`, `descrip
 |---|---|
 | `Dockerfile` | Container image definition. Can instead be a `Dockerfile.ubuntu` + `Dockerfile.arch` pair — see [Multi-base-image pattern](#multi-base-image-pattern). |
 | `exports` | What to expose to the host (see export types below) |
-| `description` | One-line label shown in the interactive TUI (keep it under ~26 chars — that's the TUI description column width) |
+| `description` | One-line label shown in the dashboard and `tools list` (keep it under 30 chars — the `tools list` description column; `scripts/lint-apps.sh` enforces it) |
 | `category` | One line naming the dashboard tab the app appears under (e.g. `AI / LLM`, `Development`, `System`, `Browsers`, `Communication`, `Shell`). Missing or empty ⇒ the app lands in an `Other` tab. Preferred tab order lives in `Categories()` in `tui/apps.go`; unknown names are appended alphabetically. |
 | `README.md` | **Required.** App-specific usage docs (see below). Rendered in the dashboard's info panel beside the app table; `tools setup` prints only its path when it finishes. |
 | `create_flags` | Optional. Extra flags passed to the container engine via `distrobox create --additional-flags`. Use for privileged mode, device passthrough, or volume mounts needed at container creation time (e.g. `--privileged -v /usr/src:/usr/src:ro`). |
 | `post-install` | Optional. Short text snippet `cat`-ed by `tools setup` when it finishes — use it for terse "next step" hints (e.g. `corefreq-setup`). This is now the *only* thing printed after an install, so keep it to a few lines; long-form docs belong in `README.md`. |
 | `host-only` | Optional. Marker file (contents ignored). Tells `tools setup` the app installs straight to the host instead of running in a container (see `apps/shell-toolbox`). |
+| `unmaintained` | Optional. Marker file for an app that still works but is not being kept current. The dashboard greys it out and sorts it last in its tab, and `tools list` flags it. Its optional one-line contents are the reason, shown in the dashboard footer. |
 | `renamed-from` | Optional. Previous app name. During setup, removes that app's obsolete Distrobox and image before building the renamed app; shared-home data is preserved. |
 
 Optionally add `icon.png` or `icon.svg` — if present, it overrides whatever icon the container has. All export types share the same bundled icon.
@@ -256,7 +257,26 @@ Distrobox mounts the host's `$HOME` inside the container. This means:
 
 `./tools.sh` with no arguments opens the **Go dashboard** in `tui/` (Bubble Tea v2, modelled on `gh-dash`): category tabs, an app table, a rendered-README panel, native wizard pages and a keybinding footer. `tools install` builds the binary — host Go if present, otherwise a throwaway `golang:1.25-alpine` container — and never fails the install if it cannot. See [`tui/README.md`](tui/README.md) and [`docs/tui-migration.md`](docs/tui-migration.md).
 
-The old `whiptail` menu (`lib/tui.sh`) is the fallback, used when the binary is missing or `LT_NO_GO_TUI=1` is set. It renders each row as `description | image ref | box name` with fixed column widths (26 / 34), so **keep `description` under ~26 chars** while that fallback exists — the dashboard itself sizes columns to the terminal and does not need the limit.
+There is no menu fallback any more: the old `whiptail` menu (`lib/tui.sh`) and its `LT_NO_GO_TUI` switch are gone. If the binary is missing, `tools` runs the build ladder once more and, if that fails too, points at the command-line interface (`tools <command> <app>`), which never depended on the dashboard. Nothing uses `whiptail` any more.
+
+### Wizard pages and command-line parameters
+
+An app's `wizard/` pages are answered in one of two ways, and `tools` never asks a question itself:
+
+- **Dashboard:** asks them natively and hands the answers to bash in a state file (`LT_SKIP_WIZARD` + `LT_WIZARD_STATE`). Its review screen prints the equivalent command.
+- **Command line:** `tools setup|build|create <app> KEY=value ...`, e.g. `tools setup comfyui COMFY_GPU=nvidia COMFY_REF=v0.39.0`. `tools help <app>` lists an app's parameters, their choices and defaults. A parameter left out takes its default, so a plain `tools setup <app>` is still the scripted default install.
+
+**Every wizard page needs a parameter name** (its `KEY`): the page's `arg|` name, or a `param|<NAME>` line for pages without one (checklists, and `.runtime` pages that feed no build arg). `scripts/lint-apps.sh` and the Go tests both enforce it. `arg` and `param` are reserved line keys, never item names. Value rules, all checked before anything is removed or built:
+
+| Page type | Value |
+|---|---|
+| `.runtime` | one of the items' *value* fields (`amd`, `nvidia`), not the label |
+| `.buildarg` | any single word (a release tag, `latest`, `master`); not checked against the list, which is fetched over the network — a wrong one fails the build |
+| `.packages` / `.mcp` | comma-separated item names, or `none`; left out, nothing is installed or removed |
+
+Two `.buildarg` pages sharing an `arg|` (llama-cpp's Release and Build views) are one parameter. The parser is `wizard_from_args` in `lib/wizard.sh`; it fills the same `BUILD_ARGS`/`VARIANT`/`_WIZARD_SELECTIONS` globals the state file does, so nothing downstream knows which front-end answered.
+
+Apps with an `unmaintained` marker are greyed out in the dashboard, sorted to the bottom of their tab, and flagged in the footer and in `tools list`. They still install normally.
 
 ## Working practices
 

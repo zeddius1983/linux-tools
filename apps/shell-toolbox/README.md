@@ -16,6 +16,14 @@ Unlike every other app in this repo, nothing runs inside the container at runtim
 tools setup shell-toolbox
 ```
 
+The setup questions can also be answered on the command line, which asks
+nothing and runs straight through. `tools help shell-toolbox` lists the parameters
+and their choices; any you leave out take their defaults:
+
+```bash
+tools setup shell-toolbox TOOLS=fzf,bat,eza,zoxide
+```
+
 The interactive wizard (`wizard/00-tools.packages`) lets you pick which tools to install. Re-running is idempotent: deselected tools are removed, selected ones are (re)installed, and the managed config is regenerated.
 
 When upgrading from `zsh-box`, setup automatically removes the obsolete

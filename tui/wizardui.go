@@ -11,8 +11,8 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-// Native wizard pages: the last thing the bash whiptail front-end was still
-// doing. Answers are collected here, written to a state file, and handed to the
+// Native wizard pages, the only interactive way to answer them: the command
+// line takes the same answers as KEY=value (lib/wizard.sh). Answers are collected here, written to a state file, and handed to the
 // backend through LT_WIZARD_STATE / LT_SKIP_WIZARD — see docs/tui-migration.md
 // §2 for why the state file has to exist at all.
 
@@ -109,8 +109,8 @@ func newWizardSession(a App, action, home string) (*wizardSession, tea.Cmd) {
 			wp.loading = true
 			cmds = append(cmds, loadBuildArgItems(w.id, len(w.pages), p))
 		default:
-			// A page whose body has no items is skipped, mirroring the empty
-			// item-list guard in _wizard_run_page.
+			// A page whose body has no items has nothing to ask, so it is
+			// skipped.
 			if len(p.Items) == 0 {
 				continue
 			}
@@ -330,7 +330,7 @@ func (w *wizardSession) scrollNotes(delta int) {
 	}
 }
 
-// diff summarises what the run will change, mirroring tui_confirm_wizards.
+// diff summarises what the run will change.
 // Only .packages pages have an on-disk notion of "already installed".
 func (w *wizardSession) diff() (install, remove []string) {
 	for _, p := range w.pages {
@@ -394,6 +394,40 @@ func (w *wizardSession) state() State {
 		}
 	}
 	return st
+}
+
+// commandLine is the `tools` invocation equivalent to these answers, so a run
+// set up here can be repeated or scripted from a shell. It mirrors state(): a
+// checklist is always answered (an empty one as "none"), and a single-choice
+// page with no items is left out so the build takes its default.
+func (w *wizardSession) commandLine() string {
+	parts := []string{"tools", w.action, w.app.Name}
+	for i, p := range w.pages {
+		key := p.ParamName()
+		if !w.active(i) || key == "" {
+			continue
+		}
+		switch {
+		case p.multi():
+			var sel []string
+			for j, it := range p.items {
+				if p.checked[j] {
+					sel = append(sel, it.Name)
+				}
+			}
+			v := strings.Join(sel, ",")
+			if v == "" {
+				v = "none"
+			}
+			parts = append(parts, key+"="+v)
+		case len(p.items) == 0 || p.radio < 0 || p.radio >= len(p.items):
+		case p.Type == "runtime":
+			parts = append(parts, key+"="+p.items[p.radio].Payload)
+		case p.Type == "buildarg":
+			parts = append(parts, key+"="+p.items[p.radio].Name)
+		}
+	}
+	return strings.Join(parts, " ")
 }
 
 // --- model integration -------------------------------------------------------
@@ -587,8 +621,8 @@ func (m *model) wizardKey(k string) (tea.Model, tea.Cmd) {
 }
 
 // runWizardAction writes the state file and hands the terminal to bash.
-// LT_SKIP_WIZARD tells tools.sh the answers are already collected, so the
-// whiptail pages are not asked a second time.
+// LT_SKIP_WIZARD tells tools.sh the answers are in that file, and that a
+// missing file is an error rather than "take the defaults".
 func (m *model) runWizardAction() tea.Cmd {
 	w := m.wiz
 	m.wiz = nil
@@ -1003,7 +1037,7 @@ func (m *model) wizardConfirmBody() string {
 		b.WriteString("  " + styDesc.Render("Runtime:  ") + " " + styRow.Render(label) +
 			styDesc.Render(" ("+st.Variant+")") + "\n")
 	}
-	b.WriteString("\n  " + styDesc.Render(fmt.Sprintf("runs: tools %s %s", w.action, w.app.Name)) + "\n")
+	b.WriteString("\n  " + styDesc.Render("runs: "+w.commandLine()) + "\n")
 	return b.String()
 }
 

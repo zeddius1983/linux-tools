@@ -306,3 +306,42 @@ func TestInfoPanelMissingReadme(t *testing.T) {
 		t.Errorf("expected placeholder, got:\n%s", out)
 	}
 }
+
+// Every real page must have a command-line KEY, and a param| line is config,
+// never an item — `tools setup <app> KEY=value` depends on both.
+func TestEveryPageHasParam(t *testing.T) {
+	dirs, err := filepath.Glob(filepath.Join(appsDir, "*", "wizard"))
+	if err != nil || len(dirs) == 0 {
+		t.Fatalf("no wizard dirs found: %v", err)
+	}
+	for _, d := range dirs {
+		pages, err := LoadPages(d)
+		if err != nil {
+			t.Fatalf("%s: %v", d, err)
+		}
+		for _, p := range pages {
+			if p.ParamName() == "" {
+				t.Errorf("%s: no param| or arg| line", p.File)
+			}
+			for _, it := range p.Items {
+				if it.Name == "param" || it.Name == "arg" {
+					t.Errorf("%s: reserved line parsed as item %q", p.File, it.Name)
+				}
+			}
+		}
+	}
+}
+
+func TestParamLineOverridesArg(t *testing.T) {
+	pages, err := LoadPages(filepath.Join(appsDir, "lmstudio", "wizard"))
+	if err != nil || len(pages) == 0 {
+		t.Fatalf("lmstudio pages: %v", err)
+	}
+	if got := pages[0].ParamName(); got != "LMSTUDIO_GPU" {
+		t.Fatalf("ParamName = %q, want LMSTUDIO_GPU", got)
+	}
+	pages, _ = LoadPages(filepath.Join(appsDir, "comfyui", "wizard"))
+	if got := pages[0].ParamName(); got != "COMFY_GPU" {
+		t.Fatalf("comfyui ParamName = %q, want COMFY_GPU (from arg|)", got)
+	}
+}

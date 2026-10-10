@@ -16,6 +16,14 @@ Built on the official upstream images, so the GPU stack and PyTorch come pre-ins
 tools setup vllm
 ```
 
+The setup questions can also be answered on the command line, which asks
+nothing and runs straight through. `tools help vllm` lists the parameters
+and their choices; any you leave out take their defaults:
+
+```bash
+tools setup vllm VLLM_GPU=nvidia VLLM_TAG=nightly
+```
+
 Run interactively, setup asks two questions:
 
 1. **GPU backend** — AMD (ROCm) or NVIDIA (CUDA). This picks both the upstream image and the container's GPU passthrough.

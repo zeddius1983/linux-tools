@@ -45,6 +45,14 @@ tracks the new driver version. Verify with `nvidia-ctk cdi list` (should show
 tools setup lmstudio
 ```
 
+The setup questions can also be answered on the command line, which asks
+nothing and runs straight through. `tools help lmstudio` lists the parameters
+and their choices; any you leave out take their defaults:
+
+```bash
+tools setup lmstudio LMSTUDIO_GPU=nvidia
+```
+
 Pick your GPU vendor when the wizard prompts. `setup` removes any existing box
 and image first, so re-running it (and choosing the other vendor) switches
 runtimes.

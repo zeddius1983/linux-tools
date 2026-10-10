@@ -25,6 +25,14 @@ Setup asks two questions:
 tools setup comfyui
 ```
 
+The setup questions can also be answered on the command line, which asks
+nothing and runs straight through. `tools help comfyui` lists the parameters
+and their choices; any you leave out take their defaults:
+
+```bash
+tools setup comfyui COMFY_GPU=nvidia COMFY_REF=v0.39.0
+```
+
 Re-running `tools setup comfyui` rebuilds from scratch, so it is also how you
 switch GPU backend or change release. Models, generated images, inputs and saved
 workflows all live under `~/.comfyui/` (see [Storage](#storage)) and survive the

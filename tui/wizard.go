@@ -58,9 +58,20 @@ type Page struct {
 	// without a line, resolving within NotesTag.
 	Aliases map[string]string
 	Extra   []string // literal values appended after the fetched releases
+	// Param is the page's KEY for `tools setup <app> KEY=value`: an explicit
+	// param| line, else ArgName (see ParamName).
+	Param string
 }
 
-// AppliesTo mirrors the action gate in _wizard_run_page.
+// ParamName is the page's command-line KEY, mirroring _wizard_page_param.
+func (p Page) ParamName() string {
+	if p.Param != "" {
+		return p.Param
+	}
+	return p.ArgName
+}
+
+// AppliesTo mirrors the action gate in _wizard_page_applies (lib/wizard.sh).
 func (p Page) AppliesTo(action string) bool {
 	for _, a := range p.Applicable {
 		if a == "*" || a == action {
@@ -126,6 +137,13 @@ func parsePage(path string) (Page, error) {
 			continue
 		}
 		fields := strings.Split(line, "|")
+
+		// param|<NAME> is the page's command-line KEY on any page type, so
+		// "param" is reserved and never an item.
+		if len(fields) >= 2 && strings.TrimSpace(fields[0]) == "param" {
+			p.Param = strings.TrimSpace(fields[1])
+			continue
+		}
 
 		if p.Type == "buildarg" {
 			// Body lines are config, not items.
@@ -201,7 +219,7 @@ func parsePage(path string) (Page, error) {
 // A bare detect entry is checked as ~/.local/bin/<name>; a "~/" prefix expands
 // to $HOME. Any match wins. When a detect field exists it is the sole
 // authority and DefaultOn is ignored, so uninstalled tools always start
-// unchecked — same rule as _wizard_run_page.
+// unchecked.
 // HasSource reports whether a .buildarg page knows where to get its items.
 func (p Page) HasSource() bool {
 	return p.ArgName != "" && (p.ItemsCmd != "" || p.ReleasesRepo != "")

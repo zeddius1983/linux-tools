@@ -16,6 +16,14 @@ Installed from the **official native-binary install script** (`https://claude.ai
 tools setup claude-code
 ```
 
+The setup questions can also be answered on the command line, which asks
+nothing and runs straight through. `tools help claude-code` lists the parameters
+and their choices; any you leave out take their defaults:
+
+```bash
+tools setup claude-code STATUSLINE=statusline
+```
+
 Build time: ~1–2 minutes (downloads the ~240 MB native binary).
 
 During an interactive `tools setup`, a wizard offers **optional integrations** (see [Status line](#status-line-optional)). Skip it and you get the plain CLI; the wizard is skipped entirely on non-interactive/CLI-piped setups.
