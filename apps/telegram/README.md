@@ -26,12 +26,11 @@ No parameters and no `create_flags`.
 |---|---|
 | **Telegram** (menu) | Launches Telegram through the box's `telegram-desktop` launcher |
 | **Telegram Desktop (Terminal)** (menu) | Opens a shell inside `telegram-box` |
-
-There's no `bin:` export, so `telegram-desktop` isn't on the host `PATH`. To
-start it from a terminal:
+| `telegram-desktop` (host `PATH`) | The same launcher, from a terminal or from other boxes |
 
 ```bash
-distrobox enter telegram-box -- telegram-desktop
+telegram-desktop                                   # start Telegram
+telegram-desktop -- "tg://resolve?domain=telegram"   # open a link in it
 ```
 
 ## Updating
@@ -64,12 +63,25 @@ Your login and chats aren't affected (see below).
   that exists only inside the box. The `telegram-desktop` launcher sets
   `DESKTOPINTEGRATION=1`, which stops that. It also deletes a copy left over
   from an older image (one whose `Exec` points into `/opt/Telegram`).
-- **`tg://` links clicked on the host don't open Telegram.** Telegram registers
-  itself as the `tg://`, `ton://` and `tonsite://` handler through GIO, which
-  writes hidden (`NoDisplay=true`) `userapp-Telegram Desktop-*.desktop` files
-  with the same box-only `/opt/Telegram/Telegram` path. They don't show in the
-  menu and don't multiply between launches, but the links go nowhere. Links
-  opened inside Telegram work normally.
+- **`tg://`, `ton://` and `tonsite://` links open Telegram from the host and
+  from other boxes**, e.g. a `t.me` "Open in Telegram" button in Chrome running
+  in `chrome-box`. The launcher sets this up each time it starts:
+  - a hidden `telegram-box-url-handler.desktop` whose `Exec` is the exported
+    `~/.local/bin/telegram-desktop`. That command works on the host and, through
+    `distrobox-host-exec`, inside any other box, where `distrobox` itself isn't
+    available. The launcher makes it the handler for those schemes in
+    `~/.config/mimeapps.list`, touching only those keys, in both
+    `[Default Applications]` and `[Added Associations]`.
+  - `~/.config/x-telegrambox-mimeapps.list`, which only Telegram reads. It makes
+    Telegram see itself as the registered handler, so it doesn't overwrite the
+    host's defaults with a box-only path.
+
+  A link starts Telegram in the background and returns straight away, so the
+  app that opened it doesn't wait. If Telegram is already running, the link is
+  handed to it. The first launch after `tools setup telegram` is what sets this
+  up; `tools rm telegram` removes the handler with the box's other menu entries.
+  Other boxes need `flatpak` on the host for `distrobox-host-exec`, as everywhere
+  else in this repo.
 - **Amd64 only.** Telegram publishes the Linux tarball for x86-64 only, so the
   image is pinned to `linux/amd64`.
 - GPU rendering uses the host's Mesa through `/dev/dri`, which Distrobox shares

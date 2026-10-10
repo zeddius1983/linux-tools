@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Telegram (in telegram-box)
+Comment=Box-only handler that matches Telegram's own command line; see /usr/bin/telegram-desktop
+Exec=/opt/Telegram/Telegram -- %u
+NoDisplay=true
+MimeType=x-scheme-handler/tg;x-scheme-handler/tonsite;x-scheme-handler/ton;
