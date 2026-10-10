@@ -16,6 +16,14 @@ official installer, and the image also includes `git` and the GitHub CLI (`gh`).
 tools setup opencode
 ```
 
+The setup question can also be answered on the command line, which asks
+nothing and runs straight through. `tools help opencode` lists the releases;
+leave the parameter out to get the newest:
+
+```bash
+tools setup opencode OPENCODE_RELEASE=v1.18.35
+```
+
 Setup asks one question: **which release** to install. The list is OpenCode's
 published GitHub releases, newest first (the default), with each release's notes
 beside it in the dashboard. A non-interactive `tools setup opencode` installs the
