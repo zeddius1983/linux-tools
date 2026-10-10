@@ -1,0 +1,5 @@
+# Format: type:name[:Display Name]
+# app     - export existing container .desktop entry to host menu
+# bin     - export binary to ~/.local/bin
+app:chatgpt:ChatGPT
+bin:chatgpt

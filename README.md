@@ -73,6 +73,7 @@ reports from other distros are welcome.
 
 | App | What it is |
 |---|---|
+| [`chatgpt`](apps/chatgpt/README.md) | OpenAI's ChatGPT desktop app (preview), with Codex built in |
 | [`comfyui`](apps/comfyui/README.md) | Node-based UI for image and video generation (AMD or NVIDIA) |
 | [`fastflowlm`](apps/fastflowlm/README.md) | LLM runtime for the AMD Ryzen AI NPU |
 | [`llama-cpp`](apps/llama-cpp/README.md) | llama.cpp inference engine (ROCm 7.2, ROCm 10 or NVIDIA CUDA, plus Vulkan) |
