@@ -20,9 +20,7 @@ APPS_DIR="$ROOT/apps"
 # Apps that predate the "every app has a README" rule (CLAUDE.md, "Adding a new
 # app"). The dashboard renders README.md in its info panel, so each of these is
 # an empty panel for that app.
-LEGACY_NO_README=(
-    amdgpu_top
-)
+LEGACY_NO_README=()
 
 # Apps whose Dockerfile still has an unqualified FROM. Podman has no
 # unqualified-search registries configured, so these depend on the host having
