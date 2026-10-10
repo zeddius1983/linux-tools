@@ -8,8 +8,9 @@
 
 [Telegram Desktop](https://desktop.telegram.org), the official Telegram client,
 in an `ubuntu:24.04` Distrobox container. The image unpacks the official Linux
-tarball from `telegram.org` into `/opt/Telegram` and adds the Qt/XCB and Mesa
-libraries it needs.
+tarball from `telegram.org` into `/opt/Telegram`, adds the Qt/XCB and Mesa
+libraries it needs, and starts it through a small `telegram-desktop` launcher
+(see [Notes](#notes)).
 
 ## Install
 
@@ -23,7 +24,7 @@ No parameters and no `create_flags`.
 
 | Entry | What it does |
 |---|---|
-| **Telegram** (menu) | Launches Telegram (`distrobox enter telegram-box -- telegram-desktop`) |
+| **Telegram** (menu) | Launches Telegram through the box's `telegram-desktop` launcher |
 | **Telegram Desktop (Terminal)** (menu) | Opens a shell inside `telegram-box` |
 
 There's no `bin:` export, so `telegram-desktop` isn't on the host `PATH`. To
@@ -57,12 +58,18 @@ Your login and chats aren't affected (see below).
 
 ## Notes
 
-- **A second "Telegram" menu entry may appear, and it doesn't work.** On first
-  run Telegram writes its own
-  `~/.local/share/applications/org.telegram.desktop._<hash>.desktop`, whose
-  `Exec=/opt/Telegram/Telegram` path exists only inside the box. Use the entry
-  `tools setup` exported (`telegram-box-telegram-desktop.desktop`). The other one
-  can be deleted, though Telegram may write it again on a later launch.
+- **Only one "Telegram" menu entry.** On every start Telegram writes its own
+  `org.telegram.desktop._<hash>.desktop` into `~/.local/share/applications`,
+  which is shared with the host, pointing at `/opt/Telegram/Telegram`, a path
+  that exists only inside the box. The `telegram-desktop` launcher sets
+  `DESKTOPINTEGRATION=1`, which stops that. It also deletes a copy left over
+  from an older image (one whose `Exec` points into `/opt/Telegram`).
+- **`tg://` links clicked on the host don't open Telegram.** Telegram registers
+  itself as the `tg://`, `ton://` and `tonsite://` handler through GIO, which
+  writes hidden (`NoDisplay=true`) `userapp-Telegram Desktop-*.desktop` files
+  with the same box-only `/opt/Telegram/Telegram` path. They don't show in the
+  menu and don't multiply between launches, but the links go nowhere. Links
+  opened inside Telegram work normally.
 - **Amd64 only.** Telegram publishes the Linux tarball for x86-64 only, so the
   image is pinned to `linux/amd64`.
 - GPU rendering uses the host's Mesa through `/dev/dri`, which Distrobox shares
