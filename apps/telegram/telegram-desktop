@@ -1,17 +1,86 @@
 #!/bin/sh
 # Launcher for Telegram Desktop inside telegram-box.
 #
-# On every start Telegram writes its own launcher to
-# ~/.local/share/applications/org.telegram.desktop._<hash>.desktop. $HOME is
-# shared with the host, so that file lands in the host menu with
-# Exec=/opt/Telegram/Telegram, a path that only exists in this box: a second
-# "Telegram" entry that does nothing. DESKTOPINTEGRATION=1 makes Telegram skip
-# writing it; the menu entry `tools setup telegram` exports is the one to use.
+# Telegram integrates itself with the desktop on every start, and because $HOME
+# is shared, whatever it writes lands on the host pointing at
+# /opt/Telegram/Telegram, a path that exists only in this box. This script keeps
+# the host side working instead:
 #
-# Remove the broken copy an earlier image left behind. Only a file pointing
-# into /opt/Telegram is touched, so a launcher from a native install is safe.
-for f in "$HOME"/.local/share/applications/org.telegram.desktop._*.desktop; do
+#   1. Menu: Telegram writes its own launcher,
+#      org.telegram.desktop._<hash>.desktop. DESKTOPINTEGRATION=1 makes it
+#      skip that; the menu entry `tools setup telegram` exports is the one to use.
+#   2. Links: Telegram registers itself for tg://, ton:// and tonsite:// through
+#      GIO unless the current default handler's command line is exactly its own
+#      ("/opt/Telegram/Telegram -- %u"). The host needs a different handler, one
+#      that goes through the box, so the two are kept apart:
+#        - the host default is telegram-box-url-handler.desktop, written here and
+#          set in ~/.config/mimeapps.list;
+#        - Telegram runs with a private desktop name prepended to
+#          XDG_CURRENT_DESKTOP, which makes GIO read
+#          ~/.config/x-telegrambox-mimeapps.list first. That file points the
+#          schemes at /usr/share/applications/telegram-box-scheme.desktop, which
+#          exists only in this image and has Telegram's own command line, so
+#          Telegram finds itself registered and leaves the host's defaults alone.
+
+apps="$HOME/.local/share/applications"
+schemes="tg tonsite ton"
+
+# Remove what earlier images left behind. Only files pointing into /opt/Telegram
+# are touched, so entries from a native install are safe.
+for f in "$apps"/org.telegram.desktop._*.desktop "$apps"/userapp-Telegram\ Desktop-*.desktop; do
     [ -f "$f" ] && grep -q '^Exec=/opt/Telegram/' "$f" && rm -f "$f"
 done
 
+# Host side: a hidden handler that opens links through the box.
+handler=telegram-box-url-handler.desktop
+want="[Desktop Entry]
+Type=Application
+Name=Telegram (links)
+Exec=distrobox enter telegram-box -- /usr/bin/telegram-desktop -- %u
+NoDisplay=true
+MimeType=x-scheme-handler/tg;x-scheme-handler/tonsite;x-scheme-handler/ton;"
+if [ "$(cat "$apps/$handler" 2>/dev/null)" != "$want" ]; then
+    mkdir -p "$apps"
+    printf '%s\n' "$want" > "$apps/$handler"
+fi
+# Set it as the default by editing [Default Applications] in the shared
+# ~/.config/mimeapps.list. `gio mime` can't do this from in here: it rejects a
+# desktop entry whose Exec program (distrobox) isn't on the box's PATH. Only the
+# three scheme keys are touched, and the file is rewritten only if they change.
+mimeapps="$HOME/.config/mimeapps.list"
+mkdir -p "$HOME/.config"
+[ -f "$mimeapps" ] || : > "$mimeapps"
+tmp="$mimeapps.telegram-box.$$"
+awk -v handler="$handler" -v schemes="$schemes" '
+    BEGIN { n = split(schemes, s, " "); for (i = 1; i <= n; i++) want["x-scheme-handler/" s[i]] = 1 }
+    function flush(   k) { for (k in want) if (!(k in done)) print k "=" handler; seen = 1 }
+    /^\[/ {
+        if (insec) flush()
+        insec = ($0 == "[Default Applications]")
+        print; next
+    }
+    insec {
+        split($0, kv, "=")
+        if (kv[1] in want) { if (!(kv[1] in done)) print kv[1] "=" handler; done[kv[1]] = 1; next }
+    }
+    { print }
+    END {
+        if (insec) flush()
+        else if (!seen) { print ""; print "[Default Applications]"; flush() }
+    }
+' "$mimeapps" > "$tmp" && if cmp -s "$tmp" "$mimeapps"; then rm -f "$tmp"; else mv -f "$tmp" "$mimeapps"; fi
+
+# Box side: what Telegram itself sees.
+private="$HOME/.config/x-telegrambox-mimeapps.list"
+want="[Default Applications]"
+for s in $schemes; do
+    want="$want
+x-scheme-handler/$s=telegram-box-scheme.desktop"
+done
+if [ "$(cat "$private" 2>/dev/null)" != "$want" ]; then
+    mkdir -p "$HOME/.config"
+    printf '%s\n' "$want" > "$private"
+fi
+
+XDG_CURRENT_DESKTOP="X-TelegramBox${XDG_CURRENT_DESKTOP:+:$XDG_CURRENT_DESKTOP}" \
 DESKTOPINTEGRATION=1 exec /opt/Telegram/Telegram "$@"

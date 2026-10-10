@@ -64,12 +64,18 @@ Your login and chats aren't affected (see below).
   that exists only inside the box. The `telegram-desktop` launcher sets
   `DESKTOPINTEGRATION=1`, which stops that. It also deletes a copy left over
   from an older image (one whose `Exec` points into `/opt/Telegram`).
-- **`tg://` links clicked on the host don't open Telegram.** Telegram registers
-  itself as the `tg://`, `ton://` and `tonsite://` handler through GIO, which
-  writes hidden (`NoDisplay=true`) `userapp-Telegram Desktop-*.desktop` files
-  with the same box-only `/opt/Telegram/Telegram` path. They don't show in the
-  menu and don't multiply between launches, but the links go nowhere. Links
-  opened inside Telegram work normally.
+- **`tg://`, `ton://` and `tonsite://` links open Telegram from anywhere on the
+  host**, e.g. a `t.me` "Open in Telegram" button in a browser. The launcher
+  sets this up each time it starts:
+  - a hidden `telegram-box-url-handler.desktop` that runs the link through the
+    box, made the default for those schemes in `~/.config/mimeapps.list` (only
+    those three keys are touched);
+  - `~/.config/x-telegrambox-mimeapps.list`, which only Telegram reads. It makes
+    Telegram see itself as the registered handler, so it doesn't overwrite the
+    host's defaults with a box-only path.
+
+  The first launch after `tools setup telegram` is what sets it up. `tools rm
+  telegram` removes the handler with the rest of the box's menu entries.
 - **Amd64 only.** Telegram publishes the Linux tarball for x86-64 only, so the
   image is pinned to `linux/amd64`.
 - GPU rendering uses the host's Mesa through `/dev/dri`, which Distrobox shares

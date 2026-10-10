@@ -20,5 +20,9 @@ RUN curl -fL https://telegram.org/dl/desktop/linux -o /tmp/tdesktop.tar.xz \
 # A wrapper rather than a symlink: it stops Telegram writing a host menu entry
 # that points into this box (see the script). It lives in /usr/bin because
 # `command -pv`, which resolves exports, does not search /usr/local/bin.
+# telegram-box-scheme.desktop is the box-only handler that keeps Telegram from
+# taking over the host's tg:// links (see the script).
 COPY telegram-desktop /usr/bin/telegram-desktop
-RUN chmod 0755 /usr/bin/telegram-desktop
+COPY telegram-box-scheme.desktop /usr/share/applications/telegram-box-scheme.desktop
+RUN chmod 0755 /usr/bin/telegram-desktop \
+    && chmod 0644 /usr/share/applications/telegram-box-scheme.desktop
