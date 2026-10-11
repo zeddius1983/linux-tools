@@ -1,17 +1,109 @@
 #!/bin/sh
 # Launcher for Telegram Desktop inside telegram-box.
 #
-# On every start Telegram writes its own launcher to
-# ~/.local/share/applications/org.telegram.desktop._<hash>.desktop. $HOME is
-# shared with the host, so that file lands in the host menu with
-# Exec=/opt/Telegram/Telegram, a path that only exists in this box: a second
-# "Telegram" entry that does nothing. DESKTOPINTEGRATION=1 makes Telegram skip
-# writing it; the menu entry `tools setup telegram` exports is the one to use.
+# Telegram integrates itself with the desktop on every start, and because $HOME
+# is shared, whatever it writes lands on the host pointing at
+# /opt/Telegram/Telegram, a path that exists only in this box. This script keeps
+# the host side working instead:
 #
-# Remove the broken copy an earlier image left behind. Only a file pointing
-# into /opt/Telegram is touched, so a launcher from a native install is safe.
-for f in "$HOME"/.local/share/applications/org.telegram.desktop._*.desktop; do
+#   1. Menu: Telegram writes its own launcher,
+#      org.telegram.desktop._<hash>.desktop. DESKTOPINTEGRATION=1 makes it
+#      skip that; the menu entry `tools setup telegram` exports is the one to use.
+#   2. Links: Telegram registers itself for tg://, ton:// and tonsite:// through
+#      GIO unless the current default handler's command line is exactly its own
+#      ("/opt/Telegram/Telegram -- %u"). The host needs a different handler, one
+#      that goes through the box, so the two are kept apart:
+#        - the host default is telegram-box-url-handler.desktop, written here and
+#          set in ~/.config/mimeapps.list;
+#        - Telegram runs with a private desktop name prepended to
+#          XDG_CURRENT_DESKTOP, which makes GIO read
+#          ~/.config/x-telegrambox-mimeapps.list first. That file points the
+#          schemes at /usr/share/applications/telegram-box-scheme.desktop, which
+#          exists only in this image and has Telegram's own command line, so
+#          Telegram finds itself registered and leaves the host's defaults alone.
+
+apps="$HOME/.local/share/applications"
+schemes="tg tonsite ton"
+
+# Remove what earlier images left behind. Only files pointing into /opt/Telegram
+# are touched, so entries from a native install are safe.
+for f in "$apps"/org.telegram.desktop._*.desktop "$apps"/userapp-Telegram\ Desktop-*.desktop; do
     [ -f "$f" ] && grep -q '^Exec=/opt/Telegram/' "$f" && rm -f "$f"
 done
 
-DESKTOPINTEGRATION=1 exec /opt/Telegram/Telegram "$@"
+# Host side: a hidden handler that opens links through the box. Its Exec is the
+# `bin:` export in ~/.local/bin, not `distrobox enter`: links are also opened by
+# apps in other boxes (Chrome in chrome-box), where `distrobox` doesn't exist.
+# The exported wrapper runs on the host directly and re-dispatches through
+# distrobox-host-exec from inside any other box, and $HOME is the same path
+# everywhere.
+handler=telegram-box-url-handler.desktop
+want="[Desktop Entry]
+Type=Application
+Name=Telegram (links)
+Exec=$HOME/.local/bin/telegram-desktop -- %u
+NoDisplay=true
+MimeType=x-scheme-handler/tg;x-scheme-handler/tonsite;x-scheme-handler/ton;"
+if [ "$(cat "$apps/$handler" 2>/dev/null)" != "$want" ]; then
+    mkdir -p "$apps"
+    printf '%s\n' "$want" > "$apps/$handler"
+fi
+# Set it as the handler by editing the shared ~/.config/mimeapps.list:
+# [Default Applications] gets the three scheme keys (added if missing), and any
+# of them already under [Added Associations] are pointed at it too. xdg-mime
+# reads that section as well, so the stale entries Telegram left there would
+# otherwise win in the boxes. `gio mime` can't do this from in here: it rejects
+# a desktop entry whose Exec it can't find on this box's PATH. The file is
+# rewritten only if something changes.
+mimeapps="$HOME/.config/mimeapps.list"
+mkdir -p "$HOME/.config"
+[ -f "$mimeapps" ] || : > "$mimeapps"
+tmp="$mimeapps.telegram-box.$$"
+awk -v handler="$handler" -v schemes="$schemes" '
+    BEGIN { n = split(schemes, s, " "); for (i = 1; i <= n; i++) want["x-scheme-handler/" s[i]] = 1 }
+    function flush(   k) { for (k in want) if (!(k in done)) print k "=" handler; seen = 1 }
+    /^\[/ {
+        if (sec == "default") flush()
+        sec = ($0 == "[Default Applications]") ? "default" : ($0 == "[Added Associations]") ? "added" : ""
+        print; next
+    }
+    sec != "" {
+        split($0, kv, "=")
+        if (kv[1] in want) {
+            if (sec == "added") { print kv[1] "=" handler ";"; next }
+            if (!(kv[1] in done)) print kv[1] "=" handler
+            done[kv[1]] = 1; next
+        }
+    }
+    { print }
+    END {
+        if (sec == "default") flush()
+        else if (!seen) { print ""; print "[Default Applications]"; flush() }
+    }
+' "$mimeapps" > "$tmp" && if cmp -s "$tmp" "$mimeapps"; then rm -f "$tmp"; else mv -f "$tmp" "$mimeapps"; fi
+
+# Box side: what Telegram itself sees.
+private="$HOME/.config/x-telegrambox-mimeapps.list"
+want="[Default Applications]"
+for s in $schemes; do
+    want="$want
+x-scheme-handler/$s=telegram-box-scheme.desktop"
+done
+if [ "$(cat "$private" 2>/dev/null)" != "$want" ]; then
+    mkdir -p "$HOME/.config"
+    printf '%s\n' "$want" > "$private"
+fi
+
+export XDG_CURRENT_DESKTOP="X-TelegramBox${XDG_CURRENT_DESKTOP:+:$XDG_CURRENT_DESKTOP}"
+export DESKTOPINTEGRATION=1
+
+# A link ("-- <url>", how the handler calls us) starts Telegram detached and
+# returns. Otherwise whatever opened the link waits for as long as Telegram
+# runs: xdg-open in another box blocks on distrobox-host-exec, which blocks on
+# `distrobox enter`. When Telegram is already running, the new instance just
+# hands the link over and exits either way.
+if [ "${1:-}" = "--" ]; then
+    setsid -f /opt/Telegram/Telegram "$@" >/dev/null 2>&1 < /dev/null
+    exit 0
+fi
+exec /opt/Telegram/Telegram "$@"
