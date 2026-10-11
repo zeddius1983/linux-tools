@@ -1,7 +1,7 @@
 FROM registry.fedoraproject.org/fedora:43
 
 RUN dnf -y --nodocs --setopt=install_weak_deps=False install \
-  bash ca-certificates curl \
+  bash ca-certificates curl git \
   vulkan-loader mesa-vulkan-drivers \
   mesa-libGL mesa-libEGL mesa-dri-drivers \
   libdrm libglvnd-glx libglvnd-egl \

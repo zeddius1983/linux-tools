@@ -1,7 +1,7 @@
-FROM --platform=linux/amd64 ubuntu:24.04
+FROM --platform=linux/amd64 docker.io/ubuntu:24.04
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        ca-certificates curl xz-utils \
+        ca-certificates curl git xz-utils \
         libxcb1 libxcb-xinerama0 libxcb-cursor0 libxcb-keysyms1 libxcb-image0 \
         libxcb-shm0 libxcb-icccm4 libxcb-render-util0 libxcb-randr0 \
         libxkbcommon0 libxkbcommon-x11-0 \

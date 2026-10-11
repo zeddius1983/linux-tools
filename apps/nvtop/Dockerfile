@@ -5,9 +5,10 @@ FROM registry.fedoraproject.org/fedora:43
 # libnvidia-ml.so.1 at runtime (no CUDA/driver needed at build time — the host
 # driver, incl. NVML, is injected via CDI at runtime), while the AMD/Intel
 # backends read libdrm + /sys/class/drm, which Distrobox exposes by default.
-# ncurses is pulled in as a dependency.
+# ncurses is pulled in as a dependency. git is for the shared-$HOME dotfiles
+# that run in every box (the base already has curl for distrobox-host-exec).
 RUN dnf -y --nodocs --setopt=install_weak_deps=False install \
-      nvtop \
+      nvtop git \
     && dnf clean all && rm -rf /var/cache/dnf/*
 
 CMD ["/bin/bash"]

@@ -21,7 +21,7 @@ nothing and runs straight through. `tools help opencode` lists the releases;
 leave the parameter out to get the newest:
 
 ```bash
-tools setup opencode OPENCODE_RELEASE=v1.18.35
+tools setup opencode OPENCODE_RELEASE=latest   # or a tag from tools help opencode
 ```
 
 Setup asks one question: **which release** to install. The list is OpenCode's
