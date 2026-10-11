@@ -3,7 +3,7 @@ FROM --platform=linux/amd64 docker.io/ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates curl \
+    ca-certificates curl git \
     libxi6 libxrender1 libxtst6 mesa-utils libfontconfig1 \
     libgtk-3-bin dbus-user-session libxcb-keysyms1 \
     libayatana-appindicator3-1 \
