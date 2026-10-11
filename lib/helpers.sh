@@ -116,12 +116,31 @@ desktop_escape() {
     printf '%s' "${s//$'\n'/\\n}"
 }
 
+# Where an exported entry's icon is kept: outside the linux-tools tree, because
+# in a release install that tree is versions/<ver>/, which a later `tools update`
+# prunes. `tools rm` deletes these by the same <box>-<name> prefix.
+stable_icon_path() {  # stable_icon_path <box> <name> <png|svg>
+    local dir="$HOME/.local/share/icons/hicolor/256x256/apps"
+    [[ "$3" == svg ]] && dir="$HOME/.local/share/icons/hicolor/scalable/apps"
+    printf '%s' "$dir/$1-$2.$3"
+}
+
+# Copy an app's bundled icon to its stable path (only when it changed) and
+# print that path.
+install_bundled_icon() {  # install_bundled_icon <src> <box> <name> <ext>
+    local dest
+    dest="$(stable_icon_path "$2" "$3" "$4")"
+    mkdir -p "${dest%/*}"
+    cmp -s "$1" "$dest" || cp "$1" "$dest" || return 1
+    printf '%s' "$dest"
+}
+
 resolve_icon() {
     local app="$1" box="$2" name="$3"
     local ext
     for ext in png svg; do
         if [[ -f "$APPS_DIR/$app/icon.$ext" ]]; then
-            printf '%s' "$APPS_DIR/$app/icon.$ext"
+            install_bundled_icon "$APPS_DIR/$app/icon.$ext" "$box" "$name" "$ext"
             return
         fi
     done

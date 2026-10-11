@@ -222,6 +222,7 @@ cmd_rm() {
     echo "==> Removing desktop shortcuts for '$box'..."
     rm -f "$HOME/.local/share/applications/${box}"-*.desktop
     rm -f "$HOME/.local/share/icons/hicolor/256x256/apps/${box}"-*.png
+    rm -f "$HOME/.local/share/icons/hicolor/scalable/apps/${box}"-*.svg
 }
 
 cmd_enter() {
@@ -445,6 +446,27 @@ install_zsh_completion() {  # install_zsh_completion <completion-file>
     echo "==> Wrote completion to $zsh_fragment"
 }
 
+# Exported entries made before icons were copied out of the tree point Icon= at
+# <tree>/apps/<app>/icon.<ext>. In a release install that tree is a versioned
+# directory, so the icon disappears once `tools update` prunes it. Repoint any
+# such entry at a stable copy taken from this tree. Runs on every install and
+# update (install.sh calls `tools.sh install`), and is a no-op once done.
+migrate_icon_paths() {
+    local f icon app ext base
+    for f in "$HOME"/.local/share/applications/*-box-*.desktop; do
+        [[ -f "$f" ]] || continue
+        icon="$(sed -n 's/^Icon=//p' "$f" | head -1)"
+        [[ "$icon" =~ /apps/([^/]+)/icon\.(png|svg)$ ]] || continue
+        app="${BASH_REMATCH[1]}"; ext="${BASH_REMATCH[2]}"
+        [[ -f "$APPS_DIR/$app/icon.$ext" ]] || continue
+        base="${f##*/}"; base="${base%.desktop}"
+        # <box>-<name>: the box is <app>-box, the rest is the export name.
+        [[ "$base" == "$app-box-"* ]] || continue
+        icon="$(install_bundled_icon "$APPS_DIR/$app/icon.$ext" "$app-box" "${base#"$app-box-"}" "$ext")" || continue
+        sed -i "s|^Icon=.*|Icon=${icon}|" "$f"
+    done
+}
+
 cmd_install() {
     local dev=0 modify_rc=1
     while [[ $# -gt 0 ]]; do
@@ -493,6 +515,7 @@ EOF
         install_zsh_completion  "$root/completion/tools.bash"
     fi
 
+    migrate_icon_paths
     cmd_build_tui
 
     echo ""
