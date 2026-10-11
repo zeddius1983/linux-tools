@@ -249,7 +249,7 @@ Distrobox mounts the host's `$HOME` inside the container. This means:
 ### Icon resolution order
 
 `tools.sh` resolves icons in this order for all export types:
-1. `apps/<name>/icon.png` or `apps/<name>/icon.svg` (bundled — preferred)
+1. `apps/<name>/icon.png` or `apps/<name>/icon.svg` (bundled — preferred). It is **copied** to `~/.local/share/icons/hicolor/{256x256,scalable}/apps/<box>-<name>.<ext>` and `Icon=` points at the copy, never into the tree: in a release install the tree is `versions/<ver>/`, which `tools update` prunes. `migrate_icon_paths` (run by every `tools install`/update) repoints entries exported before this.
 2. Standard icon paths searched inside the container (`hicolor/256x256`, `512x512`, `128x128`, `pixmaps`)
 3. Falls back to `utilities-terminal`
 
