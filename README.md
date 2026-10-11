@@ -98,7 +98,7 @@ reports from other distros are welcome.
 
 | App | What it is |
 |---|---|
-| `amdgpu_top` | AMD GPU monitor |
+| [`amdgpu_top`](apps/amdgpu_top/README.md) | AMD GPU monitor |
 | [`corefreq`](apps/corefreq/README.md) | CPU monitor with a kernel module built against your host kernel |
 | [`memtest_vulkan`](apps/memtest_vulkan/README.md) | GPU memory stress test (Vulkan) |
 | [`nvtop`](apps/nvtop/README.md) | GPU process monitor |
