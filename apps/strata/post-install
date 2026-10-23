@@ -1,0 +1,3 @@
+Start it with `strata launch` (guided) or, scripted:
+  strata launch --plan --model q2_0          # what would happen; nothing downloads
+  strata launch --model q2_0 --yes --no-tui  # engine + model download, then serve on :8080

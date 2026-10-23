@@ -1,0 +1,6 @@
+Select GPU runtime
+Which GPU should Strata use? This sets the container's GPU passthrough; the engine itself is fetched for the detected card on first launch.
+setup,create
+param|STRATA_GPU
+AMD (ROCm/HIP)|amd|/dev/kfd + /dev/dri: Radeon RX 7000/9000, R9700, Strix Halo (default)
+NVIDIA (CUDA)|nvidia|CDI nvidia.com/gpu=all; needs the host's CDI spec

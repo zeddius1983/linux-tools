@@ -16,6 +16,8 @@ Priority order within each section: highest first.
 - [ ] `sgpt` — ShellGPT: AI shell assistant; OpenAI + Ollama backends (https://github.com/TheR1D/shell_gpt)
 - [x] `unsloth` — fast LLM fine-tuning (https://unsloth.ai/docs)
 - [x] `llama-cpp` — llama.cpp LLM inference engine (setup-time GPU runtime picker: ROCm 7.2, ROCm 10.0, or NVIDIA CUDA via CDI — Vulkan built into every variant; `--device` selection, release picker with Release (`latest` + `vX.Y.Z`) and Build (`nightly` + `b####`) views switched by `[`/`]`, `llama` dispatcher). Renamed back from `llama-cpp-rocm` when CUDA was added
+- [x] `strata` — Strata local LLM server for Qwen3.8-Flash-Next (125B MoE; busiest experts on the GPU, the rest in RAM), OpenAI/Anthropic/Responses API + web chat; packages the upstream Terminal (signed install.sh at build time), engine fetched per card into shared `$HOME` (`hip-halo` on Strix Halo); GPU passthrough picker (AMD / NVIDIA CDI) and release picker
+  - [ ] desktop app: `gui:` export of the per-GPU Tauri AppImage (`--appimage-extract-and-run`)
 - [x] `fastflowlm` — Ollama-style LLM runtime running fully on the AMD Ryzen AI NPU (XDNA2); XRT userspace from the lemonade PPA, release-picker wizard, `flm-doctor` host prerequisite check
 - [x] `openclaw` — personal AI assistant CLI + gateway; routes across AI providers, persistent memory, messaging integrations (release-picker wizard; `openclaw-service [gateway|node]` runs either role as a host systemd user unit, driven by `systemctl --user` straight from the box, so one box can be the mesh's gateway or a paired node)
 

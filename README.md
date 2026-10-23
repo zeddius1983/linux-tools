@@ -79,6 +79,7 @@ reports from other distros are welcome.
 | [`llama-cpp`](apps/llama-cpp/README.md) | llama.cpp inference engine (ROCm 7.2, ROCm 10 or NVIDIA CUDA, plus Vulkan) |
 | [`lmstudio`](apps/lmstudio/README.md) | LM Studio desktop app (AMD or NVIDIA) |
 | [`openclaw`](apps/openclaw/README.md) | Personal AI agent — a gateway daemon and its CLI, or a node paired to someone else's gateway |
+| [`strata`](apps/strata/README.md) | Strata: Qwen3.8-Flash-Next (125B MoE) on one GPU plus RAM, OpenAI/Anthropic API |
 | [`unsloth`](apps/unsloth/README.md) | LLM fine-tuning on ROCm |
 | [`vllm`](apps/vllm/README.md) | OpenAI-compatible LLM inference server (AMD or NVIDIA) |
 

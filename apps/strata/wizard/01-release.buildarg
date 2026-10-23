@@ -1,0 +1,6 @@
+Select Strata release
+Choose which Strata Terminal release to install, or latest for GitHub's latest release:
+setup,build
+arg|STRATA_REF
+items-cmd|{ printf '%s\n' latest; curl -fsSL 'https://api.github.com/repos/Niko1221/Strata/releases?per_page=30' | grep -o '"tag_name": *"[^"]*"' | sed 's/.*"\([^"]*\)"$/\1/' | grep -E '^v(0\.([2-9]|[1-9][0-9])|[1-9][0-9]*)\.' | head -10; }
+notes-repo|Niko1221/Strata
