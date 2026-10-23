@@ -41,8 +41,10 @@ tools setup strata STRATA_REF=v0.2.3.1
 tools setup strata STRATA_GPU=nvidia
 ```
 
-The image is the same for both GPUs. `STRATA_GPU` only picks the device
-passthrough. The engine itself is downloaded for the detected card on first use.
+The image is the same for both GPUs. `STRATA_GPU` picks the device passthrough
+and sets `STRATA_ENGINE_BACKEND` (`hip` or `cuda`) in the box, so the engine
+downloaded on first use is for that make even on a PC with both AMD and NVIDIA
+cards. Strata itself would otherwise prefer NVIDIA.
 
 ## Exported commands
 
