@@ -25,12 +25,7 @@ LEGACY_NO_README=()
 # Apps whose Dockerfile still has an unqualified FROM. Podman has no
 # unqualified-search registries configured, so these depend on the host having
 # one set up (CLAUDE.md, "Known pitfalls").
-LEGACY_UNQUALIFIED_FROM=(
-    antigravity
-    claude-code
-    copilot-cli
-    telegram
-)
+LEGACY_UNQUALIFIED_FROM=()
 
 # `tools list` prints descriptions in a 30-character column. The dashboard sizes
 # its own columns, but a label longer than this is truncated there on a narrow

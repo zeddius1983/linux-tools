@@ -1,7 +1,7 @@
 FROM registry.fedoraproject.org/fedora:43
 
 RUN dnf -y --nodocs --setopt=install_weak_deps=False install \
-  bash ca-certificates curl wget xdg-utils \
+  bash ca-certificates curl git wget xdg-utils \
   fuse fuse-libs libappindicator-gtk3 \
   vulkan-loader vulkan-tools mesa-vulkan-drivers mesa-dri-drivers \
   libdrm libglvnd-glx libglvnd-egl libX11 libXext libXrender libXrandr \

@@ -2,9 +2,10 @@ FROM docker.io/nvidia/cuda:12.6.3-devel-ubuntu24.04
 
 # build-essential + cmake (>=3.20; Ubuntu 24.04 ships 3.28) for the build;
 # git because CMakeLists runs `git describe` for the version string;
-# ca-certificates so CMake FetchContent can pull the pinned argparse tarball.
+# ca-certificates so CMake FetchContent can pull the pinned argparse tarball;
+# curl so distrobox-host-exec can bootstrap host-spawn (the CUDA base has none).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      build-essential cmake git ca-certificates \
+      build-essential cmake git ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
 
 # nvbandwidth links against -lcuda (libcuda.so.1) and -lnvidia-ml. Neither the
