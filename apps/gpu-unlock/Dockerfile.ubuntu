@@ -1,0 +1,18 @@
+FROM ghcr.io/astral-sh/uv:0.9.5 AS uv
+FROM docker.io/library/ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential git kmod sudo curl ca-certificates python3 \
+        dwarves libelf-dev bc flex bison clang lld llvm xz-utils zstd && \
+    rm -rf /var/lib/apt/lists/*
+COPY --from=uv /uv /usr/bin/uv
+ENV UV_PYTHON_INSTALL_DIR=/opt/gpu-unlock-python UV_LINK_MODE=copy
+COPY image-setup /tmp/gpu-unlock-image-setup
+RUN bash /tmp/gpu-unlock-image-setup
+
+COPY gpu_unlock gpu-unlock-build /usr/bin/
+COPY gpu-unlock-host host-bootstrap common.sh benchmark.py /usr/share/gpu-unlock/
+COPY boot /usr/share/gpu-unlock/boot
+RUN chmod +x /usr/bin/gpu_unlock /usr/bin/gpu-unlock-build
+CMD ["/bin/bash"]

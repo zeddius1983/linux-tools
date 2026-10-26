@@ -43,6 +43,9 @@ Priority order within each section: highest first.
 
 - [x] `amdgpu_top` — AMD GPU usage monitor
 - [x] `corefreq` — CPU frequency / perf monitor (kernel module build)
+- [x] `gpu-unlock` — Zagitta's NVIDIA tensor throughput unlock (Arch/Ubuntu build containers, exported `gpu_unlock` install/on/off/status, bundled CUDA PyTorch benchmark with saved before/after comparisons; hardware/boot validation pending)
+  - Review fixes: root-owned firmware/license installation, verified privileged snapshots, persisted initramfs backend with explicit selection on ambiguous hosts, independent removal, temporary-build cleanup and actionable objtool dependency errors.
+  - CachyOS/Limine: ignore compatibility-only update-initramfs wrappers, detect active Limine generator hooks, regenerate through the Limine entrypoint, and preflight before compilation/sudo.
 - [x] `nvtop` — GPU process monitor (NVIDIA / AMD), Fedora package + GPU picker (default passthrough / NVIDIA CDI)
 - [x] `nvbandwidth` — NVIDIA GPU memory-bandwidth / NVLink benchmark (CUDA build container + CDI passthrough)
 - [x] `nvidia-cdi-service` — host-only boot service; regenerates the CDI spec each boot to match installed GPUs
@@ -66,6 +69,8 @@ Priority order within each section: highest first.
 - [x] `shell-toolbox` — Zsh shell exported to the host, with optional utilities: fzf, bat, glow, ripgrep, eza, zoxide, fd, delta
 
 ## Tooling / Infrastructure
+
+- [x] **Report export failures accurately** — initialize Distroboxes with visible diagnostics and fail setup on initialization, missing-command or export errors instead of reporting success.
 
 - [x] **Releases and distribution** — installable without cloning: a GitHub Release per CalVer tag (`vYYYY.MM.N`), an `install.sh` that unpacks it into `~/.local/share/linux-tools/versions/<ver>/` behind a `current` symlink, and `tools update [--version <tag>] [--check]` to move between versions (a rollback to a version still on disk is a symlink flip, no download). Release assets carry no version in their names so `/releases/latest/download/` and a pinned tag are the same URL shape and nothing needs the rate-limited API; the version travels as the tree's `VERSION` file, which also marks a release install. CI covers shellcheck, the Go dashboard, an `apps/` contract linter (`scripts/lint-apps.sh`, a ratchet over the CLAUDE.md rules) and an end-to-end install/upgrade/rollback smoke test. Docs: [`docs/releasing.md`](docs/releasing.md).
   - Done (Oct 2026): the linter's grandfather lists are both empty. Every app has a `README.md` (`LEGACY_NO_README`) and a fully-qualified `FROM` (`LEGACY_UNQUALIFIED_FROM`), so `scripts/lint-apps.sh --strict` passes. The empty lists stay in the script as the place to grandfather a rule added later.

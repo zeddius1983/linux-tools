@@ -1,0 +1,342 @@
+#!/usr/bin/env bash
+# Small host-side installer/controller. Compilers and PyTorch stay in the box.
+set -euo pipefail
+ROOT=''
+
+config_path() { echo "$ROOT/etc/modprobe.d/zz-linux-tools-gpu-unlock.conf"; }
+state_path() { echo "$ROOT/var/lib/linux-tools/gpu-unlock"; }
+fail() { echo "ERROR: $*" >&2; return 1; }
+valid_kernel() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]]; }
+valid_targets() {
+    [[ "$1" == all || "$1" =~ ^[[:xdigit:]]{4}:[[:xdigit:]]{2}:[[:xdigit:]]{2}\.[0-7](,[[:xdigit:]]{4}:[[:xdigit:]]{2}:[[:xdigit:]]{2}\.[0-7])*$ ]]
+}
+
+check_conflicts() {
+    local cmdline
+    cmdline="$(cat "$ROOT/proc/cmdline")"
+    if [[ "$cmdline" =~ (^|[[:space:]])gpu[-_]unlock\.targets= ]]; then
+        fail 'Remove the old gpu_unlock.targets= kernel option and reboot once before using this controller. It manages module options instead.'
+        return 1
+    fi
+    if [[ -d "$ROOT/var/lib/dkms/gpu-unlock" ]] || compgen -G "$ROOT/usr/src/gpu-unlock-*" >/dev/null; then
+        fail 'Remove the previous gpu-unlock-dkms and gpu-unlock-firmware packages before using this container-built installation.'
+        return 1
+    fi
+    if [[ -d "$ROOT/usr/lib/firmware/gpu-unlock" && ! -d "$(state_path)/kernels" ]]; then
+        fail 'Existing gpu-unlock firmware is not owned by this installation; remove the previous installation first.'
+        return 1
+    fi
+}
+
+configured_limine_backend() {
+    local directory hook name seen=' ' backend='' candidate
+    [[ -f "$ROOT/etc/default/limine" ]] || return 0
+    # Local hooks override vendor hooks by basename, including /dev/null masks.
+    for directory in /etc/pacman.d/hooks /usr/share/libalpm/hooks; do
+        for hook in "$ROOT$directory/"*.hook; do
+            [[ -e "$hook" || -L "$hook" ]] || continue
+            name="${hook##*/}"
+            [[ "$seen" != *" $name "* ]] || continue
+            seen+="$name "
+            [[ -f "$hook" && "$(readlink "$hook" || true)" != /dev/null ]] || continue
+            candidate=''
+            if grep -Eq '^[[:space:]]*Exec[[:space:]]*=[[:space:]]*/[^[:space:]]*/limine-mkinitcpio-install([[:space:]]|$)' "$hook"; then
+                candidate=mkinitcpio
+            elif grep -Eq '^[[:space:]]*Exec[[:space:]]*=[[:space:]]*/[^[:space:]]*/limine-dracut-install([[:space:]]|$)' "$hook"; then
+                candidate=dracut
+            fi
+            [[ -n "$candidate" ]] || continue
+            if [[ -n "$backend" && "$backend" != "$candidate" ]]; then
+                fail 'Conflicting active Limine initramfs hooks; fix the boot-generator configuration first.'
+                return 1
+            fi
+            backend="$candidate"
+        done
+    done
+    [[ -z "$backend" ]] || printf '%s\n' "$backend"
+}
+
+tool_available() {
+    command -v "$1" >/dev/null 2>&1 || return 1
+    # CachyOS provides an update-initramfs compatibility dispatcher. Its name
+    # alone does not establish that the initramfs-tools hooks are consumed.
+    [[ "$1" != update-initramfs || -d "$ROOT/usr/share/initramfs-tools" ]]
+}
+
+validate_tool() {
+    local limine
+    case "$1" in mkinitcpio|update-initramfs|dracut) ;; *) fail "Unsupported initramfs tool: $1"; return 1 ;; esac
+    tool_available "$1" || { fail "Configured initramfs tool '$1' is unavailable or is only a compatibility wrapper"; return 1; }
+    limine="$(configured_limine_backend)"
+    if [[ -n "$limine" && "$limine" != "$1" ]]; then
+        fail "Requested backend '$1' conflicts with the active Limine $limine hook. Use --initramfs $limine."
+        return 1
+    fi
+    if [[ -n "$limine" ]] && ! command -v "limine-$limine" >/dev/null 2>&1; then
+        fail "Active Limine hook requires limine-$limine, but that command is unavailable."
+        return 1
+    fi
+    printf '%s\n' "$1"
+}
+
+select_initramfs_tool() {
+    local requested="${1:-auto}" tool config generator='' limine candidates=()
+    if [[ "$requested" != auto ]]; then validate_tool "$requested"; return; fi
+    if [[ -f "$(state_path)/initramfs-tool" ]]; then
+        validate_tool "$(cat "$(state_path)/initramfs-tool")"
+        return
+    fi
+    limine="$(configured_limine_backend)"
+    if [[ -n "$limine" ]]; then validate_tool "$limine"; return; fi
+    # kernel-install's explicit generator is evidence of the configured boot
+    # pipeline. Never source a config as shell code merely to read this value.
+    for config in /etc/kernel/install.conf /run/kernel/install.conf /usr/local/lib/kernel/install.conf /usr/lib/kernel/install.conf; do
+        if [[ -f "$ROOT$config" ]]; then
+            generator="$(sed -nE "s/^[[:space:]]*initrd_generator=[\"']?([A-Za-z0-9_-]+)[\"']?[[:space:]]*(#.*)?$/\\1/p" "$ROOT$config" | tail -1)"
+            break
+        fi
+    done
+    # Drop-in merging is deliberately not guessed. Hosts using it can specify
+    # --initramfs explicitly rather than risk rebuilding a different image.
+    if compgen -G "$ROOT/etc/kernel/install.conf.d/*.conf" >/dev/null || \
+       compgen -G "$ROOT/run/kernel/install.conf.d/*.conf" >/dev/null || \
+       compgen -G "$ROOT/usr/local/lib/kernel/install.conf.d/*.conf" >/dev/null || \
+       compgen -G "$ROOT/usr/lib/kernel/install.conf.d/*.conf" >/dev/null; then
+        fail 'kernel-install drop-ins are present; select the boot image tool explicitly with gpu_unlock install --initramfs TOOL.'
+        return 1
+    fi
+    if [[ -n "$generator" ]]; then validate_tool "$generator"; return; fi
+    for tool in mkinitcpio update-initramfs dracut; do
+        if tool_available "$tool"; then candidates+=("$tool"); fi
+    done
+    if [[ ${#candidates[@]} -eq 1 ]]; then printf '%s\n' "${candidates[0]}"; return; fi
+    fail "Cannot determine the active initramfs tool (available: ${candidates[*]:-none}). Specify --initramfs dracut|mkinitcpio|update-initramfs on install or uninstall for your boot setup."
+}
+
+initramfs_tool() {
+    [[ -f "$(state_path)/initramfs-tool" ]] || {
+        fail 'No initramfs backend recorded. Reinstall with gpu_unlock install --initramfs TOOL.'; return 1;
+    }
+    validate_tool "$(cat "$(state_path)/initramfs-tool")"
+}
+
+install_owned_tree() (
+    set -euo pipefail
+    local source="$1" destination="$2" parent temporary entry relative permissions
+    parent="${destination%/*}"
+    # A fresh tree avoids following a symlink left in an older user-owned
+    # installation. Do not copy metadata onto shared firmware/license parents.
+    [[ -d "$parent" && ! -L "$parent" ]] || { fail "Missing or symlinked system parent: $parent"; return 1; }
+    [[ -d "$source" && ! -L "$source" ]] || { fail "Missing payload directory: $source"; return 1; }
+    permissions="$(stat -c '%a' "$parent")"
+    if [[ "$(stat -c '%u' "$parent")" != 0 ]] || (( (8#$permissions & 0022) != 0 )); then
+        fail "System parent $parent must be root-owned and not group/world-writable; repair its metadata before installation."
+        return 1
+    fi
+    temporary="$(mktemp -d "$parent/.gpu-unlock.XXXXXXXX")"
+    trap 'rm -rf -- "$temporary"' EXIT
+    if [[ -n "$(find "$source" ! -type d ! -type f -print -quit)" ]]; then
+        fail 'Payload contains a symlink or special file'; return 1
+    fi
+    while IFS= read -r -d '' entry; do
+        relative="${entry#"$source"}"
+        install -d -o 0 -g 0 -m 755 "$temporary$relative"
+    done < <(find "$source" -type d -print0)
+    while IFS= read -r -d '' entry; do
+        relative="${entry#"$source"/}"
+        install -o 0 -g 0 -m 644 "$entry" "$temporary/$relative"
+    done < <(find "$source" -type f -print0)
+    rm -rf -- "$destination"
+    mv -T -- "$temporary" "$destination"
+)
+
+regenerate() {
+    local tool kernel marker limine result=0
+    tool="$(initramfs_tool)"
+    limine="$(configured_limine_backend)"
+    if [[ -n "$limine" ]]; then
+        # Limine can generate images without mkinitcpio presets and must update
+        # its boot entries too. Plain mkinitcpio -P is insufficient here.
+        "limine-$limine"
+        return
+    fi
+    case "$tool" in
+        mkinitcpio) mkinitcpio -P ;;
+        *)
+            for marker in "$(state_path)"/kernels/*; do
+                [[ -f "$marker" ]] || continue
+                kernel="${marker##*/}"
+                [[ -d "$ROOT/lib/modules/$kernel" ]] || continue
+                case "$tool" in
+                    update-initramfs) update-initramfs -u -k "$kernel" || result=1 ;;
+                    dracut) dracut --force --kver "$kernel" || result=1 ;;
+                esac
+            done
+            return "$result"
+            ;;
+    esac
+}
+
+next_targets() {
+    local config
+    config="$(config_path)"
+    if [[ -f "$config" ]]; then sed -n 's/^options gpu_unlock targets=//p' "$config"; fi
+}
+
+write_targets() {
+    local config
+    config="$(config_path)"
+    mkdir -p "${config%/*}"
+    printf '# Managed by gpu_unlock; changes take effect after reboot.\noptions gpu_unlock targets=%s\n' "$1" > "$config.new"
+    chmod 644 "$config.new"
+    mv -f "$config.new" "$config"
+}
+
+set_targets() {
+    local targets="$1" previous marker found=0
+    [[ -z "$targets" ]] || valid_targets "$targets" || { fail 'Use all or comma-separated full PCI addresses, e.g. 0000:21:00.0'; return 1; }
+    check_conflicts
+    initramfs_tool >/dev/null
+    for marker in "$(state_path)"/kernels/*; do
+        if [[ -f "$marker" && -f "$ROOT/lib/modules/${marker##*/}/updates/linux-tools-gpu-unlock/gpu_unlock.ko" ]]; then found=1; fi
+    done
+    (( found )) || { fail 'Run gpu_unlock install before changing boot settings.'; return 1; }
+    previous="$(next_targets)"
+    write_targets "$targets"
+    if ! regenerate; then
+        echo 'ERROR: initramfs rebuild failed; restoring the previous boot request.' >&2
+        write_targets "$previous"
+        regenerate || echo 'ERROR: rollback image rebuild also failed; repair the initramfs before rebooting.' >&2
+        return 1
+    fi
+    if [[ -n "$targets" ]]; then echo "Next boot: ON ($targets)."; else echo 'Next boot: OFF.'; fi
+    echo 'Reboot required. The running GPU state has not changed.'
+}
+
+install_host() {
+    local kernel="$1" work="$2" requested="${3:-auto}" tool config state firmware
+    valid_kernel "$kernel" || { fail 'Invalid kernel version'; return 1; }
+    [[ -d "$ROOT/lib/modules/$kernel" ]] || { fail "Host kernel $kernel is not installed"; return 1; }
+    [[ -f "$work/module/gpu_unlock.ko" && -d "$work/payload/usr/lib/firmware/gpu-unlock" && -d "$work/boot" ]] || {
+        fail 'Incomplete container build'; return 1;
+    }
+    [[ "$(modinfo -F vermagic "$work/module/gpu_unlock.ko")" == "$kernel "* ]] || {
+        fail 'Module vermagic does not match the requested kernel'; return 1;
+    }
+    check_conflicts
+    tool="$(select_initramfs_tool "$requested")"
+    state="$(state_path)"
+    config="$(config_path)"
+    install -d -o 0 -g 0 -m 755 "$state" "$state/kernels" "$ROOT/lib/modules/$kernel/updates/linux-tools-gpu-unlock"
+    if [[ -f "$state/initramfs-tool" && "$(cat "$state/initramfs-tool")" != "$tool" ]]; then
+        fail 'Backend differs from the installed integration. Uninstall first, then install with the new --initramfs value.'
+        return 1
+    fi
+    install -o 0 -g 0 -m 644 "$work/module/gpu_unlock.ko" "$ROOT/lib/modules/$kernel/updates/linux-tools-gpu-unlock/gpu_unlock.ko"
+    firmware="$ROOT/usr/lib/firmware/gpu-unlock"
+    # Shared parents are existing system directories; their owner/mode stays put.
+    mkdir -p "$ROOT/usr/lib/firmware" "$ROOT/usr/share/licenses"
+    install_owned_tree "$work/payload/usr/lib/firmware/gpu-unlock" "$firmware"
+    install_owned_tree "$work/payload/usr/share/licenses/gpu-unlock" "$ROOT/usr/share/licenses/gpu-unlock"
+    install_owned_tree "$work/payload/usr/share/licenses/gpu-unlock-firmware" "$ROOT/usr/share/licenses/gpu-unlock-firmware"
+    [[ -f "$config" ]] || write_targets ''
+    case "$tool" in
+        mkinitcpio)
+            install -D -o 0 -g 0 -m644 "$work/boot/mkinitcpio.conf" "$ROOT/etc/mkinitcpio.conf.d/zz-linux-tools-gpu-unlock.conf"
+            ;;
+        update-initramfs)
+            install -D -o 0 -g 0 -m755 "$work/boot/initramfs-hook" "$ROOT/etc/initramfs-tools/hooks/linux-tools-gpu-unlock"
+            install -D -o 0 -g 0 -m755 "$work/boot/initramfs-load" "$ROOT/etc/initramfs-tools/scripts/init-top/linux-tools-gpu-unlock"
+            ;;
+        dracut)
+            # check() includes it automatically only for kernels with our
+            # module. Forcing add_dracutmodules would break new-kernel image
+            # generation before that kernel has a container build.
+            install -d -o 0 -g 0 -m755 "$ROOT/usr/lib/dracut/modules.d/01linux-tools-gpu-unlock"
+            install -o 0 -g 0 -m755 "$work/boot/dracut/"*.sh "$ROOT/usr/lib/dracut/modules.d/01linux-tools-gpu-unlock/"
+            ;;
+    esac
+    printf '6081407b312aa3139a2bed62bdda354f4ffddc1d\n' > "$state/kernels/$kernel"
+    printf '%s\n' "$tool" > "$state/initramfs-tool"
+    chown 0:0 "$state/kernels/$kernel" "$state/initramfs-tool"
+    chmod 644 "$state/kernels/$kernel" "$state/initramfs-tool"
+    depmod "$kernel"
+    regenerate
+    echo "Installed for $kernel. Next boot targets: $(next_targets)"
+    echo 'Use gpu_unlock on to enable, then reboot. Rebuild with gpu_unlock install after kernel upgrades.'
+}
+
+status_host() {
+    local targets marker current limine
+    targets="$(next_targets)"
+    echo "Next-boot request: ${targets:-OFF}"
+    limine="$(configured_limine_backend)"
+    [[ -z "$limine" ]] || echo "Active Limine backend: $limine"
+    if [[ -f "$(state_path)/initramfs-tool" ]]; then
+        echo "Initramfs backend: $(cat "$(state_path)/initramfs-tool")"
+    else
+        echo 'Initramfs backend: not recorded; next-boot integration is unverified.'
+    fi
+    current="$ROOT/sys/module/gpu_unlock/parameters/targets"
+    if [[ -f "$current" ]]; then
+        current="$(cat "$current")"
+        echo "Current boot requested targets: ${current:-OFF}"
+    else
+        echo 'Current boot: module not loaded.'
+    fi
+    echo 'Installed kernel builds:'
+    for marker in "$(state_path)"/kernels/*; do [[ ! -f "$marker" ]] || echo "  ${marker##*/}"; done
+    echo 'Kernel log (look for unlocked / successful handoff for each selected GPU):'
+    journalctl -k -b --no-pager -n 30 --grep=gpu_unlock || true
+}
+
+uninstall_host() {
+    local marker kernel tool
+    [[ -d "$(state_path)/kernels" ]] || { fail 'No managed host installation found'; return 1; }
+    tool="$(select_initramfs_tool "${1:-auto}")"
+    printf '%s\n' "$tool" > "$(state_path)/initramfs-tool"
+    chown 0:0 "$(state_path)/initramfs-tool"
+    chmod 644 "$(state_path)/initramfs-tool"
+    # Remove only paths owned by this integration, keeping markers until images
+    # have been rebuilt for every managed kernel.
+    rm -f "$(config_path)" "$ROOT/etc/mkinitcpio.conf.d/zz-linux-tools-gpu-unlock.conf" \
+        "$ROOT/etc/initramfs-tools/hooks/linux-tools-gpu-unlock" \
+        "$ROOT/etc/initramfs-tools/scripts/init-top/linux-tools-gpu-unlock"
+    rm -rf "$ROOT/usr/lib/dracut/modules.d/01linux-tools-gpu-unlock"
+    for marker in "$(state_path)"/kernels/*; do
+        [[ -f "$marker" ]] || continue
+        kernel="${marker##*/}"
+        rm -rf "$ROOT/lib/modules/$kernel/updates/linux-tools-gpu-unlock"
+        [[ ! -d "$ROOT/lib/modules/$kernel" ]] || depmod "$kernel"
+    done
+    # Other installations may still use this firmware; removing our module and
+    # boot hooks must not delete their shared files or be blocked by their state.
+    if [[ ! -d "$ROOT/var/lib/dkms/gpu-unlock" ]] && ! compgen -G "$ROOT/usr/src/gpu-unlock-*" >/dev/null; then
+        rm -rf "$ROOT/usr/lib/firmware/gpu-unlock" "$ROOT/usr/share/licenses/gpu-unlock" "$ROOT/usr/share/licenses/gpu-unlock-firmware"
+    fi
+    regenerate
+    rm -rf "$(state_path)"
+    echo 'Host files removed. Reboot required to clear the current GPU state. Benchmark results are kept.'
+    echo 'Remove any legacy gpu_unlock.targets= boot option and manage separate DKMS packages independently.'
+}
+
+main() {
+    local action="${1:-}"; [[ $# -eq 0 ]] || shift
+    case "$action:$#" in
+        status:0) status_host; return ;;
+        preflight:1) select_initramfs_tool "$1"; return ;;
+        install:3|on:1|off:0|uninstall:1) ;;
+        *) fail 'Usage: gpu-unlock-host install KERNEL WORK BACKEND | on TARGETS | off | status | uninstall'; return 1 ;;
+    esac
+    (( EUID == 0 )) || { fail 'This action requires host sudo'; return 1; }
+    # The bootstrap's private 077 umask (or a strict sudo umask) must not reach
+    # depmod, mkdir or the image generators: their output is world-readable.
+    umask 022
+    case "$action" in
+        install) install_host "$@" ;;
+        on) set_targets "$1" ;;
+        off) set_targets '' ;;
+        uninstall) uninstall_host "$1" ;;
+    esac
+}
+if [[ "${BASH_SOURCE[0]:-$0}" == "$0" ]]; then main "$@"; fi

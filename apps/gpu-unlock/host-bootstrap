@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# This code is passed as a sudo command argument, never executed from shared home.
+set -euo pipefail
+
+snapshot_bundle() {
+    local archive="$1" expected="$2" destination="$3" actual
+    [[ "$expected" =~ ^[[:xdigit:]]{64}$ ]] || { echo 'ERROR: invalid bundle digest' >&2; return 1; }
+    # Copy before checking. Only this private snapshot is subsequently read, so
+    # changing the caller's archive after verification cannot change execution.
+    cp -P -- "$archive" "$destination/bundle.tar"
+    [[ -f "$destination/bundle.tar" && ! -L "$destination/bundle.tar" ]] || {
+        echo 'ERROR: the transfer must be a regular archive' >&2; return 1;
+    }
+    chmod 600 "$destination/bundle.tar"
+    actual="$(sha256sum "$destination/bundle.tar")"; actual="${actual%% *}"
+    [[ "$actual" == "$expected" ]] || { echo 'ERROR: bundle changed before privileged installation; refusing to execute it' >&2; return 1; }
+    mkdir -m 700 "$destination/tree"
+    tar --extract --file "$destination/bundle.tar" --directory "$destination/tree" \
+        --no-same-owner --no-same-permissions
+    # The bundle is created from fixed image paths and the build workspace.
+    # Reject symlinks and special files before executing or installing anything.
+    if [[ -n "$(find "$destination/tree" ! -type f ! -type d -print -quit)" ]]; then
+        echo 'ERROR: bundle contains a symlink or special file' >&2; return 1
+    fi
+}
+
+main() (
+    (( EUID == 0 )) || { echo 'ERROR: bootstrap requires host sudo' >&2; exit 1; }
+    export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+    umask 077
+    local archive="$1" expected="$2" action="$3" snapshot
+    shift 3
+    snapshot="$(mktemp -d /var/tmp/linux-tools-gpu-unlock.XXXXXXXX)"
+    trap 'rm -rf -- "$snapshot"' EXIT
+    snapshot_bundle "$archive" "$expected" "$snapshot"
+    case "$action" in
+        install) /bin/bash "$snapshot/tree/gpu-unlock-host" install "$1" "$snapshot/tree" "$2" ;;
+        on|off|uninstall) /bin/bash "$snapshot/tree/gpu-unlock-host" "$action" "$@" ;;
+        *) echo 'ERROR: invalid privileged action' >&2; exit 1 ;;
+    esac
+)
+if [[ "${BASH_SOURCE[0]:-$0}" == "$0" ]]; then main "$@"; fi

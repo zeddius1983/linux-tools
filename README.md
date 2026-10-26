@@ -63,8 +63,9 @@ here on GitHub and as coloured pills in the dashboard's README panel:
   <img alt="CachyOS: untested" src="https://img.shields.io/badge/CachyOS-untested-lightgrey?logo=cachyos&logoColor=00C2A0">
 </p>
 
-Everything here is developed and tested on **Ubuntu-family** hosts, Linux Mint in
-particular, so those two are green everywhere. A green **CachyOS** badge means the
+Most apps here are developed and tested on **Ubuntu-family** hosts, Linux Mint in
+particular. New integrations awaiting hardware testing carry grey badges until
+they have been run on the corresponding distro. A green **CachyOS** badge means the
 app has also been exercised on an Arch-family host; a grey one means it has not —
 it may well work, but nothing is promised. Nothing is deliberately Ubuntu-only, so
 reports from other distros are welcome.
@@ -101,6 +102,7 @@ reports from other distros are welcome.
 |---|---|
 | [`amdgpu_top`](apps/amdgpu_top/README.md) | AMD GPU monitor |
 | [`corefreq`](apps/corefreq/README.md) | CPU monitor with a kernel module built against your host kernel |
+| [`gpu-unlock`](apps/gpu-unlock/README.md) | Container-built NVIDIA tensor unlock, `gpu_unlock` on/off control and bundled PyTorch benchmarks |
 | [`memtest_vulkan`](apps/memtest_vulkan/README.md) | GPU memory stress test (Vulkan) |
 | [`nvtop`](apps/nvtop/README.md) | GPU process monitor |
 | [`nvbandwidth`](apps/nvbandwidth/README.md) | NVIDIA GPU/NVLink bandwidth test |
@@ -139,6 +141,7 @@ There is also `tools build`, `tools create` and `tools export` when you want a s
 - **Rerunning `tools setup <app>` is how you update or reconfigure it.** It removes the old image and box first, so it is a rebuild, not a repair. Answers you gave the wizard last time are asked again — that is how you switch a GPU backend or move to a newer release.
 - **Your home directory is shared with every container.** Config and data written to `~/` are still there after a rebuild, and are visible to the host. Anything inside the container's own filesystem is not.
 - **App windows may not appear in the menu until you log out and back in**, the first time.
+- **Setup stops if container initialization or command export fails.** After fixing the reported problem, `tools export <app>` retries the exports.
 - **`tools rm <app>` keeps the image**, so putting the app back is fast. To reclaim the disk, remove the image with `podman rmi linux-tools/<app>:latest`.
 - **A container is a normal Distrobox**, named `<app>-box`: `distrobox enter comfyui-box` works exactly as you would expect.
 - **No Go, no dashboard, no problem.** `tools.sh install` builds the dashboard with host Go if you have it, otherwise in a throwaway container, and skips it harmlessly if neither is available. Every action is still there as `tools <command> <app>` (see `tools help`).

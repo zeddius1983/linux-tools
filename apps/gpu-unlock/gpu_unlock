@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+    cat <<'HELP'
+Usage: gpu_unlock COMMAND
+  install [KERNEL] [--initramfs auto|dracut|mkinitcpio|update-initramfs]
+                        Build in the container, install on host (default: running kernel)
+                        --keep-build retains the workspace for troubleshooting
+  on [all|PCI,PCI,...]   Enable for next boot (default: all; install first)
+  off                   Disable for next boot
+  status                Show installed kernels, next-boot request and current boot logs
+  benchmark [OPTIONS]   Run bundled CUDA PyTorch FP16/BF16/TF32 GEMM benchmark
+                        --save before.json   --device GPU-...   --size 8192
+  compare BEFORE AFTER  Compare two saved benchmark JSON reports
+  uninstall [--initramfs TOOL]
+                        Remove host module, firmware and boot integration
+On/off require a reboot. No live GPU reset or automatic reboot is performed.
+HELP
+}
+
+main() {
+    local action="${1:-help}"; [[ $# -eq 0 ]] || shift
+    case "$action" in help|-h|--help) usage; return ;; esac
+    source /usr/share/gpu-unlock/common.sh
+    case "$action" in
+        install) exec /usr/bin/gpu-unlock-build "$@" ;;
+        on)
+            [[ $# -le 1 ]] || { usage >&2; return 1; }
+            run_host_helper on "${1:-all}"
+            ;;
+        off|status)
+            [[ $# -eq 0 ]] || { usage >&2; return 1; }
+            run_host_helper "$action"
+            ;;
+        uninstall)
+            if [[ $# -eq 0 ]]; then
+                run_host_helper uninstall auto
+            elif [[ $# -eq 2 && "$1" == --initramfs ]]; then
+                case "$2" in dracut|mkinitcpio|update-initramfs) run_host_helper uninstall "$2" ;; *) usage >&2; return 1 ;; esac
+            else
+                usage >&2; return 1
+            fi
+            ;;
+        benchmark|bench)
+            exec /opt/gpu-unlock-venv/bin/python "$GPU_UNLOCK_SHARE/benchmark.py" "$@"
+            ;;
+        compare)
+            exec /opt/gpu-unlock-venv/bin/python "$GPU_UNLOCK_SHARE/benchmark.py" compare "$@"
+            ;;
+        help|-h|--help) usage ;;
+        *) usage >&2; return 1 ;;
+    esac
+}
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then main "$@"; fi

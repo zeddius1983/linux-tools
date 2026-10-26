@@ -1,0 +1,3 @@
+Next: gpu_unlock install
+Measure: gpu_unlock benchmark --save before.json
+Enable: gpu_unlock on   (then reboot; disable with gpu_unlock off)
