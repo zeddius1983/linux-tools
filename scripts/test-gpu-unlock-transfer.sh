@@ -8,6 +8,8 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
 mkdir -p "$work/share" "$work/transfers" "$work/check"
+# Read by run_host_helper from the sourced common.sh.
+# shellcheck disable=SC2034
 GPU_UNLOCK_SHARE="$work/share"
 printf 'printf "original status\\n"\n' > "$work/share/gpu-unlock-host"
 cp "$root/apps/gpu-unlock/host-bootstrap" "$work/share/host-bootstrap"
