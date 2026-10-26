@@ -231,6 +231,21 @@ matters most to engines that run BF16 with FP32 accumulation throughout (vLLM,
 PyTorch training) and little to int8-quantized GGUF kernels. A Strata model
 streaming experts from RAM and disk is I/O bound and shows no measurable change.
 
+ComfyUI 0.35.0 (PyTorch 2.11, PyTorch attention), SDXL base 1.0 at 1024×1024,
+euler, CFG 7. Per-step time is the difference between median 10- and 30-step
+runs, so model load, text encoding and VAE decode cancel out:
+
+| UNet weights | Locked | Unlocked | Speedup |
+|---|---:|---:|---:|
+| FP16 (ComfyUI default) | 3.29 it/s | 4.95 it/s | 1.50× |
+| BF16 (`--bf16-unet`) | 2.93 it/s | 4.51 it/s | 1.54× |
+| Whole 30-step image, FP16 | 9.62 s | 6.52 s | 1.48× |
+
+PyTorch accumulates FP16 matrix math in FP32, so unlike llama.cpp's F16 path,
+ComfyUI's default FP16 gains without any flag. FP16 stays the faster choice for
+SDXL on this card. Avoid `--fast` when comparing: newer ComfyUI can switch to
+FP16 accumulation, which is never throttled and hides the difference.
+
 ## Remove
 
 ```bash
