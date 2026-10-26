@@ -29,8 +29,10 @@ jobs:
       - name: verify
         run: |
           shellcheck --severity=warning -e SC1091 \
-            tools.sh install.sh lib/*.sh scripts/*.sh completion/tools.bash
+            tools.sh install.sh lib/*.sh scripts/*.sh completion/tools.bash \
+            apps/strata/strata-config-migrate apps/strata/test-config-migrate.sh
           ./scripts/lint-apps.sh
+          ./apps/strata/test-config-migrate.sh
           cd tui && go vet ./... && go test ./...
 
       - name: package

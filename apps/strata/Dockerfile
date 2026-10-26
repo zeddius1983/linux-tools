@@ -58,8 +58,11 @@ RUN set -e; \
 #   strata-launch  the desktop entry: `strata launch`'s guided screens in a
 #                  terminal window, kept open afterwards so the printed
 #                  addresses and any error stay readable
-RUN printf '%s\n' \
+COPY strata-config-migrate /usr/libexec/strata-config-migrate
+RUN chmod +x /usr/libexec/strata-config-migrate \
+    && printf '%s\n' \
       '#!/usr/bin/env sh' \
+      '/usr/libexec/strata-config-migrate || echo "strata: warning: stale launch manifests could not be migrated" >&2' \
       'exec /opt/strata/terminal/current/bin/strata "$@"' \
       > /usr/bin/strata \
     && printf '%s\n' \
