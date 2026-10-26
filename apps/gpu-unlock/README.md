@@ -201,6 +201,36 @@ LLM prompt tokens/s and generation tokens/s separately, warm ComfyUI generation
 time, or steady-state training step time. `nvbandwidth` measures transfers and
 is not the primary benchmark for this arithmetic unlock.
 
+### Measured results
+
+RTX 3080 (GA102, display card), CachyOS 7.3 with Limine, driver 580.178.04,
+320 W power limit. Full `install` → `on` → reboot → `off` → reboot cycle.
+
+Bundled benchmark (`gpu_unlock benchmark`, 8192³ GEMM, FP32 accumulation):
+
+| Input | Locked | Unlocked | Speedup |
+|---|---:|---:|---:|
+| FP16 | 60.3 TFLOPS | 106.8 TFLOPS | 1.77× |
+| BF16 | 63.7 TFLOPS | 109.4 TFLOPS | 1.72× |
+| TF32 | 30.9 TFLOPS | 52.6 TFLOPS | 1.70× |
+
+Spot-check errors were identical in both states.
+
+llama.cpp (`llama-bench -dev CUDA0 -fa 1`, build 620d222), Llama 3.2 3B Instruct:
+
+| Weights | Test | Locked | Unlocked | Speedup |
+|---|---|---:|---:|---:|
+| BF16 | `pp512` (prefill) | 7,440 t/s | 11,308 t/s | 1.52× |
+| F16 | `pp512` (prefill) | 10,750 t/s | ≈10,750 t/s | none |
+| BF16 | `tg128` (generation) | 100.5 t/s | 99.8 t/s | none |
+
+The unlock speeds up BF16 prefill only: llama.cpp accumulates F16 matrix math in
+FP16, which was never throttled, and generation is memory-bandwidth bound. On a
+locked card, F16 weights prefill almost as fast as unlocked BF16. The unlock
+matters most to engines that run BF16 with FP32 accumulation throughout (vLLM,
+PyTorch training) and little to int8-quantized GGUF kernels. A Strata model
+streaming experts from RAM and disk is I/O bound and shows no measurable change.
+
 ## Remove
 
 ```bash
@@ -237,8 +267,7 @@ are kept.
 | `/usr/lib/dracut/modules.d/01linux-tools-gpu-unlock/` | dracut integration when applicable |
 | Paths supplied to `benchmark --save` | Before/after JSON reports in shared home |
 
-Boot and numerical correctness still need validation on each supported GPU/host
-combination; compatibility badges remain untested until those runs succeed.
-The Arch image, a CachyOS kernel-module build, real dracut image generation in a
-disposable container, and the bundled benchmark on an RTX 3080 have been checked.
-The unlock itself has not yet been enabled and verified across a host reboot.
+The full enable/disable cycle has been verified across reboots on CachyOS with
+Limine and an RTX 3080 (see [Measured results](#measured-results)). Ubuntu and
+Linux Mint hosts, other GA10x cards and multi-GPU systems are untested; their
+badges stay grey until a real run succeeds.
