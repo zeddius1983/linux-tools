@@ -25,7 +25,7 @@ printf '%s\n' '{"cwd":"/opt/strata/terminal/current"}' > "$launch/current.json"
 printf '%s\n' '/opt/strata/terminal/0.1.48.1' > "$work/unrelated/keep.txt"
 chmod 600 "$install/strata-q2_0.json"
 
-HOME="$work" XDG_DATA_HOME= XDG_STATE_HOME= "$here/strata-config-migrate"
+HOME="$work" XDG_DATA_HOME='' XDG_STATE_HOME='' "$here/strata-config-migrate"
 
 ! grep -R -q '/opt/strata/terminal/0.1.48.1' "$install" "$launch"
 grep -q '"custom":{"temperature":0.25}' "$install/strata-q2_0.json"
@@ -35,7 +35,7 @@ grep -q '/opt/strata/terminal/0.1.48.1' "$work/unrelated/keep.txt"
 [[ "$(stat -c '%a' "$install/strata-q2_0.json")" == 600 ]]
 
 before="$(find "$install" "$launch" -type f -exec sha256sum {} + | sort)"
-HOME="$work" XDG_DATA_HOME= XDG_STATE_HOME= "$here/strata-config-migrate"
+HOME="$work" XDG_DATA_HOME='' XDG_STATE_HOME='' "$here/strata-config-migrate"
 after="$(find "$install" "$launch" -type f -exec sha256sum {} + | sort)"
 [[ "$before" == "$after" ]]
 ! find "$install" "$launch" -name '*.linux-tools.tmp.*' -print -quit | grep -q .
