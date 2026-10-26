@@ -20,7 +20,8 @@ jobs:
       - name: shellcheck
         run: |
           shellcheck --severity=warning -e SC1091 \
-            tools.sh install.sh lib/*.sh scripts/*.sh completion/tools.bash
+            tools.sh install.sh lib/*.sh scripts/*.sh completion/tools.bash \
+            apps/strata/strata-config-migrate apps/strata/test-config-migrate.sh
 
   go:
     name: dashboard
@@ -56,7 +57,9 @@ jobs:
       # Checks every apps/<name>/ against the contract in CLAUDE.md. Rules the
       # tree does not fully satisfy yet are grandfathered by name inside the
       # script, so this fails on new violations only.
-      - run: ./scripts/lint-apps.sh
+      - run: |
+          ./scripts/lint-apps.sh
+          ./apps/strata/test-config-migrate.sh
 
   install:
     name: install.sh smoke test

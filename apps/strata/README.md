@@ -3,7 +3,7 @@
 <p>
   <img alt="Ubuntu: tested" src="https://img.shields.io/badge/-tested-brightgreen?logo=ubuntu&logoColor=E95420">
   <img alt="Linux Mint: tested" src="https://img.shields.io/badge/-tested-brightgreen?logo=linuxmint&logoColor=87CF3E">
-  <img alt="CachyOS: untested" src="https://img.shields.io/badge/-untested-lightgrey?logo=cachyos&logoColor=00C2A0">
+  <img alt="CachyOS: tested" src="https://img.shields.io/badge/-tested-brightgreen?logo=cachyos&logoColor=00C2A0">
 </p>
 
 [Strata](https://github.com/Niko1221/Strata) runs **Qwen3.8-Flash-Next**, a
@@ -128,6 +128,9 @@ To keep the models on another disk: `strata launch --data-dir /mnt/big/strata`.
 ## Updating
 
 - **Terminal:** it is baked into the image, so `tools setup strata` updates it.
+  Existing generated launch manifests are migrated to the Terminal's stable
+  `current` path on the next `strata` command, preserving models and custom
+  settings across the container rebuild.
 - **Engine:** `strata update` installs a newer engine for the current Terminal,
   after a test start. `strata components rollback` goes back. The engine also
   comes with a fresh `strata launch` after a rebuild.
