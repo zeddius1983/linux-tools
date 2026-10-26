@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Build against read-only host headers; only the final helper writes to the host.
+set -euo pipefail
+source /usr/share/gpu-unlock/common.sh
+KVER="$(uname -r)"
+BACKEND=auto
+KEEP_BUILD=0
+kernel_given=0
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --initramfs) [[ $# -ge 2 ]] || { echo 'Missing --initramfs value' >&2; exit 1; }; BACKEND="$2"; shift 2 ;;
+        --keep-build) KEEP_BUILD=1; shift ;;
+        --*) echo "Unknown option: $1" >&2; exit 1 ;;
+        *) (( ! kernel_given )) || { echo 'Specify only one kernel version' >&2; exit 1; }; KVER="$1"; kernel_given=1; shift ;;
+    esac
+done
+case "$BACKEND" in auto|dracut|mkinitcpio|update-initramfs) ;; *) echo 'Invalid --initramfs value' >&2; exit 1 ;; esac
+[[ "$KVER" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]] || { echo 'Invalid kernel version' >&2; exit 1; }
+[[ "$(uname -m)" == x86_64 ]] || { echo 'gpu-unlock requires x86_64' >&2; exit 1; }
+KBUILD="/lib/modules/$KVER/build"
+[[ -d "$KBUILD" ]] || { echo "Install host kernel headers for $KVER first ($KBUILD missing)." >&2; exit 1; }
+# Resolve on the host before allocating/copying a workspace or compiling.
+# Installation validates again as root in case the boot setup changed meanwhile.
+BACKEND="$(run_host_helper preflight "$BACKEND")"
+case "$BACKEND" in dracut|mkinitcpio|update-initramfs) ;; *) echo 'Invalid host preflight response' >&2; exit 1 ;; esac
+STATE="${XDG_DATA_HOME:-$HOME/.local/share}/gpu-unlock"
+mkdir -p "$STATE/builds"
+WORK="$(mktemp -d "$STATE/builds/$KVER.XXXXXX")"
+cleanup() {
+    if (( KEEP_BUILD )); then
+        echo "Build workspace retained: $WORK" >&2
+    else
+        rm -rf -- "$WORK"
+    fi
+}
+trap cleanup EXIT
+cp -a /opt/gpu-unlock-src/kernel/gpu_unlock "$WORK/module"
+cp -a /opt/gpu-unlock-payload "$WORK/payload"
+cp -a /usr/share/gpu-unlock/boot "$WORK/boot"
+declare -a MK=(KDIR="$KBUILD")
+if grep -q '^CONFIG_CC_IS_CLANG=y' "$KBUILD/.config"; then
+    MK+=(LLVM=1 CC=clang LD=ld.lld AR=llvm-ar NM=llvm-nm \
+        OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip)
+fi
+
+# Prebuilt objtool comes from the host's headers and may require a newer
+# binutils library. Stage only its missing libraries, never the whole host libdir.
+stage_objtool_libraries "$KBUILD/tools/objtool/objtool" /run/host "$WORK/libs"
+make -C "$WORK/module" -j"$(nproc)" "${MK[@]}"
+[[ "$(modinfo -F vermagic "$WORK/module/gpu_unlock.ko")" == "$KVER "* ]] || {
+    echo 'Built module does not match requested host kernel' >&2; exit 1;
+}
+run_host_helper install "$KVER" "$WORK" "$BACKEND"

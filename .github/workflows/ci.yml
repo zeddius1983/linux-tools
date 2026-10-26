@@ -21,6 +21,10 @@ jobs:
         run: |
           shellcheck --severity=warning -e SC1091 \
             tools.sh install.sh lib/*.sh scripts/*.sh completion/tools.bash \
+            apps/gpu-unlock/gpu_unlock apps/gpu-unlock/gpu-unlock-{build,host} \
+            apps/gpu-unlock/image-setup apps/gpu-unlock/boot/initramfs-* \
+            apps/gpu-unlock/common.sh apps/gpu-unlock/host-bootstrap \
+            apps/gpu-unlock/boot/dracut/*.sh \
             apps/strata/strata-config-migrate apps/strata/test-config-migrate.sh
 
   go:
@@ -59,6 +63,10 @@ jobs:
       # script, so this fails on new violations only.
       - run: |
           ./scripts/lint-apps.sh
+          bash ./scripts/test-exports.sh
+          sudo bash ./scripts/test-gpu-unlock.sh
+          bash ./scripts/test-gpu-unlock-transfer.sh
+          python3 ./scripts/test-gpu-unlock-benchmark.py
           ./apps/strata/test-config-migrate.sh
 
   install:

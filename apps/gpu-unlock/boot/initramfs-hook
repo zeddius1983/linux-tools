@@ -1,0 +1,12 @@
+#!/bin/sh
+# shellcheck disable=SC2154
+set -e
+PREREQ=""
+prereqs() { echo "$PREREQ"; }
+case "${1:-}" in prereqs) prereqs; exit 0 ;; esac
+. /usr/share/initramfs-tools/hook-functions
+# A newly-installed kernel without a container build must still get an image.
+if modinfo -k "$version" gpu_unlock >/dev/null 2>&1; then
+    manual_add_modules gpu_unlock
+    copy_file config /etc/modprobe.d/zz-linux-tools-gpu-unlock.conf
+fi

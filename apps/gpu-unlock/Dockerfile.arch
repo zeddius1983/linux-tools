@@ -1,0 +1,22 @@
+FROM ghcr.io/astral-sh/uv:0.9.5 AS uv
+FROM docker.io/library/archlinux:base-devel
+
+RUN pacman -Syu --noconfirm --needed \
+        clang lld llvm pahole git make gcc kmod sudo curl ca-certificates \
+        python libelf bc flex bison xz zstd && \
+    (yes | pacman -Scc --noconfirm >/dev/null 2>&1 || true)
+COPY --from=uv /uv /usr/bin/uv
+ENV UV_PYTHON_INSTALL_DIR=/opt/gpu-unlock-python UV_LINK_MODE=copy
+COPY image-setup /tmp/gpu-unlock-image-setup
+RUN bash /tmp/gpu-unlock-image-setup
+
+COPY gpu_unlock gpu-unlock-build /usr/bin/
+COPY gpu-unlock-host host-bootstrap common.sh benchmark.py /usr/share/gpu-unlock/
+COPY boot /usr/share/gpu-unlock/boot
+RUN chmod +x /usr/bin/gpu_unlock /usr/bin/gpu-unlock-build
+# Install Mesa before CDI supplies libGLX_indirect.so.0 at container creation.
+# Otherwise Distrobox's first-boot pacman transaction sees an unowned file and
+# refuses to install Mesa. Keep this after the expensive firmware/PyTorch layer.
+RUN pacman -S --noconfirm --needed mesa && \
+    (yes | pacman -Scc --noconfirm >/dev/null 2>&1 || true)
+CMD ["/bin/bash"]

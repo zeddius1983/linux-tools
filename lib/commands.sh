@@ -56,11 +56,33 @@ cmd_create() {
     "${create_cmd[@]}"
 }
 
+resolve_export_bin() {
+    local box="$1" name="$2" output bin_path
+    if ! output=$(distrobox enter "$box" -- bash -c "command -pv '$name'"); then
+        echo "Error: binary lookup failed for '$name' in '$box'." >&2
+        return 1
+    fi
+    bin_path=$(printf '%s\n' "$output" | sed -n '/^\//p')
+    if [[ -z "$bin_path" ]]; then
+        echo "Error: cannot find '$name' inside container '$box'." >&2
+        return 1
+    fi
+    printf '%s\n' "$bin_path"
+}
+
 cmd_export() {
     local app="$1" box
     box="$(box_name "$app")"
     local exports_file="$APPS_DIR/$app/exports"
     [[ -f "$exports_file" ]] || { echo "No exports file found, skipping"; return; }
+
+    # First entry initializes a fresh Distrobox. Keep its output visible and
+    # stop on failure before looking up binaries or changing existing shortcuts.
+    echo "==> Initializing distrobox '$box'..."
+    if ! distrobox enter "$box" -- true; then
+        echo "Error: failed to initialize '$box'; exports were not installed." >&2
+        return 1
+    fi
 
     local term t_prefix desktop_dir app_desc
     term=$(pick_terminal)
@@ -81,7 +103,7 @@ cmd_export() {
             app)
                 local display_name="${extra:-$name}"
                 echo "==> Exporting desktop app '$name'..."
-                distrobox enter "$box" -- distrobox-export --app "$name"
+                distrobox enter "$box" -- distrobox-export --app "$name" || return
                 local app_desktop="$HOME/.local/share/applications/${box}-${name}.desktop"
                 if [[ -f "$app_desktop" ]]; then
                     sed -i "s|^Name=.*|Name=${display_name} (on ${box})|" "$app_desktop"
@@ -103,23 +125,15 @@ cmd_export() {
             bin)
                 echo "==> Exporting binary '$name' to ~/.local/bin..."
                 local bin_path
-                bin_path=$(distrobox enter "$box" -- bash -c "command -pv '$name'" 2>/dev/null | grep '^/') || true
-                if [[ -z "$bin_path" ]]; then
-                    echo "Error: cannot find '$name' inside container" >&2
-                    continue
-                fi
-                distrobox enter "$box" -- distrobox-export --bin "$bin_path" --export-path ~/.local/bin
+                bin_path=$(resolve_export_bin "$box" "$name") || return
+                distrobox enter "$box" -- distrobox-export --bin "$bin_path" --export-path ~/.local/bin || return
                 ;;
             desktop)
                 local display_name="${extra:-$name}"
                 echo "==> Creating desktop entry for '$display_name'..."
                 local bin_path local_icon esc_display_name
                 local_icon=""
-                bin_path=$(distrobox enter "$box" -- bash -c "command -pv '$name'" 2>/dev/null | grep '^/') || true
-                if [[ -z "$bin_path" ]]; then
-                    echo "Error: cannot find '$name' inside container" >&2
-                    continue
-                fi
+                bin_path=$(resolve_export_bin "$box" "$name") || return
                 local_icon=$(resolve_icon "$app" "$box" "$name")
                 esc_display_name=$(desktop_escape "$display_name")
 
@@ -150,11 +164,7 @@ DESKTOPEOF
                 echo "==> Creating GUI desktop entry for '$display_name'..."
                 local bin_path local_icon esc_display_name
                 local_icon=""
-                bin_path=$(distrobox enter "$box" -- bash -c "command -pv '$name'" 2>/dev/null | grep '^/') || true
-                if [[ -z "$bin_path" ]]; then
-                    echo "Error: cannot find '$name' inside container" >&2
-                    continue
-                fi
+                bin_path=$(resolve_export_bin "$box" "$name") || return
                 local_icon=$(resolve_icon "$app" "$box" "$name")
                 esc_display_name=$(desktop_escape "$display_name")
 
