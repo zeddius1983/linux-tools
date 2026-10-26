@@ -43,7 +43,7 @@ Priority order within each section: highest first.
 
 - [x] `amdgpu_top` — AMD GPU usage monitor
 - [x] `corefreq` — CPU frequency / perf monitor (kernel module build)
-- [x] `gpu-unlock` — Zagitta's NVIDIA tensor throughput unlock (Arch/Ubuntu build containers, exported `gpu_unlock` install/on/off/status, bundled CUDA PyTorch benchmark with saved before/after comparisons; hardware/boot validation pending)
+- [x] `gpu-unlock` — Zagitta's NVIDIA tensor throughput unlock (Arch/Ubuntu build containers, exported `gpu_unlock` install/on/off/status, bundled CUDA PyTorch benchmark with saved before/after comparisons; validated on CachyOS/Limine with an RTX 3080, ~1.7× FP16/BF16/TF32; Ubuntu/Mint pending)
   - Review fixes: root-owned firmware/license installation, verified privileged snapshots, persisted initramfs backend with explicit selection on ambiguous hosts, independent removal, temporary-build cleanup and actionable objtool dependency errors.
   - CachyOS/Limine: ignore compatibility-only update-initramfs wrappers, detect active Limine generator hooks, regenerate through the Limine entrypoint, and preflight before compilation/sudo.
 - [x] `nvtop` — GPU process monitor (NVIDIA / AMD), Fedora package + GPU picker (default passthrough / NVIDIA CDI)

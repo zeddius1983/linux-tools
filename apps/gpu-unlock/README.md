@@ -3,7 +3,7 @@
 <p>
   <img alt="Ubuntu: untested" src="https://img.shields.io/badge/-untested-lightgrey?logo=ubuntu&logoColor=E95420">
   <img alt="Linux Mint: untested" src="https://img.shields.io/badge/-untested-lightgrey?logo=linuxmint&logoColor=87CF3E">
-  <img alt="CachyOS: untested" src="https://img.shields.io/badge/-untested-lightgrey?logo=cachyos&logoColor=00C2A0">
+  <img alt="CachyOS: tested" src="https://img.shields.io/badge/-tested-brightgreen?logo=cachyos&logoColor=00C2A0">
 </p>
 
 [gpu-unlock](https://github.com/Zagitta/gpu-unlock) unlocks tensor arithmetic
