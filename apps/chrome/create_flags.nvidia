@@ -1,0 +1,1 @@
+--device nvidia.com/gpu=all --env __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json

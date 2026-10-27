@@ -1,0 +1,6 @@
+Select GPU
+Which GPU should Chrome render and decode video on? One image serves both; this sets the box's passthrough.
+setup,create
+param|CHROME_GPU
+AMD / Intel|amd|Mesa via the default /dev/dri passthrough, no host prerequisite (default)
+NVIDIA (CDI)|nvidia|Adds --device nvidia.com/gpu=all + NVIDIA EGL; needs /etc/cdi/nvidia.yaml
