@@ -23,8 +23,9 @@ installed, and fall back to `xdg-open` when it is not.
 tools setup chrome
 ```
 
-No wizard, no GPU picker, no `create_flags` — see [GPU
-acceleration](#gpu-acceleration) for why none are needed.
+No wizard and no GPU picker. AMD/Intel needs no `create_flags` — see [GPU
+acceleration](#gpu-acceleration). An NVIDIA host needs a local one — see
+[NVIDIA hosts](#nvidia-hosts).
 
 ## What you get
 
@@ -73,6 +74,42 @@ distrobox enter chrome-box -- bash -c 'ls -l /dev/dri; test -w /dev/dri/renderD1
 ```
 
 or open `chrome://gpu` in the browser and look at *Graphics Feature Status*.
+
+## NVIDIA hosts
+
+Everything above is about Mesa GPUs. On a host whose GPU is NVIDIA, a plain box
+has no NVIDIA userspace at all, so Chrome renders **everything** through
+llvmpipe on the CPU — compositing, rasterization, canvas — and video stutters.
+Give the box the driver through CDI (host setup: `nvidia-container-toolkit` and
+`nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml`) with a **local,
+uncommitted** `apps/chrome/create_flags`:
+
+```
+--device nvidia.com/gpu=all --env __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json
+```
+
+then `tools rm chrome && tools create chrome && tools export chrome`. Both halves
+matter: with CDI alone glvnd still hands Chrome's display to Mesa (llvmpipe). Never
+commit that file — the `--env` hides Mesa, which breaks AMD/Intel hosts.
+
+The image does the rest:
+
+- **Hardware decode** through
+  [`nvidia-vaapi-driver`](https://github.com/elFarto/nvidia-vaapi-driver), built
+  from source (Ubuntu's 0.0.8 fails Chrome's `vaCreateContext`), plus
+  `--enable-features=VaapiOnNvidiaGPUs` in `/etc/chrome-flags.conf`. Measured on an
+  RTX 3080 (KDE Wayland): 1080p H.264 ~97 % → ~27 % of a core, VP9 ~81 % → ~17 %,
+  with NVDEC busy. `nvidia-smi --query-gpu=utilization.decoder
+  --format=csv -lms 500` on the host is the trustworthy check here — non-zero
+  while a video plays means hardware decode.
+- **`GBM_BACKENDS_PATH`**, set by the wrapper when CDI mounted NVIDIA's GBM backend
+  at `/usr/lib/gbm` (an Arch-family host's path, which Ubuntu's libgbm never
+  searches). Without it the GPU process crashes during playback (`Cannot create bo`)
+  and Chrome falls back to software rendering after three crashes.
+
+`--disable-gpu-driver-bug-workarounds` (the AMD fix below) is still applied on
+NVIDIA; it was not needed there and has not caused problems, but it is the first
+suspect for any rendering glitch.
 
 ## Hardware video decode (VA-API)
 
