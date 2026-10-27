@@ -1,5 +1,24 @@
 # Chrome is published for amd64 only, so pin the platform: on an arm64 host this
 # needs qemu-user-static binfmt on the host, but it keeps the image honest.
+# nvidia-vaapi-driver, built from source: Ubuntu 24.04 packages 0.0.8, which
+# cannot serve Chrome -- Chrome creates its decode context with 0 render targets
+# and 0.0.8 hands that straight to cuvidCreateDecoder ("CUDA ERROR 'invalid
+# argument'", so vaCreateContext fails and Chrome decodes on the CPU). Newer
+# releases size the decoder themselves. Harmless on AMD/Intel hosts: libva picks
+# its driver from the DRM driver name, so this one only loads on nvidia-drm. It
+# needs the NVIDIA userspace (libcuda/libnvcuvid) at runtime, which only a box
+# created with CDI (--device nvidia.com/gpu=all) has -- see README.
+# gstreamer's codec parsers are optional upstream but gate VP9, YouTube's main codec.
+FROM --platform=linux/amd64 docker.io/ubuntu:24.04 AS nvidia-vaapi
+ARG NVIDIA_VAAPI_REF=v0.0.18
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates gcc git meson ninja-build pkg-config \
+    libdrm-dev libegl-dev libffmpeg-nvenc-dev libgstreamer-plugins-bad1.0-dev libva-dev \
+    && git clone --depth 1 -b "$NVIDIA_VAAPI_REF" \
+        https://github.com/elFarto/nvidia-vaapi-driver /src \
+    && meson setup /src/build /src --buildtype=release \
+    && meson compile -C /src/build
+
 FROM --platform=linux/amd64 docker.io/ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -19,6 +38,7 @@ RUN sh /tmp/distrobox-deps/apt.sh && rm -rf /tmp/distrobox-deps
 # chrome://gpu reports VENDOR=0x0000 DEVICE=0x0000, which breaks the render-node
 # matching its VA-API setup depends on (see README).
 # libva + mesa-va-drivers make VA-API video decode available; vainfo diagnoses it.
+# libgstreamer-plugins-bad1.0-0 (libgstcodecparsers) is the runtime half of the NVIDIA VA driver's VP9 support.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
@@ -29,6 +49,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libasound2t64 \
     libva2 \
     libva-drm2 \
+    libgstreamer-plugins-bad1.0-0 \
     mesa-va-drivers \
     vainfo \
     fonts-noto-core \
@@ -58,3 +79,5 @@ RUN dpkg-divert --divert /usr/bin/google-chrome-stable.real --rename \
         /usr/bin/google-chrome-stable \
     && mv /tmp/google-chrome-wrapper /usr/bin/google-chrome-stable \
     && chmod +x /usr/bin/google-chrome-stable
+
+COPY --from=nvidia-vaapi /src/build/nvidia_drv_video.so /usr/lib/x86_64-linux-gnu/dri/

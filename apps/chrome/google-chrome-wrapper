@@ -27,4 +27,13 @@ if [[ -r "$conf" ]]; then
     done < "$conf"
 fi
 
+# NVIDIA via CDI on a non-Debian host (Arch puts it there) mounts the driver's
+# GBM backend at /usr/lib/gbm, which Ubuntu's libgbm never searches. Without it
+# GBM falls back to Mesa, cannot allocate buffers on nvidia-drm ("Cannot create
+# bo"), and the GPU process crashes during video playback until Chrome gives up
+# and renders in software. Keep the multiarch dir too, or dri_gbm is lost.
+if [[ -e /usr/lib/gbm/nvidia-drm_gbm.so && -z "${GBM_BACKENDS_PATH:-}" ]]; then
+    export GBM_BACKENDS_PATH=/usr/lib/gbm:/usr/lib/x86_64-linux-gnu/gbm
+fi
+
 exec /usr/bin/google-chrome-stable.real ${flags[@]+"${flags[@]}"} "$@"
