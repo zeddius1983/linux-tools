@@ -20,24 +20,33 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     && rm -rf /var/lib/apt/lists/*
 
 # OpenCode release selected by wizard/00-release.buildarg, which offers the
-# repo's published GitHub releases as tags ("v1.18.35"); the installer wants the
-# bare version, so the "v" is stripped. "latest", the non-interactive default,
-# lets the installer pick the newest release itself. Only published releases
-# work: the repo also carries bare git tags (a 2.0.x line) with no release
-# assets, which is why the page is releases| rather than a git ls-remote list.
+# repo's published GitHub releases as tags ("v2.2.0", "v1.18.35"); the
+# installers want the bare version, so the "v" is stripped. Only published
+# releases work, which is why the page is releases| rather than a git
+# ls-remote list.
+#
+# OpenCode 1 and 2 have separate installers and neither installs the other:
+# /install refuses 2.x ("not an OpenCode 1 release") and only resolves "latest"
+# to the newest 1.x; /v2/install downloads from npm (@opencode/cli), where the
+# 1.x builds are not published. So pick the installer by major version, and
+# send "latest", the non-interactive default, to /v2/install, which resolves
+# it to the newest 2.x.
 # CACHE_BUST is fresh on every `tools build/setup`, so the network install is
 # never satisfied by a stale layer.
 #
-# The installer always writes to $HOME/.opencode/bin and has no install-dir
-# option, so it runs against a throwaway HOME and the binary is moved to
-# /usr/bin, where `command -pv` (used to resolve exports) looks. It needs bash,
-# not dash: it uses `set -o pipefail`.
+# Both installers always write to $HOME/.opencode/bin and have no install-dir
+# option, so they run against a throwaway HOME and the binary is moved to
+# /usr/bin, where `command -pv` (used to resolve exports) looks. (v2 also drops
+# an `opencode2` shim there; it is discarded with the throwaway HOME.) They
+# need bash, not dash: they use `set -o pipefail`.
 ARG CACHE_BUST=0
 ARG OPENCODE_RELEASE=latest
 RUN echo "==> Installing OpenCode ${OPENCODE_RELEASE} (cache-bust: ${CACHE_BUST})" \
-    && curl -fsSL https://opencode.ai/install -o /tmp/opencode-install.sh \
-    && if [ "${OPENCODE_RELEASE}" = latest ]; then set --; \
-       else set -- --version "${OPENCODE_RELEASE#v}"; fi \
+    && version="${OPENCODE_RELEASE#v}" \
+    && case "$version" in 0.*|1.*) installer=install ;; *) installer=v2/install ;; esac \
+    && curl -fsSL "https://opencode.ai/${installer}" -o /tmp/opencode-install.sh \
+    && if [ "$version" = latest ]; then set --; \
+       else set -- --version "$version"; fi \
     && HOME=/opt/opencode-install bash /tmp/opencode-install.sh --no-modify-path "$@" \
     && mv /opt/opencode-install/.opencode/bin/opencode /usr/bin/opencode \
     && /usr/bin/opencode --version \

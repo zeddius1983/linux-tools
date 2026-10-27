@@ -29,6 +29,19 @@ published GitHub releases, newest first (the default), with each release's notes
 beside it in the dashboard. A non-interactive `tools setup opencode` installs the
 newest release.
 
+### OpenCode 1 and 2
+
+The list has both lines: `v2.x` releases and the older `v1.x` ones. The default,
+`latest`, is the newest **2.x**. Pick a `v1.x` tag to stay on OpenCode 1; each
+line has its own upstream installer, and setup uses the right one for the tag.
+
+Moving from 1 to 2 keeps the same `opencode` command and the same config and
+data locations (table below), and V2 reads V1 configuration as is. What breaks:
+V1 plugins don't run under V2's new plugin API, the server API changed, and the
+terminal settings in `tui.json(c)` move to a single `cli.json` (migrated
+automatically). See OpenCode's
+[Migrate from V1](https://opencode.ai/v2/docs/migrate-v1/) guide.
+
 ## What you get
 
 | Entry | What it does |
