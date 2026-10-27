@@ -1,5 +1,10 @@
 FROM docker.io/library/ubuntu:24.04
 
+# distrobox-init's first-start packages, preinstalled from the shared list so a
+# fresh box doesn't download them (lib/distrobox-deps; context passed by tools).
+COPY --from=distrobox-deps . /tmp/distrobox-deps/
+RUN sh /tmp/distrobox-deps/apt.sh && rm -rf /tmp/distrobox-deps
+
 # dwarves provides pahole, needed whenever the host kernel has
 # CONFIG_DEBUG_INFO_BTF=y (true for stock Ubuntu kernels too) -- without it the
 # final BTF-encoding step fails with "pahole: not found". curl lets

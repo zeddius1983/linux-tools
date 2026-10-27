@@ -4,6 +4,11 @@ FROM --platform=linux/amd64 docker.io/ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# distrobox-init's first-start packages, preinstalled from the shared list so a
+# fresh box doesn't download them (lib/distrobox-deps; context passed by tools).
+COPY --from=distrobox-deps . /tmp/distrobox-deps/
+RUN sh /tmp/distrobox-deps/apt.sh && rm -rf /tmp/distrobox-deps
+
 # curl/gnupg fetch the signing key below; curl also lets distrobox-host-exec
 # bootstrap host-spawn on a fresh box. libpulse0/libasound2t64 give Chrome
 # audio through the host's PulseAudio/PipeWire socket. git is here because the

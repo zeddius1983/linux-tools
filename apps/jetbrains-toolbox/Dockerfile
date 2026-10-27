@@ -2,6 +2,11 @@ FROM --platform=linux/amd64 docker.io/ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# distrobox-init's first-start packages, preinstalled from the shared list so a
+# fresh box doesn't download them (lib/distrobox-deps; context passed by tools).
+COPY --from=distrobox-deps . /tmp/distrobox-deps/
+RUN sh /tmp/distrobox-deps/apt.sh && rm -rf /tmp/distrobox-deps
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl git \
     libxi6 libxrender1 libxtst6 mesa-utils libfontconfig1 \

@@ -2,6 +2,11 @@ FROM docker.io/ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# distrobox-init's first-start packages, preinstalled from the shared list so a
+# fresh box doesn't download them (lib/distrobox-deps; context passed by tools).
+COPY --from=distrobox-deps . /tmp/distrobox-deps/
+RUN sh /tmp/distrobox-deps/apt.sh && rm -rf /tmp/distrobox-deps
+
 # libvulkan1: memtest_vulkan dlopen()s libvulkan.so.1 at runtime (it uses the
 #   erupt bindings and links against no Vulkan library at all), so the loader is
 #   a hard runtime dependency rather than something the binary drags in itself.

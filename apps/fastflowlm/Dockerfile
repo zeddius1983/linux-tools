@@ -2,6 +2,11 @@ FROM docker.io/ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# distrobox-init's first-start packages, preinstalled from the shared list so a
+# fresh box doesn't download them (lib/distrobox-deps; context passed by tools).
+COPY --from=distrobox-deps . /tmp/distrobox-deps/
+RUN sh /tmp/distrobox-deps/apt.sh && rm -rf /tmp/distrobox-deps
+
 # ca-certificates/curl: release downloads + distrobox-host-exec bootstrap.
 # software-properties-common + gnupg: add-apt-repository for the AMD XRT PPA.
 # git: dotfiles run inside every box via the shared $HOME.

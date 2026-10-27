@@ -231,6 +231,21 @@ libX11 libXcursor libXi libXrandr libXext libXrender
 libxkbcommon libxkbcommon-x11
 ```
 
+### Distrobox first-start packages (`lib/distrobox-deps`)
+
+On a box's first start, `distrobox-init` installs its own ~50-package list with the image's package manager (100+ MiB with dependencies, incl. Mesa/LLVM), printing only `Installing basic packages...` until it finishes. `tools setup` recreates the box every time, so without help every rebuild repeats that download — minutes on a slow mirror, and it looks like a frozen `distrobox enter`.
+
+Every Dockerfile (`apt-get`, `dnf` or `pacman`) therefore preinstalls the list at build time, early in its final stage and above any `ARG` that changes per build (so the layer stays cached):
+
+```dockerfile
+COPY --from=distrobox-deps . /tmp/distrobox-deps/
+RUN sh /tmp/distrobox-deps/apt.sh && rm -rf /tmp/distrobox-deps   # or dnf.sh / pacman.sh
+```
+
+`distrobox-deps` is a named build context that `cmd_build` passes (`--build-context distrobox-deps=lib/distrobox-deps`), so these Dockerfiles only build through `tools`, not a bare `podman build`. The lists are `lib/distrobox-deps/{apt,dnf,pacman}.txt`, copied from `setup_apt`/`setup_dnf`/`setup_pacman` in `distrobox-init` — resync them when distrobox is upgraded. `scripts/lint-apps.sh` fails any `Dockerfile`/`Dockerfile.ubuntu`/`Dockerfile.arch` whose package manager's script is missing.
+
+distrobox still runs its setup on first start (it only checks for `/.containersetupdone`), but the dependency install becomes a no-op. First start on a fast mirror: Ubuntu 60s → 10s, Fedora 27s → 15s, Arch 24s → 10s. What remains: the metadata refresh (Ubuntu's 33.6 MB lists, dnf's metadata), and on Arch a `pacman -Syu` (small for a fresh image) plus a glibc + glibc-locales reinstall (~22 MiB) that distrobox-init always does, because its locale test is missing a `/` (`/usr/share/i18n/locales${HOST_LOCALE}`). Don't pre-create `/.containersetupdone` to skip that: the same block installs the host's login shell and generates the host locale.
+
 ### Naming conventions
 
 | Artifact | Pattern |

@@ -1,0 +1,45 @@
+# distrobox-init's own pacman package list (setup_pacman in distrobox-init),
+# copied verbatim. distrobox installs this on every box's first start;
+# pacman.sh preinstalls it at image build time. Resync with
+# /usr/bin/distrobox-init when distrobox is upgraded.
+bash-completion
+bc
+curl
+diffutils
+findutils
+glibc
+gnupg
+iputils
+inetutils
+keyutils
+less
+lsof
+man-db
+man-pages
+mlocate
+mtr
+ncurses
+nss-mdns
+openssh
+pigz
+pinentry
+procps-ng
+rsync
+shadow
+sudo
+tcpdump
+time
+traceroute
+tree
+tzdata
+unzip
+util-linux
+util-linux-libs
+vte-common
+wget
+words
+xorg-xauth
+zip
+mesa
+vulkan-intel
+vulkan-radeon

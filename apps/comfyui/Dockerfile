@@ -39,6 +39,12 @@ RUN echo nvidia > /etc/comfyui-gpu
 # --- Common ------------------------------------------------------------------
 FROM base-${COMFY_GPU} AS comfyui
 
+# distrobox-init's first-start packages, preinstalled from the shared list so a
+# fresh box doesn't download them (lib/distrobox-deps; context passed by tools).
+# Above ARG COMFY_REF so a release change keeps this layer cached.
+COPY --from=distrobox-deps . /tmp/distrobox-deps/
+RUN sh /tmp/distrobox-deps/apt.sh && rm -rf /tmp/distrobox-deps
+
 ENV VIRTUAL_ENV=/opt/venv
 ENV PATH=/opt/venv/bin:${PATH}
 

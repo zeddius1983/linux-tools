@@ -2,6 +2,11 @@ FROM docker.io/ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# distrobox-init's first-start packages, preinstalled from the shared list so a
+# fresh box doesn't download them (lib/distrobox-deps; context passed by tools).
+COPY --from=distrobox-deps . /tmp/distrobox-deps/
+RUN sh /tmp/distrobox-deps/apt.sh && rm -rf /tmp/distrobox-deps
+
 # curl fetches the .deb below and lets distrobox-host-exec bootstrap host-spawn
 # on a fresh box. git is a Recommends of the package (Codex runs git in local
 # projects) and the shared $HOME dotfiles need it too. libsecret-1-0 lets

@@ -40,6 +40,11 @@ RUN printf '%s\n' \
 # --- Common ------------------------------------------------------------------
 FROM base-${VLLM_GPU}
 
+# distrobox-init's first-start packages, preinstalled from the shared list so a
+# fresh box doesn't download them (lib/distrobox-deps; context passed by tools).
+COPY --from=distrobox-deps . /tmp/distrobox-deps/
+RUN sh /tmp/distrobox-deps/apt.sh && rm -rf /tmp/distrobox-deps
+
 # The CLI lives in /usr/local/bin, which `command -pv` (used by tools.sh for
 # bin: exports) does not search, so it is bridged into /usr/bin. Its path is
 # resolved at build time rather than hard-coded: the ROCm and CUDA images are

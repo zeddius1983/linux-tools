@@ -18,6 +18,11 @@ FROM docker.io/ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# distrobox-init's first-start packages, preinstalled from the shared list so a
+# fresh box doesn't download them (lib/distrobox-deps; context passed by tools).
+COPY --from=distrobox-deps . /tmp/distrobox-deps/
+RUN sh /tmp/distrobox-deps/apt.sh && rm -rf /tmp/distrobox-deps
+
 # The system libraries upstream's runtime image adds for its engine packages
 # (docker/Dockerfile: the common set plus the FLAVOR=hip set). The CUDA
 # packages carry their own cudart/cublas; libcuda comes from the host via CDI.
