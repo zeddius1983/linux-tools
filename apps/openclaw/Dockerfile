@@ -2,6 +2,11 @@ FROM docker.io/ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# distrobox-init's first-start packages, preinstalled from the shared list so a
+# fresh box doesn't download them (lib/distrobox-deps; context passed by tools).
+COPY --from=distrobox-deps . /tmp/distrobox-deps/
+RUN sh /tmp/distrobox-deps/apt.sh && rm -rf /tmp/distrobox-deps
+
 # systemd is here purely for the systemctl client binary -- nothing is ever
 # started from it. Ubuntu's base image ships no systemctl at all, and the
 # wrappers need it to drive the *host's* user manager over the shared session

@@ -1,5 +1,10 @@
 FROM docker.io/nvidia/cuda:12.6.3-devel-ubuntu24.04
 
+# distrobox-init's first-start packages, preinstalled from the shared list so a
+# fresh box doesn't download them (lib/distrobox-deps; context passed by tools).
+COPY --from=distrobox-deps . /tmp/distrobox-deps/
+RUN sh /tmp/distrobox-deps/apt.sh && rm -rf /tmp/distrobox-deps
+
 # build-essential + cmake (>=3.20; Ubuntu 24.04 ships 3.28) for the build;
 # git because CMakeLists runs `git describe` for the version string;
 # ca-certificates so CMake FetchContent can pull the pinned argparse tarball;

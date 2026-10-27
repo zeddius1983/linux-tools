@@ -18,7 +18,11 @@ cmd_build() {
         echo "==> Detected ${variant}-family host; using Dockerfile.${variant}"
         dockerfile_args=(-f "$APPS_DIR/$app/Dockerfile.${variant}")
     fi
+    # distrobox-deps: lets Ubuntu Dockerfiles preinstall distrobox-init's
+    # first-start packages (lib/distrobox-deps/apt.sh) from one shared list.
+    # Dockerfiles that don't reference it are unaffected.
     $RUNTIME build --build-arg CACHE_BUST="$(date +%s)" \
+        --build-context distrobox-deps="$SCRIPT_DIR/lib/distrobox-deps" \
         "${extra_args[@]+"${extra_args[@]}"}" \
         "${dockerfile_args[@]+"${dockerfile_args[@]}"}" \
         -t "$(image_name "$app")" "$APPS_DIR/$app"

@@ -110,6 +110,16 @@ check_app() {
             done < <(grep -iE '^[[:space:]]*FROM[[:space:]]' "$df")
         done
 
+        # apt-based images preinstall distrobox-init's first-start packages
+        # from the shared list (lib/distrobox-deps), or every fresh box
+        # downloads ~180 of them behind a silent "Installing basic packages...".
+        for df in "$d"/Dockerfile "$d"/Dockerfile.ubuntu; do
+            [[ -f "$df" ]] || continue
+            grep -q 'apt-get' "$df" || continue
+            grep -q -- '--from=distrobox-deps' "$df" \
+                || fail "$app" "$(basename "$df") uses apt-get but does not install lib/distrobox-deps (COPY --from=distrobox-deps . /tmp/distrobox-deps/ + RUN sh /tmp/distrobox-deps/apt.sh)"
+        done
+
         # ── exports ─────────────────────────────────────────────────────────
         if [[ ! -f "$d/exports" ]]; then
             fail "$app" "no exports file"

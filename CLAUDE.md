@@ -231,6 +231,21 @@ libX11 libXcursor libXi libXrandr libXext libXrender
 libxkbcommon libxkbcommon-x11
 ```
 
+### Distrobox first-start packages (`lib/distrobox-deps`)
+
+On a box's first start, `distrobox-init` apt-installs its own ~50-package list (~250 packages with dependencies, incl. `mesa-vulkan-drivers` → `libllvm20`), printing only `Installing basic packages...` until it finishes. `tools setup` recreates the box every time, so without help every rebuild repeats that download — minutes on a slow mirror, and it looks like a frozen `distrobox enter`.
+
+Every apt-based Dockerfile therefore preinstalls the list at build time, early in its final stage and above any `ARG` that changes per build (so the layer stays cached):
+
+```dockerfile
+COPY --from=distrobox-deps . /tmp/distrobox-deps/
+RUN sh /tmp/distrobox-deps/apt.sh && rm -rf /tmp/distrobox-deps
+```
+
+`distrobox-deps` is a named build context that `cmd_build` passes (`--build-context distrobox-deps=lib/distrobox-deps`), so these Dockerfiles only build through `tools`, not a bare `podman build`. The list is `lib/distrobox-deps/apt.txt`, copied from `setup_apt` in `distrobox-init` — resync it when distrobox is upgraded. `scripts/lint-apps.sh` fails any `Dockerfile`/`Dockerfile.ubuntu` that uses `apt-get` without it.
+
+distrobox still runs `apt-get update` + its install on first start (it only checks for `/.containersetupdone`), but the install becomes a no-op. Measured on `ubuntu:24.04`: 60s → 10s first start on a fast mirror; the remaining time is the 33.6 MB index refresh, which is all a slow mirror still costs. Don't pre-create `/.containersetupdone` to skip that: the same block installs the host's login shell and generates the host locale. Fedora apps (`dnf`) are not covered yet.
+
 ### Naming conventions
 
 | Artifact | Pattern |

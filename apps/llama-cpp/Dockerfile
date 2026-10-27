@@ -166,6 +166,11 @@ RUN apt-get update \
 FROM runtime-${LLAMA_GPU}
 ARG LLAMA_GPU
 
+# distrobox-init's first-start packages, preinstalled from the shared list so a
+# fresh box doesn't download them (lib/distrobox-deps; context passed by tools).
+COPY --from=distrobox-deps . /tmp/distrobox-deps/
+RUN sh /tmp/distrobox-deps/apt.sh && rm -rf /tmp/distrobox-deps
+
 RUN apt-get update \
     && apt-get install -y libgomp1 curl git python3 python3-pip \
     && apt-get autoremove -y \

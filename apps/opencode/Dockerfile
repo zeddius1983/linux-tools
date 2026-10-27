@@ -2,6 +2,11 @@ FROM docker.io/ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# distrobox-init's first-start packages, preinstalled from the shared list so a
+# fresh box doesn't download them (lib/distrobox-deps; context passed by tools).
+COPY --from=distrobox-deps . /tmp/distrobox-deps/
+RUN sh /tmp/distrobox-deps/apt.sh && rm -rf /tmp/distrobox-deps
+
 # curl also lets distrobox-host-exec bootstrap host-spawn on a fresh box; git is
 # what opencode drives in a project, and the shared $HOME dotfiles need it too.
 RUN apt-get update && apt-get install -y --no-install-recommends \
