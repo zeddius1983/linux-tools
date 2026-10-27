@@ -1,5 +1,10 @@
 FROM registry.fedoraproject.org/fedora:43
 
+# distrobox-init's first-start packages, preinstalled from the shared list so a
+# fresh box doesn't download them (lib/distrobox-deps; context passed by tools).
+COPY --from=distrobox-deps . /tmp/distrobox-deps/
+RUN sh /tmp/distrobox-deps/dnf.sh && rm -rf /tmp/distrobox-deps
+
 RUN dnf -y --nodocs --setopt=install_weak_deps=False install \
   bash ca-certificates curl git \
   vulkan-loader mesa-vulkan-drivers \

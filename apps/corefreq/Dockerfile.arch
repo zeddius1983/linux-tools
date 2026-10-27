@@ -1,5 +1,10 @@
 FROM docker.io/library/archlinux:base-devel
 
+# distrobox-init's first-start packages, preinstalled from the shared list so a
+# fresh box doesn't download them (lib/distrobox-deps; context passed by tools).
+COPY --from=distrobox-deps . /tmp/distrobox-deps/
+RUN sh /tmp/distrobox-deps/pacman.sh && rm -rf /tmp/distrobox-deps
+
 # base-devel already provides gcc/make/binutils. clang+lld+llvm are needed
 # because Arch-family kernels (CachyOS in particular) are built with Clang and
 # embed Clang-only codegen flags in their build config -- pacman only ever

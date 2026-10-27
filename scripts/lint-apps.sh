@@ -110,14 +110,20 @@ check_app() {
             done < <(grep -iE '^[[:space:]]*FROM[[:space:]]' "$df")
         done
 
-        # apt-based images preinstall distrobox-init's first-start packages
-        # from the shared list (lib/distrobox-deps), or every fresh box
-        # downloads ~180 of them behind a silent "Installing basic packages...".
-        for df in "$d"/Dockerfile "$d"/Dockerfile.ubuntu; do
+        # Images preinstall distrobox-init's first-start packages from the
+        # shared list for their package manager (lib/distrobox-deps), or every
+        # fresh box downloads 100+ MiB of them behind a silent
+        # "Installing basic packages...".
+        local mgr
+        for df in "$d"/Dockerfile "$d"/Dockerfile.ubuntu "$d"/Dockerfile.arch; do
             [[ -f "$df" ]] || continue
-            grep -q 'apt-get' "$df" || continue
-            grep -q -- '--from=distrobox-deps' "$df" \
-                || fail "$app" "$(basename "$df") uses apt-get but does not install lib/distrobox-deps (COPY --from=distrobox-deps . /tmp/distrobox-deps/ + RUN sh /tmp/distrobox-deps/apt.sh)"
+            if grep -v '^[[:space:]]*#' "$df" | grep -q 'apt-get'; then mgr=apt
+            elif grep -v '^[[:space:]]*#' "$df" | grep -qE '\bdnf\b'; then mgr=dnf
+            elif grep -v '^[[:space:]]*#' "$df" | grep -qE '\bpacman\b'; then mgr=pacman
+            else continue
+            fi
+            grep -q "/tmp/distrobox-deps/${mgr}\.sh" "$df" \
+                || fail "$app" "$(basename "$df") uses $mgr but does not install lib/distrobox-deps (COPY --from=distrobox-deps . /tmp/distrobox-deps/ + RUN sh /tmp/distrobox-deps/${mgr}.sh)"
         done
 
         # ── exports ─────────────────────────────────────────────────────────
