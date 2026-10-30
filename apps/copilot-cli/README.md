@@ -6,9 +6,6 @@
   <img alt="CachyOS: untested" src="https://img.shields.io/badge/-untested-lightgrey?logo=cachyos&logoColor=00C2A0">
 </p>
 
-> **Unmaintained.** This app still installs, but it isn't being kept current, and
-> the dashboard greys it out. Expect rough edges.
-
 GitHub's [Copilot CLI](https://github.com/github/copilot-cli) (`copilot`), installed
 with GitHub's own installer in an `ubuntu:24.04` Distrobox container. The image
 also includes the GitHub CLI (`gh`) and `git`.
