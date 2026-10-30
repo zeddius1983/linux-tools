@@ -59,7 +59,8 @@ them only in a repository you are happy for it to change freely.
 ## Storage
 
 `$HOME` is shared with the host, so Copilot's login, settings and session history
-stay under `~/.copilot/` across rebuilds:
+stay under `~/.copilot/` across rebuilds (the login token goes to the system
+keyring when one is reachable, otherwise into a plain-text file there):
 
 | Path | Contents |
 |---|---|
@@ -76,6 +77,9 @@ tools setup copilot-cli
 ```
 
 This replaces the box and image; `~/.copilot/` is kept.
+
+Prefer this over `copilot update`, which the CLI suggests after `--version`: the
+binary lives in the image's `/usr/bin`, which the container user can't write to.
 
 ## Shell access
 
