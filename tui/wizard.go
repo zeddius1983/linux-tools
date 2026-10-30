@@ -48,9 +48,13 @@ type Page struct {
 	// values come from somewhere else (git tags, a hard-coded "latest").
 	ReleasesRepo  string
 	ReleasesLimit int
-	NotesRepo     string
-	NotesTag      string // tag template, "%s" = the item value
-	NotesLimit    int
+	// TagMatch, from `tag-match|<regex>`, keeps only the releases whose tag it
+	// matches, for repos that publish more than one product: stablyai/orca
+	// interleaves mobile-android-v* pre-releases with the desktop v* tags.
+	TagMatch   string
+	NotesRepo  string
+	NotesTag   string // tag template, "%s" = the item value
+	NotesLimit int
 	// Aliases are items that name no tag of their own but stand for the newest
 	// tag of some shape — "latest" for the newest vX.Y.Z, "nightly" for the
 	// newest b####. Keyed by lower-cased item name, valued by tag template;
@@ -159,6 +163,9 @@ func parsePage(path string) (Page, error) {
 					if len(fields) > 2 {
 						p.ReleasesLimit = atoiOr(fields[2], 0)
 					}
+				case "tag-match":
+					// Rejoin: the regex may contain '|'.
+					p.TagMatch = strings.Join(fields[1:], "|")
 				case "notes-repo":
 					p.NotesRepo = strings.TrimSpace(fields[1])
 					if len(fields) > 2 {

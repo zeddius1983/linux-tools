@@ -270,3 +270,38 @@ func TestMatchesTemplate(t *testing.T) {
 		}
 	}
 }
+
+// A tag-match| page offers only the releases of its own train, and its count
+// is a count of those: stablyai/orca interleaves Android pre-releases with the
+// desktop tags, and neither the Android tags nor the limit may crowd out the
+// desktop versions.
+func TestBuildArgItemsTagMatch(t *testing.T) {
+	releaseServer(t, `[
+	 {"tag_name":"mobile-android-v0.0.61","prerelease":true},
+	 {"tag_name":"v1.4.245"},
+	 {"tag_name":"mobile-android-v0.0.60","prerelease":true},
+	 {"tag_name":"v1.4.244"},
+	 {"tag_name":"v1.4.243"}
+	]`)
+
+	items, err := buildArgItems(context.Background(), Page{
+		Type: "buildarg", ArgName: "REF", ReleasesRepo: "owner/repo", ReleasesLimit: 2,
+		TagMatch: `^v[0-9]+\.[0-9]+\.[0-9]+$`,
+	})
+	if err != nil {
+		t.Fatalf("items: %v", err)
+	}
+	var got []string
+	for _, it := range items {
+		got = append(got, it.Name)
+	}
+	if strings.Join(got, ",") != "v1.4.245,v1.4.244" {
+		t.Errorf("items = %v, want the two newest desktop tags", got)
+	}
+
+	if _, err := buildArgItems(context.Background(), Page{
+		Type: "buildarg", ArgName: "REF", ReleasesRepo: "owner/repo", TagMatch: "(",
+	}); err == nil {
+		t.Error("an invalid tag-match was accepted")
+	}
+}

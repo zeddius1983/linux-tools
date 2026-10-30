@@ -199,10 +199,11 @@ in a pane beside the list — `PgDn`/`PgUp` or the wheel scrolls them, and movin
 the cursor starts the next version at its own top. Below 69 columns the pane is
 dropped rather than squeezed; the version list is what the page is for.
 
-Two optional lines go with it:
+Optional lines that go with it:
 
 | Line | Effect |
 |---|---|
+| `tag-match\|regex` | offer only the releases whose tag matches, for a repo that publishes more than one product: `apps/orca` has `tag-match\|^v[0-9]+\.[0-9]+\.[0-9]+$` to hide the `mobile-android-v*` pre-releases between its desktop tags. It reads 100 releases (one request) and the page's count is then a count of matches. Keep the regex to what both RE2 (dashboard) and `grep -E` (`tools help`) accept |
 | `extra\|master` | a literal choice listed after the releases — a branch is not a release, and gets no notes (`apps/comfyui`) |
 | `alias\|item\|tag-template` | an item that names no tag of its own but the newest tag of that shape, so it gets that release's notes: `apps/llama-cpp` has `alias\|latest\|v%s` on its Release view and `alias\|nightly\|b%s` on its Build view. Without a line, `latest` is an alias within the `notes-repo` template |
 | `notes-repo\|owner/repo[\|tag-template[\|count]]` | notes for a page that keeps its own `items-cmd`: each value is matched to a release tag, with `%s` in the template standing for the value (`rust-v%s` for `apps/codex-cli`, whose values are bare versions of a `rust-v` tag) |
@@ -223,7 +224,7 @@ it needs no permissions: `export GH_TOKEN=$(gh auth token)` is enough. The
 bash side does the same through `github_curl` (`lib/helpers.sh`).
 
 `tools help <app>` lists the same values from the bash side (`items-cmd`, or
-`releases|` through `github_curl`, plus any `extra|`); it has nowhere to put
+`releases|` through `github_curl`, filtered by any `tag-match|`, plus any `extra|`); it has nowhere to put
 notes, so it ignores `notes-repo` and `alias`.
 
 Ticked state is what will exist *after* the run, not what to add: unticking an

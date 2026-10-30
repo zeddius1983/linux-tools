@@ -1,0 +1,6 @@
+Select Orca release
+Choose an Orca release to install:
+setup,build
+arg|ORCA_RELEASE
+releases|stablyai/orca
+tag-match|^v[0-9]+\.[0-9]+\.[0-9]+$
