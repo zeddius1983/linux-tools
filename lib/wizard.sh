@@ -40,6 +40,11 @@
 #                 releases|<owner>/<repo>[|<count>]   (default count: 10)
 #               which lists that repo's release tags, newest first. The
 #               dashboard shows each one's notes beside the list. Optional:
+#                 tag-match|<regex>   offer only releases whose tag matches
+#                                     (ERE, and RE2 in the dashboard: keep to
+#                                     their common subset), for repos that
+#                                     publish several trains (apps/orca);
+#                                     <count> then counts matches
 #                 extra|<value>       literal choice appended after the tags
 #                                     (e.g. a branch name like "master")
 #                 notes-repo|<owner>/<repo>[|<tag-template>[|<count>]]
@@ -305,17 +310,23 @@ wizard_from_args() {  # wizard_from_args <app> <action> [KEY=value...]
 # backed (items-cmd, or the releases| repo), so it is only used by `tools help`,
 # never to validate an argument; failures just leave the list empty.
 _wizard_buildarg_values() {
-    local page="$1" items_cmd rel_val rel_repo rel_count
+    local page="$1" items_cmd rel_val rel_repo rel_count tag_match per_page
     items_cmd="$(sed -n 's/^items-cmd|//p' "$page" | tr -d '\r' | head -1)"
     rel_val="$(sed -n 's/^releases|//p' "$page" | tr -d '\r' | head -1)"
+    tag_match="$(sed -n 's/^tag-match|//p' "$page" | tr -d '\r' | head -1)"
     if [[ -n "$items_cmd" ]]; then
         timeout 20 bash -c "$items_cmd" 2>/dev/null
     elif [[ -n "$rel_val" ]]; then
         rel_repo="${rel_val%%|*}"
         [[ "$rel_val" == *"|"* ]] && rel_count="${rel_val#*|}"
+        # A tag-match page filters a deeper list (the API's per_page maximum,
+        # as the dashboard does) and its count is a count of matches.
+        per_page="${rel_count:-10}"
+        [[ -n "$tag_match" ]] && per_page=100
         github_curl --max-time 20 \
-            "https://api.github.com/repos/${rel_repo}/releases?per_page=${rel_count:-10}" 2>/dev/null \
-            | grep -o '"tag_name": *"[^"]*"' | sed 's/.*"\([^"]*\)"$/\1/'
+            "https://api.github.com/repos/${rel_repo}/releases?per_page=${per_page}" 2>/dev/null \
+            | grep -o '"tag_name": *"[^"]*"' | sed 's/.*"\([^"]*\)"$/\1/' \
+            | grep -E -- "${tag_match:-.}" | head -n "${rel_count:-10}"
     fi
     sed -n 's/^extra|//p' "$page" | tr -d '\r' | cut -d'|' -f1
 }

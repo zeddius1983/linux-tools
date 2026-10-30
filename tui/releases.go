@@ -70,6 +70,43 @@ func fetchReleases(ctx context.Context, repo string, limit int) ([]ghRelease, er
 	return out, nil
 }
 
+// tagMatchDepth is how many releases a tag-match| page fetches before
+// filtering — the API's per_page maximum, so it is still a single request and
+// the page's own count of matches survives even a repo that interleaves
+// several other trains between them.
+const tagMatchDepth = 100
+
+// fetchMatchingReleases is a releases| page's list: the repo's releases,
+// narrowed to the page's tag-match| pattern when it has one, then cut to the
+// page's count.
+func fetchMatchingReleases(ctx context.Context, p Page) ([]ghRelease, error) {
+	if p.TagMatch == "" {
+		return fetchReleases(ctx, p.ReleasesRepo, p.ReleasesLimit)
+	}
+	re, err := regexp.Compile(p.TagMatch)
+	if err != nil {
+		return nil, fmt.Errorf("tag-match: %w", err)
+	}
+	rels, err := fetchReleases(ctx, p.ReleasesRepo, tagMatchDepth)
+	if err != nil {
+		return nil, err
+	}
+	limit := p.ReleasesLimit
+	if limit <= 0 {
+		limit = defaultReleaseLimit
+	}
+	out := rels[:0]
+	for _, r := range rels {
+		if len(out) == limit {
+			break
+		}
+		if re.MatchString(r.TagName) {
+			out = append(out, r)
+		}
+	}
+	return out, nil
+}
+
 // fetchRelease looks up a single release by its tag.
 func fetchRelease(ctx context.Context, repo, tag string) (ghRelease, error) {
 	var r ghRelease

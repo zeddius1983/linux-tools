@@ -148,7 +148,7 @@ func loadBuildArgItems(session, page int, p Page) tea.Cmd {
 // values that an optional notes-repo can then annotate.
 func buildArgItems(ctx context.Context, p Page) ([]Item, error) {
 	if p.ReleasesRepo != "" {
-		rels, err := fetchReleases(ctx, p.ReleasesRepo, p.ReleasesLimit)
+		rels, err := fetchMatchingReleases(ctx, p)
 		if err != nil {
 			return nil, err
 		}
