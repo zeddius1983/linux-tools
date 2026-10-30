@@ -35,8 +35,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ayatana-appindicator). CACHE_BUST is fresh on every `tools build/setup`, so a
 # rebuild picks up a new release instead of reusing the cached layer.
 # The package names its desktop entry "GitHub Copilot.desktop"; it is renamed to
-# github.desktop so the `app:github` export lands at copilot-app-box-github.desktop,
-# the path tools.sh post-processes (Name, Icon).
+# copilot-app.desktop and pointed at the copilot-app launcher, so the
+# `app:copilot-app` export lands at copilot-app-box-copilot-app.desktop, the path
+# tools.sh post-processes (Name, Icon). Its MimeType= is dropped: the launcher
+# registers a link handler that also works from other boxes (see copilot-app).
 ARG CACHE_BUST=0
 RUN echo "==> Installing GitHub Copilot app (cache-bust: ${CACHE_BUST})" \
     && case "$(dpkg --print-architecture)" in \
@@ -49,5 +51,9 @@ RUN echo "==> Installing GitHub Copilot app (cache-bust: ${CACHE_BUST})" \
     && apt-get install -y --no-install-recommends /tmp/copilot-app.deb \
     && rm -f /tmp/copilot-app.deb \
     && rm -rf /var/lib/apt/lists/* \
-    && mv "/usr/share/applications/GitHub Copilot.desktop" /usr/share/applications/github.desktop \
-    && sed -i 's/^Categories=$/Categories=Development;/' /usr/share/applications/github.desktop
+    && mv "/usr/share/applications/GitHub Copilot.desktop" /usr/share/applications/copilot-app.desktop \
+    && sed -i -e 's/^Exec=github /Exec=copilot-app /' -e '/^MimeType=/d' \
+        -e 's/^Categories=$/Categories=Development;/' /usr/share/applications/copilot-app.desktop
+
+COPY copilot-app /usr/bin/copilot-app
+RUN chmod 0755 /usr/bin/copilot-app

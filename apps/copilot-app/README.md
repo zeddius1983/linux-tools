@@ -13,9 +13,9 @@ installed from GitHub's official `.deb` ([`github/app`](https://github.com/githu
 releases) in an `ubuntu:24.04` Distrobox container and exported to the host
 application menu.
 
-The app needs a paid Copilot plan (Pro, Pro+, Business or Enterprise); Copilot Free
-does not include it. On Business and Enterprise, an admin must also enable Copilot
-CLI in the policy settings.
+Any [GitHub Copilot plan](https://github.com/features/copilot/plans) works,
+including Copilot Free and Copilot Student. Without a plan you can still use it by
+bringing your own key (BYOK) for your own model provider.
 
 ## Install
 
@@ -30,14 +30,26 @@ match the host.
 
 | Entry | What it does |
 |---|---|
-| **GitHub Copilot** (menu) | Launches the app. It's the package's own `.desktop`, so it also opens `ghapp://`, `github-app://` and `gh://` links |
+| **GitHub Copilot** (menu) | Launches the app (the package's own `.desktop`, pointed at the `copilot-app` launcher) |
+| `copilot-app` (host `PATH`) | The same launcher, for starting it from a terminal or another box |
 | **GitHub Copilot desktop app (Terminal)** (menu) | Opens a shell inside `copilot-app-box` |
 
-To start it from a terminal:
-
 ```bash
-distrobox enter copilot-app-box -- github
+copilot-app                  # start the app
 ```
+
+## Links
+
+The app opens `ghapp://`, `github-app://` and `gh://` links. On every start,
+`copilot-app` registers a hidden handler for them,
+`~/.local/share/applications/copilot-app-box-url-handler.desktop`, and makes it the
+default in `~/.config/mimeapps.list`. Its command is `~/.local/bin/copilot-app`,
+which works from the host and from inside other boxes, so a link clicked in
+[`chrome`](../chrome/README.md) (`chrome-box`) opens the app too. A link opened
+while the app is running is handed to the open window.
+
+The handler is written when the app starts, so links open the app only after it
+has been started once since the last `tools setup`.
 
 ## Signing in
 

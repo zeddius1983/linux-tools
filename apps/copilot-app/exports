@@ -1,3 +1,5 @@
 # Format: type:name[:Display Name]
 # app     - export existing container .desktop entry to host menu
-app:github:GitHub Copilot
+# bin     - export binary to ~/.local/bin
+app:copilot-app:GitHub Copilot
+bin:copilot-app
