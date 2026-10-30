@@ -107,7 +107,13 @@ cmd_export() {
             app)
                 local display_name="${extra:-$name}"
                 echo "==> Exporting desktop app '$name'..."
-                distrobox enter "$box" -- distrobox-export --app "$name" || return
+                # distrobox-export also searches $XDG_DATA_HOME/applications, which
+                # is the shared ~/.local/share/applications: any host entry whose
+                # Exec or Name contains $name (a launcher's own link handler, say)
+                # would be re-exported as a broken duplicate. Point it at a path
+                # that doesn't exist so only the image's own entries are searched.
+                distrobox enter "$box" -- env XDG_DATA_HOME=/nonexistent \
+                    distrobox-export --app "$name" || return
                 local app_desktop="$HOME/.local/share/applications/${box}-${name}.desktop"
                 if [[ -f "$app_desktop" ]]; then
                     sed -i "s|^Name=.*|Name=${display_name} (on ${box})|" "$app_desktop"
