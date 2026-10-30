@@ -27,6 +27,7 @@ Priority order within each section: highest first.
 - [x] `claude-code` — Anthropic Claude Code CLI
 - [x] `codex-cli` — OpenAI Codex CLI (latest/recent stable release picker, cache-safe rebuilds, optional built-in and tmux gruvbox status lines)
 - [x] `copilot-cli` — GitHub Copilot CLI
+- [x] `copilot-app` — GitHub Copilot desktop app (Tauri); official `.deb` from `github/app`'s latest release, rebuilt on every setup; shares `~/.copilot/` with `copilot-cli`
 - [x] `antigravity` — Google Antigravity AI CLI (agy) *(unmaintained: greyed out in the dashboard)*
 - [x] `dev-toolbox` SDKMAN/Java support — project JDK management moved out of `jetbrains-toolbox`
 - [ ] `orca` — ADE for driving a fleet of parallel coding agents (Claude Code, Codex, opencode, Copilot), each in its own git worktree; ships a Linux AppImage, so `gui:` + a wrapper script (https://github.com/stablyai/orca)

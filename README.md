@@ -91,6 +91,7 @@ reports from other distros are welcome.
 | [`claude-code`](apps/claude-code/README.md) | Anthropic's Claude Code CLI |
 | [`codex-cli`](apps/codex-cli/README.md) | OpenAI Codex CLI |
 | [`copilot-cli`](apps/copilot-cli/README.md) | GitHub Copilot CLI |
+| [`copilot-app`](apps/copilot-app/README.md) | GitHub Copilot desktop app: agent sessions across your repositories |
 | [`opencode`](apps/opencode/README.md) | OpenCode agent CLI, with a release picker |
 | [`antigravity`](apps/antigravity/README.md) | Antigravity CLI (`agy`) *(unmaintained)* |
 | [`dev-toolbox`](apps/dev-toolbox/README.md) | Node, Python, Go, Rust, JVM toolchains and language servers, pick-and-mix |
