@@ -1,0 +1,74 @@
+#!/bin/sh
+# Launcher for the GitHub Copilot app inside copilot-app-box.
+#
+# The package's desktop entry claims ghapp://, github-app:// and gh:// links.
+# Exported as-is, its Exec is `distrobox-enter ...`, which exists on the host
+# but not in other boxes, so a link clicked in Chrome (chrome-box) went nowhere.
+# The image drops MimeType= from that entry, and this script registers a hidden
+# handler instead whose Exec is the `bin:` export in ~/.local/bin: that wrapper
+# runs on the host directly and re-dispatches through distrobox-host-exec from
+# inside any other box, and $HOME is the same path everywhere. Named
+# copilot-app-box-*.desktop so `tools rm` removes it with the other exports.
+
+apps="$HOME/.local/share/applications"
+schemes="github-app ghapp gh"
+handler=copilot-app-box-url-handler.desktop
+want="[Desktop Entry]
+Type=Application
+Name=GitHub Copilot (links)
+Exec=$HOME/.local/bin/copilot-app %u
+NoDisplay=true
+MimeType=x-scheme-handler/github-app;x-scheme-handler/ghapp;x-scheme-handler/gh;"
+if [ "$(cat "$apps/$handler" 2>/dev/null)" != "$want" ]; then
+    mkdir -p "$apps"
+    printf '%s\n' "$want" > "$apps/$handler"
+fi
+
+# Set it as the handler in the shared ~/.config/mimeapps.list: the scheme keys
+# in [Default Applications] (added if missing), and any already under
+# [Added Associations]. Same edit as apps/telegram/telegram-desktop, which has
+# the reasoning; the file is rewritten only if something changes.
+mimeapps="$HOME/.config/mimeapps.list"
+mkdir -p "$HOME/.config"
+# Held around the whole read-edit-replace, under a lock every linux-tools
+# launcher that edits this file shares (apps/telegram/telegram-desktop,
+# apps/copilot-app/copilot-app), so two starting at once can't each write a
+# copy that lacks the other's keys.
+(
+    flock 9
+    [ -f "$mimeapps" ] || : > "$mimeapps"
+    tmp="$mimeapps.copilot-app-box.$$"
+    awk -v handler="$handler" -v schemes="$schemes" '
+        BEGIN { n = split(schemes, s, " "); for (i = 1; i <= n; i++) want["x-scheme-handler/" s[i]] = 1 }
+        function flush(   k) { for (k in want) if (!(k in done)) print k "=" handler; seen = 1 }
+        /^\[/ {
+            if (sec == "default") flush()
+            sec = ($0 == "[Default Applications]") ? "default" : ($0 == "[Added Associations]") ? "added" : ""
+            print; next
+        }
+        sec != "" {
+            split($0, kv, "=")
+            if (kv[1] in want) {
+                if (sec == "added") { print kv[1] "=" handler ";"; next }
+                if (!(kv[1] in done)) print kv[1] "=" handler
+                done[kv[1]] = 1; next
+            }
+        }
+        { print }
+        END {
+            if (sec == "default") flush()
+            else if (!seen) { print ""; print "[Default Applications]"; flush() }
+        }
+    ' "$mimeapps" > "$tmp" && if cmp -s "$tmp" "$mimeapps"; then rm -f "$tmp"; else mv -f "$tmp" "$mimeapps"; fi
+) 9>"$mimeapps.linux-tools.lock"
+
+# A link starts the app detached and returns. Otherwise whatever opened it
+# waits for as long as the app runs: xdg-open in another box blocks on
+# distrobox-host-exec, which blocks on `distrobox enter`.
+case "${1:-}" in
+    github-app:* | ghapp:* | gh:*)
+        setsid -f /usr/bin/github "$@" >/dev/null 2>&1 < /dev/null
+        exit 0
+        ;;
+esac
+exec /usr/bin/github "$@"

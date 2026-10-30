@@ -57,30 +57,37 @@ fi
 # rewritten only if something changes.
 mimeapps="$HOME/.config/mimeapps.list"
 mkdir -p "$HOME/.config"
-[ -f "$mimeapps" ] || : > "$mimeapps"
-tmp="$mimeapps.telegram-box.$$"
-awk -v handler="$handler" -v schemes="$schemes" '
-    BEGIN { n = split(schemes, s, " "); for (i = 1; i <= n; i++) want["x-scheme-handler/" s[i]] = 1 }
-    function flush(   k) { for (k in want) if (!(k in done)) print k "=" handler; seen = 1 }
-    /^\[/ {
-        if (sec == "default") flush()
-        sec = ($0 == "[Default Applications]") ? "default" : ($0 == "[Added Associations]") ? "added" : ""
-        print; next
-    }
-    sec != "" {
-        split($0, kv, "=")
-        if (kv[1] in want) {
-            if (sec == "added") { print kv[1] "=" handler ";"; next }
-            if (!(kv[1] in done)) print kv[1] "=" handler
-            done[kv[1]] = 1; next
+# Held around the whole read-edit-replace, under a lock every linux-tools
+# launcher that edits this file shares (apps/telegram/telegram-desktop,
+# apps/copilot-app/copilot-app), so two starting at once can't each write a
+# copy that lacks the other's keys.
+(
+    flock 9
+    [ -f "$mimeapps" ] || : > "$mimeapps"
+    tmp="$mimeapps.telegram-box.$$"
+    awk -v handler="$handler" -v schemes="$schemes" '
+        BEGIN { n = split(schemes, s, " "); for (i = 1; i <= n; i++) want["x-scheme-handler/" s[i]] = 1 }
+        function flush(   k) { for (k in want) if (!(k in done)) print k "=" handler; seen = 1 }
+        /^\[/ {
+            if (sec == "default") flush()
+            sec = ($0 == "[Default Applications]") ? "default" : ($0 == "[Added Associations]") ? "added" : ""
+            print; next
         }
-    }
-    { print }
-    END {
-        if (sec == "default") flush()
-        else if (!seen) { print ""; print "[Default Applications]"; flush() }
-    }
-' "$mimeapps" > "$tmp" && if cmp -s "$tmp" "$mimeapps"; then rm -f "$tmp"; else mv -f "$tmp" "$mimeapps"; fi
+        sec != "" {
+            split($0, kv, "=")
+            if (kv[1] in want) {
+                if (sec == "added") { print kv[1] "=" handler ";"; next }
+                if (!(kv[1] in done)) print kv[1] "=" handler
+                done[kv[1]] = 1; next
+            }
+        }
+        { print }
+        END {
+            if (sec == "default") flush()
+            else if (!seen) { print ""; print "[Default Applications]"; flush() }
+        }
+    ' "$mimeapps" > "$tmp" && if cmp -s "$tmp" "$mimeapps"; then rm -f "$tmp"; else mv -f "$tmp" "$mimeapps"; fi
+) 9>"$mimeapps.linux-tools.lock"
 
 # Box side: what Telegram itself sees.
 private="$HOME/.config/x-telegrambox-mimeapps.list"
