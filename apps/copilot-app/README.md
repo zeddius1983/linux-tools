@@ -32,7 +32,7 @@ match the host.
 |---|---|
 | **GitHub Copilot** (menu) | Launches the app (the package's own `.desktop`, pointed at the `copilot-app` launcher) |
 | `copilot-app` (host `PATH`) | The same launcher, for starting it from a terminal or another box |
-| **GitHub Copilot desktop app (Terminal)** (menu) | Opens a shell inside `copilot-app-box` |
+| **GitHub Copilot (Terminal)** (menu) | Opens a shell inside `copilot-app-box` |
 
 ```bash
 copilot-app                  # start the app
