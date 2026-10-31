@@ -16,11 +16,16 @@ type App struct {
 	Category    string
 	HostOnly    bool
 	HasImage    bool
-	HasBox      bool
-	BoxRunning  bool
-	WizardDir   string
-	Exports     []string
-	HasWizard   bool
+	// ImageID is the short ID of the local image, when there is one, and
+	// Record what the build that made it installed — nil for an app built
+	// before install records existed, or whose record names another image.
+	ImageID    string
+	Record     *InstallRecord
+	HasBox     bool
+	BoxRunning bool
+	WizardDir  string
+	Exports    []string
+	HasWizard  bool
 	// Unmaintained is set by an apps/<name>/unmaintained marker: the app still
 	// installs, but is not being kept current, so the dashboard greys it out.
 	// UnmaintainedNote is the marker's optional one-line reason.
@@ -151,7 +156,10 @@ func LoadApps(appsDir string) ([]App, error) {
 			app.HasWizard = true
 		}
 		app.Exports = readExports(filepath.Join(appsDir, e.Name(), "exports"))
-		app.HasImage = images[app.ImageName()]
+		app.ImageID, app.HasImage = images[app.ImageName()]
+		if app.HasImage {
+			app.Record = loadInstallRecord(app.Name, app.ImageID)
+		}
 		app.HasBox, app.BoxRunning = boxes[app.BoxName()].exists, boxes[app.BoxName()].running
 		apps = append(apps, app)
 	}
@@ -167,7 +175,7 @@ func readTrimmed(path string) string {
 	return strings.TrimSpace(string(b))
 }
 
-// podmanImages returns the set of local image refs. A failure here is not
+// podmanImages maps each local image ref to its short image ID. A failure here is not
 // fatal: status degrades to "not built" rather than blocking the menu, which
 // keeps the binary usable when the runtime is unreachable (e.g. when it is run
 // from inside a container during development).
@@ -175,12 +183,12 @@ func readTrimmed(path string) string {
 // Both runtimes are tried, in the order tools.sh picks them: a host with only
 // Docker installed builds fine through the backend, and querying podman alone
 // would report every one of its images as not built.
-func podmanImages() map[string]bool {
-	out := map[string]bool{}
+func podmanImages() map[string]string {
+	out := map[string]string{}
 	var b []byte
 	var err error
 	for _, runtime := range []string{"podman", "docker"} {
-		b, err = hostCommand(runtime, "images", "--format", "{{.Repository}}:{{.Tag}}").Output()
+		b, err = hostCommand(runtime, "images", "--format", "{{.Repository}}:{{.Tag}} {{.ID}}").Output()
 		if err == nil {
 			break
 		}
@@ -190,13 +198,14 @@ func podmanImages() map[string]bool {
 	}
 	s := bufio.NewScanner(strings.NewReader(string(b)))
 	for s.Scan() {
-		ref := strings.TrimSpace(s.Text())
-		out[ref] = true
+		ref, id, _ := strings.Cut(strings.TrimSpace(s.Text()), " ")
+		id = strings.TrimPrefix(strings.TrimSpace(id), "sha256:")
+		out[ref] = id
 		// Podman reports locally-built images with a "localhost/" prefix
 		// ("localhost/linux-tools/comfyui:latest"), while image_name() in
 		// lib/helpers.sh produces the unprefixed form. Index both so the
 		// lookup matches either way.
-		out[strings.TrimPrefix(ref, "localhost/")] = true
+		out[strings.TrimPrefix(ref, "localhost/")] = id
 	}
 	return out
 }

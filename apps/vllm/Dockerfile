@@ -75,4 +75,21 @@ RUN set -eux; \
         | sed "s|@VLLM@|$vllm_bin|" > /usr/bin/vllm-serve; \
     chmod +x /usr/bin/vllm-serve
 
+# The release actually installed, as the picker writes it ("v0.32.0"), for the
+# dashboard's update check; read back by record_install (lib/commands.sh).
+# `vllm --version` imports torch and dies without a GPU, so the version comes
+# from the package metadata, through the interpreter on the CLI's own shebang
+# (the images do not agree on which python that is). The local "+rocm723"
+# suffix is dropped. "nightly" is recorded as itself: it is a moving tag.
+ARG VLLM_TAG
+RUN set -eu; \
+    mkdir -p /usr/share/linux-tools; \
+    if [ "$VLLM_TAG" = nightly ]; then v=nightly; else \
+        py="$(sed -n '1s/^#!//p' "$(command -v vllm | xargs readlink -f)")"; \
+        case "$py" in *bash*|*/sh) py=python3 ;; esac; \
+        v="$($py -c 'import importlib.metadata as m; print(m.version("vllm"))')"; \
+        v="v${v%%+*}"; \
+    fi; \
+    echo "$v" > /usr/share/linux-tools/release
+
 CMD ["/bin/bash"]

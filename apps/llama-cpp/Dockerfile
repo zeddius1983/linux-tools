@@ -94,6 +94,7 @@ RUN set -e; \
     esac; \
     echo "==> Building llama.cpp ${ref} (build ${build}) for ${LLAMA_GPU} (cache-bust: ${CACHE_BUST})"; \
     git clone --depth 1 --branch "${ref}" "$repo" /src; \
+    mkdir -p /stage && echo "$ref" > /stage/release; \
     echo "$build" > /src/.build-number; \
     echo "$dev" > /src/.build-is-dev
 
@@ -186,6 +187,9 @@ RUN echo "${LLAMA_GPU}" > /etc/llama-cpp-gpu
 COPY --from=build /stage/bin/ /opt/llama-cpp/
 COPY --from=build /stage/lib/ /opt/llama-cpp/
 COPY --from=build /stage/gguf-py/ /opt/llama-cpp/gguf-py/
+# The resolved tag ("v4.0.1" or "b12008", never "latest"/"nightly"), for the
+# dashboard's update check; read back by record_install (lib/commands.sh).
+COPY --from=build /stage/release /usr/share/linux-tools/release
 
 # Register /opt/llama-cpp so ld.so finds libllama-*-impl.so and other build-time shared libs
 RUN echo /opt/llama-cpp > /etc/ld.so.conf.d/llama-cpp.conf && ldconfig

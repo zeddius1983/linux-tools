@@ -273,25 +273,25 @@ func TestInfoPanelScrolls(t *testing.T) {
 	a := App{Name: "dev-toolbox", Description: "Dev Toolbox"}
 	const w, h = 60, 10
 
-	top := p.view(a, w, h)
+	top := p.view(a, nil, w, h)
 	if !p.canScroll(a, w, h) {
 		t.Fatal("dev-toolbox README should overflow a 10-line panel")
 	}
 
 	p.scroll(10)
-	mid := p.view(a, w, h)
+	mid := p.view(a, nil, w, h)
 	if mid == top {
 		t.Error("scrolling produced an identical frame")
 	}
 
 	// Far past the end: must clamp, not panic or blank out.
 	p.scroll(100000)
-	end := p.view(a, w, h)
+	end := p.view(a, nil, w, h)
 	if strings.TrimSpace(end) == "" {
 		t.Error("over-scrolling blanked the panel")
 	}
 	p.scroll(-100000)
-	if back := p.view(a, w, h); back != top {
+	if back := p.view(a, nil, w, h); back != top {
 		t.Error("scrolling back to 0 did not restore the first frame")
 	}
 }
@@ -301,7 +301,7 @@ func TestInfoPanelScrolls(t *testing.T) {
 // quietly turn this into a test of nothing.
 func TestInfoPanelMissingReadme(t *testing.T) {
 	p := newInfoPanel(appsDir, newIconSet(false))
-	out := p.view(App{Name: "no-such-app"}, 50, 6)
+	out := p.view(App{Name: "no-such-app"}, nil, 50, 6)
 	if !strings.Contains(out, "No README.md") {
 		t.Errorf("expected placeholder, got:\n%s", out)
 	}

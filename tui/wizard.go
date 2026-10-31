@@ -22,6 +22,9 @@ type Item struct {
 	// title above it. Both are empty for a value with no matching release.
 	Notes      string
 	NotesTitle string
+	// Prerelease is GitHub's flag for the matched release; the update check
+	// uses it to keep a stable install from being offered pre-releases.
+	Prerelease bool
 }
 
 // Page is a parsed apps/<app>/wizard/NN-name.<type> file.

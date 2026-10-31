@@ -42,6 +42,14 @@ RUN echo "==> Installing Codex ${CODEX_RELEASE} (cache-bust: ${CACHE_BUST})" \
     && /usr/bin/codex --version \
     && rm -rf /opt/codex-install /tmp/codex-install.sh
 
+# The release actually installed, in the picker's own form ("0.166.0"), so the
+# dashboard can tell when a newer one is out — "latest" is resolved here, by the
+# binary itself. Read back by record_install (lib/commands.sh) after the build.
+RUN mkdir -p /usr/share/linux-tools \
+    && /usr/bin/codex --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+[0-9A-Za-z.+-]*' | head -1 \
+       > /usr/share/linux-tools/release \
+    && test -s /usr/share/linux-tools/release
+
 # Optional host integrations, wired up by the setup wizard
 # (wizard/01-statusline.packages). Writes to ~/.codex/ on the host via the
 # shared home; see codex-cli-install for what it touches.

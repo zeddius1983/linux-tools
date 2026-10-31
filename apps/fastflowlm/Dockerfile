@@ -45,6 +45,13 @@ RUN set -e; \
     rm -f /tmp/fastflowlm.deb; \
     rm -rf /var/lib/apt/lists/*
 
+# The release actually installed, as the picker writes it ("v1.0.11"), for the
+# dashboard's update check; read back by record_install (lib/commands.sh). The
+# .deb's own version is the release's without the "v".
+RUN mkdir -p /usr/share/linux-tools \
+    && v="$(dpkg-query -W -f='${Version}' fastflowlm)" \
+    && test -n "$v" && echo "v$v" > /usr/share/linux-tools/release
+
 # The .deb ships /usr/bin/flm -> /opt/fastflowlm/bin/flm, so `bin:flm` exports
 # cleanly. Runtime state (models, config) lives under $HOME and is therefore
 # shared with the host by Distrobox.

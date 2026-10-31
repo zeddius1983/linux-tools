@@ -64,6 +64,7 @@ func main() {
 				m.resolveWizardItems()
 			}
 		}
+		m.resolveAppUpdates()
 		m.renderKeys(renderKeys)
 		fmt.Println(m.View().Content)
 		return
@@ -116,6 +117,7 @@ var (
 	styStatusOK = lipgloss.NewStyle().Foreground(colOK)
 	styStatusNo = lipgloss.NewStyle().Foreground(colDim)
 	styWarn     = lipgloss.NewStyle().Foreground(colWarn)
+	styUpdate   = lipgloss.NewStyle().Bold(true).Foreground(colAccent)
 	// One colour for every glyph, tab bar and rows alike, so they read as a set.
 	// The shape already says container vs host, so colour only has to make them
 	// legible — the dim style used before rendered Docker's logo nearly
@@ -190,6 +192,10 @@ type model struct {
 	// latest is the newest published release tag, when the background check
 	// found one. Empty until it answers, and it may never answer.
 	latest string
+
+	// updates is the per-app answer of the release-picker update check, keyed
+	// by app name; an app with no entry has nothing to check (see checkable).
+	updates map[string]appUpdate
 }
 
 // wheelNotch is how close together wheel events have to be to count as one
@@ -207,12 +213,50 @@ func newModel(apps []App, appsDir, toolsBin string, useNerdFonts bool) *model {
 		icons:    newIconSet(useNerdFonts),
 		w:        100,
 		h:        30,
+		updates:  map[string]appUpdate{},
 	}
 }
 
-// Init starts the update check. It runs in the background and is allowed to
-// fail silently, so the dashboard draws immediately either way.
-func (m *model) Init() tea.Cmd { return checkUpdate() }
+// Init starts the update checks — linux-tools' own and each installed app's.
+// They run in the background and are allowed to fail silently, so the
+// dashboard draws immediately either way.
+func (m *model) Init() tea.Cmd { return tea.Batch(checkUpdate(), m.checkApps(false)) }
+
+// checkApps marks every checkable app as being checked and starts the checks.
+// force skips the cache (R). Apps that are no longer checkable lose their
+// entry, so a removed image does not keep a stale marker.
+func (m *model) checkApps(force bool) tea.Cmd {
+	next := map[string]appUpdate{}
+	for _, a := range m.apps {
+		if !checkable(a) {
+			continue
+		}
+		if u, ok := m.updates[a.Name]; ok && u.Installed == a.Record.Release && !force {
+			next[a.Name] = u // keep showing the last answer while re-checking
+		} else {
+			next[a.Name] = appUpdate{State: updChecking, Installed: a.Record.Release}
+		}
+	}
+	m.updates = next
+	return checkAppUpdates(m.apps, force)
+}
+
+// resolveAppUpdates runs the checks inline, for --render's single frame.
+func (m *model) resolveAppUpdates() {
+	for _, a := range m.apps {
+		if checkable(a) {
+			m.updates[a.Name] = resolveAppUpdate(a, false)
+		}
+	}
+}
+
+// updateFor is the selected app's update answer, if it has one.
+func (m *model) updateFor(a App) *appUpdate {
+	if u, ok := m.updates[a.Name]; ok {
+		return &u
+	}
+	return nil
+}
 
 // selectApp moves the cursor to a named app, switching category if needed.
 func (m *model) selectApp(name string) bool {
@@ -278,10 +322,14 @@ type actionDoneMsg struct {
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// An open wizard owns the screen and every key until it is confirmed or
-	// cancelled; only the action result, which arrives after it has closed,
-	// bypasses it.
+	// cancelled. Only results that describe the dashboard rather than the
+	// wizard bypass it: the action result, which arrives after it has closed,
+	// and an update check that finishes while it is open (dropped, it would
+	// leave the app at "checking…" until the next refresh).
 	if m.wiz != nil {
-		if _, ok := msg.(actionDoneMsg); !ok {
+		switch msg.(type) {
+		case actionDoneMsg, appUpdateMsg:
+		default:
 			return m.wizardUpdate(msg)
 		}
 	}
@@ -292,6 +340,14 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case updateMsg:
 		m.latest = msg.latest
+		return m, nil
+
+	case appUpdateMsg:
+		// A check that finishes after its app was rebuilt or removed describes
+		// something no longer there.
+		if cur, ok := m.updates[msg.app]; ok && cur.Installed == msg.upd.Installed {
+			m.updates[msg.app] = msg.upd
+		}
 		return m, nil
 
 	case actionDoneMsg:
@@ -310,10 +366,13 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = fmt.Sprintf("%s %s finished", msg.action, msg.app)
 			m.statusErr = false
 		}
-		// Container state almost certainly changed; re-read it.
+		// Container state almost certainly changed; re-read it. A rebuild has
+		// a new install record, which the checks pick up (the cache is keyed
+		// by the installed release).
 		if apps, err := LoadApps(m.appsDir); err == nil {
 			m.apps = apps
 			m.cats = Categories(apps)
+			return m, m.checkApps(false)
 		}
 		return m, nil
 
@@ -446,7 +505,12 @@ func (m *model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if apps, err := LoadApps(m.appsDir); err == nil {
 			m.apps = apps
 			m.cats = Categories(apps)
-			m.status, m.statusErr = "reloaded", false
+			m.status, m.statusErr = "reloaded, checking for updates", false
+			return m, m.checkApps(true)
+		}
+	case "n":
+		if a, ok := m.current(); ok {
+			m.info.toggleNotes(a)
 		}
 	case "enter":
 		// Enter is the primary action: the wizard for apps that have pages, the
@@ -620,7 +684,7 @@ func (m *model) infoView(width int) string {
 	if !ok {
 		return lipgloss.NewStyle().Width(width).Render(styDesc.Render("no app selected"))
 	}
-	return m.info.view(a, width, m.bodyHeight())
+	return m.info.view(a, m.updateFor(a), width, m.bodyHeight())
 }
 
 // superscript renders an integer with Unicode superscript digits, so the count
@@ -699,6 +763,9 @@ func (m *model) tableView(width int) string {
 
 		glyph, glyphSty := m.icons.appGlyph(a)
 		imgTxt, imgSty := m.icons.image(a)
+		if u := m.updateFor(a); u != nil && u.State == updAvailable {
+			imgTxt, imgSty = "↑", styUpdate
+		}
 		boxTxt, boxSty := m.icons.box(a)
 
 		// The selected row is marked by a background running the full width
@@ -816,6 +883,10 @@ func (m *model) contextLine() string {
 		img += styWarn.Render("   " + note)
 	}
 
+	if u := m.updateFor(a); u != nil {
+		img += m.updateLabel(*u)
+	}
+
 	exports := a.ExportNames()
 	if len(exports) == 0 {
 		return img
@@ -840,7 +911,13 @@ func (m *model) keysLine() string {
 	}
 	parts = append(parts, styKey.Render("o")+styDesc.Render(" shell"))
 	if m.showInfo() {
-		parts = append(parts, styKey.Render("PgDn/PgUp")+styDesc.Render(" scroll readme"))
+		what := " notes"
+		if a, ok := m.current(); ok && m.info.showsNotes(a, m.updateFor(a)) {
+			what = " readme"
+		}
+		parts = append(parts,
+			styKey.Render("n")+styDesc.Render(what),
+			styKey.Render("PgDn/PgUp")+styDesc.Render(" scroll"))
 	}
 	parts = append(parts,
 		styKey.Render("/")+styDesc.Render(" filter"),
@@ -871,6 +948,7 @@ func (m *model) helpView() string {
 		{"tab / shift+tab", "previous / next category"},
 		{"g / end", "first / last row"},
 		{"PgDn / PgUp", "scroll the README panel"},
+		{"n", "switch the panel between README and release notes (notes first when an update is out)"},
 		{"wheel", "scroll the pane under the pointer"},
 		{"/", "filter within category"},
 		{"⏎ / s", "setup — install (removes existing box+image)"},
@@ -880,7 +958,7 @@ func (m *model) helpView() string {
 		{"e", "export — re-export to host"},
 		{"r", "rm — remove box, keep image"},
 		{"o", "open a shell in the box"},
-		{"R", "reload app/container state"},
+		{"R", "reload app/container state, recheck updates"},
 		{"?", "toggle this help"},
 		{"q / esc", "quit"},
 	}
@@ -891,6 +969,7 @@ func (m *model) helpView() string {
 	b.WriteString("\n" + styTitle.Render("  columns") + "\n\n")
 	legend := [][2]string{
 		{"IMAGE  ✓", "image built"},
+		{"IMAGE  ↑", "built, and a newer release is out (n for its notes)"},
 		{"IMAGE  ✗", "not built"},
 		{"BOX    ●", "box exists and is running"},
 		{"BOX    ○", "box exists, stopped"},
@@ -934,4 +1013,18 @@ func maxInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// updateLabel is the footer's note on the selected app's version.
+func (m *model) updateLabel(u appUpdate) string {
+	switch u.State {
+	case updAvailable:
+		return styUpdate.Render(fmt.Sprintf("   ↑ %s → %s", u.Installed, u.Latest))
+	case updCurrent:
+		return styDesc.Render("   " + u.Installed + " (latest)")
+	case updChecking:
+		return styDesc.Render("   " + u.Installed + " (checking…)")
+	default:
+		return styDesc.Render("   " + u.Installed)
+	}
 }

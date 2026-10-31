@@ -39,6 +39,13 @@ ARG OPENCLAW_VERSION=latest
 RUN npm install -g "openclaw@${OPENCLAW_VERSION}" --allow-scripts=openclaw \
     || npm install -g "openclaw@${OPENCLAW_VERSION}"
 
+# The release actually installed, as the picker writes it ("2026.10.9"), for
+# the dashboard's update check; read back by record_install (lib/commands.sh).
+RUN mkdir -p /usr/share/linux-tools \
+    && node -p "require('$(npm root -g)/openclaw/package.json').version" \
+       > /usr/share/linux-tools/release \
+    && test -s /usr/share/linux-tools/release
+
 # NodeSource sets npm's prefix to /usr, so the global bin lands at
 # /usr/bin/openclaw -- already on the system default PATH that `command -pv`
 # searches, so no /usr/local/bin problem for the exports.
