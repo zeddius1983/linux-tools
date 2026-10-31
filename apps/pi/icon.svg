@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- Pi's mark from pi.dev/favicon.svg, light on a dark tile so it reads on any panel -->
+  <rect width="256" height="256" rx="48" fill="#111111"/>
+  <g transform="translate(44 44) scale(0.3)" fill="#f6f6f6">
+    <path d="M420 280H280V140H0V0H420V280Z"/>
+    <path d="M560 560H420V280H560V560Z"/>
+    <path d="M140 560H0V140H140V280H280V420H140V560Z"/>
+  </g>
+</svg>
