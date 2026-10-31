@@ -1,0 +1,5 @@
+Select Pi release
+Choose a Pi release to install:
+setup,build
+arg|PI_RELEASE
+releases|earendil-works/pi

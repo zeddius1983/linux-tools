@@ -93,6 +93,7 @@ reports from other distros are welcome.
 | [`copilot-cli`](apps/copilot-cli/README.md) | GitHub Copilot CLI |
 | [`copilot-app`](apps/copilot-app/README.md) | GitHub Copilot desktop app: agent sessions across your repositories |
 | [`opencode`](apps/opencode/README.md) | OpenCode agent CLI, with a release picker |
+| [`pi`](apps/pi/README.md) | Pi: minimal, extensible coding agent (TypeScript extensions), with a release picker |
 | [`orca`](apps/orca/README.md) | Orca desktop IDE: a fleet of coding agents in parallel worktrees, with a release picker |
 | [`antigravity`](apps/antigravity/README.md) | Antigravity CLI (`agy`) *(unmaintained)* |
 | [`dev-toolbox`](apps/dev-toolbox/README.md) | Node, Python, Go, Rust, JVM toolchains and language servers, pick-and-mix |
