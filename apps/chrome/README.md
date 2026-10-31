@@ -20,12 +20,28 @@ installed, and fall back to `xdg-open` when it is not.
 ## Install
 
 ```bash
-tools setup chrome
+tools setup chrome                    # AMD / Intel (default)
+tools setup chrome CHROME_GPU=nvidia  # NVIDIA
 ```
 
-No wizard and no GPU picker. AMD/Intel needs no `create_flags` — see [GPU
-acceleration](#gpu-acceleration). An NVIDIA host needs a local one — see
-[NVIDIA hosts](#nvidia-hosts).
+One parameter, also asked by the dashboard's *Select GPU* page:
+
+| `CHROME_GPU` | Passthrough | Host prerequisite |
+|---|---|---|
+| `amd` (default) | Default `/dev/dri`, Mesa — see [GPU acceleration](#gpu-acceleration). Covers Intel too. | none |
+| `nvidia` | `create_flags.nvidia`: CDI `--device nvidia.com/gpu=all` + NVIDIA EGL — see [NVIDIA hosts](#nvidia-hosts) | `/etc/cdi/nvidia.yaml` |
+
+The image is the same either way (it carries both the Mesa and the NVIDIA VA-API
+drivers, and each loads only on its own GPU), so the choice only affects how the
+box is created. To switch an existing install:
+`tools rm chrome && tools create chrome CHROME_GPU=nvidia && tools export chrome`
+(no rebuild).
+
+**Upgrading from a local `create_flags`:** earlier versions had NVIDIA hosts keep
+an uncommitted `apps/chrome/create_flags`. Delete it (`rm apps/chrome/create_flags`)
+and recreate the box with `CHROME_GPU` instead. While it exists it is used whenever
+no `create_flags.<gpu>` file matches, so `CHROME_GPU=amd` would still get the
+NVIDIA device flags and the EGL override that hides Mesa.
 
 ## What you get
 
@@ -80,17 +96,24 @@ or open `chrome://gpu` in the browser and look at *Graphics Feature Status*.
 Everything above is about Mesa GPUs. On a host whose GPU is NVIDIA, a plain box
 has no NVIDIA userspace at all, so Chrome renders **everything** through
 llvmpipe on the CPU — compositing, rasterization, canvas — and video stutters.
-Give the box the driver through CDI (host setup: `nvidia-container-toolkit` and
-`nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml`) with a **local,
-uncommitted** `apps/chrome/create_flags`:
+Install with `CHROME_GPU=nvidia`, after the one-time host setup for CDI:
+
+```bash
+sudo pacman -S nvidia-container-toolkit                    # CachyOS / Arch
+sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml # again after driver updates
+tools setup chrome CHROME_GPU=nvidia
+```
+
+That selects `create_flags.nvidia`:
 
 ```
 --device nvidia.com/gpu=all --env __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json
 ```
 
-then `tools rm chrome && tools create chrome && tools export chrome`. Both halves
-matter: with CDI alone glvnd still hands Chrome's display to Mesa (llvmpipe). Never
-commit that file — the `--env` hides Mesa, which breaks AMD/Intel hosts.
+Both halves matter: with CDI alone glvnd still hands Chrome's display to Mesa
+(llvmpipe). The `--env` hides Mesa from the box entirely, which is why it is an
+opt-in variant rather than the default, and why a hybrid laptop (Intel/AMD iGPU +
+NVIDIA dGPU) using it renders everything on the NVIDIA card.
 
 The image does the rest:
 
