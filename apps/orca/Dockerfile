@@ -80,7 +80,8 @@ RUN echo "==> Installing Orca ${ORCA_RELEASE} (cache-bust: ${CACHE_BUST})" \
     && sed -i -e 's@^MimeType=.*@MimeType=x-scheme-handler/orca;@' \
               -e 's@^Exec=/opt/Orca/orca-ide@Exec=/usr/bin/orca-ide-launch@' \
         /usr/share/applications/orca-ide.desktop \
-    && grep -q '^Exec=/usr/bin/orca-ide-launch ' /usr/share/applications/orca-ide.desktop
+    && grep -q '^Exec=/usr/bin/orca-ide-launch ' /usr/share/applications/orca-ide.desktop \
+    && mkdir -p /usr/share/linux-tools && echo "$tag" > /usr/share/linux-tools/release
 
 # Tray icon (orca-tray) showing that Orca's terminal daemon is still running
 # after the window closes, with a Quit Completely item; Orca draws none on

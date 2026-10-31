@@ -53,6 +53,11 @@ ARG COMFY_REF=master
 RUN git clone --depth=1 --branch "${COMFY_REF}" \
         https://github.com/Comfy-Org/ComfyUI.git /opt/ComfyUI
 
+# What was installed, for the dashboard's update check (read back by
+# record_install in lib/commands.sh): the release tag as picked, or "master",
+# which the dashboard treats as a branch and never calls out of date.
+RUN mkdir -p /usr/share/linux-tools && echo "${COMFY_REF}" > /usr/share/linux-tools/release
+
 WORKDIR /opt/ComfyUI
 # torch/torchvision/torchaudio are already satisfied by the stage above, so this
 # only pulls ComfyUI's own dependencies.

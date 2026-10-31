@@ -26,6 +26,50 @@ cmd_build() {
         "${extra_args[@]+"${extra_args[@]}"}" \
         "${dockerfile_args[@]+"${dockerfile_args[@]}"}" \
         -t "$(image_name "$app")" "$APPS_DIR/$app"
+    record_install "$app"
+}
+
+# ── Install records ──────────────────────────────────────────────────────────
+# What a build actually installed, for the dashboard's update check (tui/
+# installed.go). A release picker's "latest" is only resolved inside the
+# Dockerfile, so each app with a .buildarg page writes the version it ended up
+# with to /usr/share/linux-tools/release, in the picker's own form ("v1.4.0"),
+# and it is read back here once, while the image is fresh.
+#
+# The record lives in the state directory, not the tree: a release install's
+# tree is versioned and pruned by `tools update`, and this has to outlive that.
+# IMAGE_ID ties it to the image it describes, so the dashboard ignores a record
+# whose image was rebuilt or removed some other way. Best-effort throughout: a
+# missing record costs the update marker, never the install.
+install_record_dir() { printf '%s\n' "${XDG_STATE_HOME:-$HOME/.local/state}/linux-tools/installed"; }
+
+app_has_release_picker() {
+    compgen -G "$APPS_DIR/$1/wizard/*.buildarg" >/dev/null
+}
+
+record_install() {
+    local app="$1" image dir release="" image_id args="" tok
+    image="$(image_name "$app")"
+    dir="$(install_record_dir)"
+    image_id="$($RUNTIME image inspect --format '{{.Id}}' "$image" 2>/dev/null)" || return 0
+    if app_has_release_picker "$app"; then
+        release="$($RUNTIME run --rm --pull=never --network=none --entrypoint cat \
+            "$image" /usr/share/linux-tools/release 2>/dev/null | head -1 | tr -d '[:space:]')" || release=""
+        [[ -n "$release" ]] || echo "==> Note: '$app' recorded no release; the dashboard cannot check it for updates" >&2
+    fi
+    for tok in $(wizard_build_args "$app"); do
+        [[ "$tok" == --build-arg ]] || args+="${args:+ }$tok"
+    done
+    mkdir -p "$dir" || return 0
+    {
+        printf 'RELEASE=%s\n' "$release"
+        printf 'ARGS=%s\n' "$args"
+        printf 'VARIANT=%s\n' "$(wizard_create_variant "$app")"
+        printf 'IMAGE_ID=%s\n' "$image_id"
+        printf 'BUILT_AT=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    } > "$dir/$app.tmp" && mv "$dir/$app.tmp" "$dir/$app"
+    [[ -n "$release" ]] && echo "==> Installed '$app' release ${release}"
+    return 0
 }
 
 cmd_create() {

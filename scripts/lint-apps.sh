@@ -126,6 +126,14 @@ check_app() {
                 || fail "$app" "$(basename "$df") uses $mgr but does not install lib/distrobox-deps (COPY --from=distrobox-deps . /tmp/distrobox-deps/ + RUN sh /tmp/distrobox-deps/${mgr}.sh)"
         done
 
+        # A release picker's app records the version it actually installed, or
+        # the dashboard has nothing to compare the newest release against (see
+        # record_install in lib/commands.sh).
+        if compgen -G "$d/wizard/*.buildarg" >/dev/null \
+            && ! grep -qs '/usr/share/linux-tools/release' "$d"/Dockerfile "$d"/Dockerfile.ubuntu "$d"/Dockerfile.arch; then
+            fail "$app" "has a .buildarg release picker but its Dockerfile does not write /usr/share/linux-tools/release (the installed version, in the picker's own form)"
+        fi
+
         # ── exports ─────────────────────────────────────────────────────────
         if [[ ! -f "$d/exports" ]]; then
             fail "$app" "no exports file"

@@ -45,6 +45,12 @@ RUN echo "==> Installing Pi ${PI_RELEASE} (cache-bust: ${CACHE_BUST})" \
     && npm install -g --ignore-scripts "@earendil-works/pi-coding-agent@${PI_RELEASE#v}" \
     && rm -rf /root/.npm
 
+# The release actually installed, as the picker writes it ("v1.4.0"), for the
+# dashboard's update check; read back by record_install (lib/commands.sh).
+RUN mkdir -p /usr/share/linux-tools \
+    && v="$(node -p "require('$(npm root -g)/@earendil-works/pi-coding-agent/package.json').version")" \
+    && test -n "$v" && echo "v$v" > /usr/share/linux-tools/release
+
 # NodeSource sets npm's prefix to /usr, so npm's shim lands at /usr/bin/pi.
 # Record where it points and replace it with our launcher, which names
 # /usr/bin/node instead of `#!/usr/bin/env node` (see the pi script for why).

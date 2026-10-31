@@ -57,6 +57,13 @@ RUN set -e; \
     rm -rf /root/.local/share/strata /root/.config/strata /root/.cache; \
     /opt/strata/terminal/current/bin/strata --version
 
+# The release actually installed, as the picker writes it ("v0.2.9"), for the
+# dashboard's update check; read back by record_install (lib/commands.sh).
+# `strata --version` prints "strata 0.2.4.2 (build ...; python ...)".
+RUN mkdir -p /usr/share/linux-tools \
+    && v="$(/opt/strata/terminal/current/bin/strata --version | awk '{ print $2; exit }')" \
+    && test -n "$v" && echo "v$v" > /usr/share/linux-tools/release
+
 # Wrappers must live in /usr/bin: `command -pv` (used by the bin:/desktop:
 # exports) does not search /usr/local/bin.
 #   strata         the Terminal itself

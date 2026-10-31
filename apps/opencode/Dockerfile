@@ -56,3 +56,10 @@ RUN echo "==> Installing OpenCode ${OPENCODE_RELEASE} (cache-bust: ${CACHE_BUST}
     && mv /opt/opencode-install/.opencode/bin/opencode /usr/bin/opencode \
     && /usr/bin/opencode --version \
     && rm -rf /opt/opencode-install /tmp/opencode-install.sh
+
+# The release actually installed, as the picker writes it ("v2.2.5"), for the
+# dashboard's update check; read back by record_install (lib/commands.sh). 2.x
+# prints "opencode v2.2.5" and 1.x a bare "1.18.35", hence the re-prefixing.
+RUN mkdir -p /usr/share/linux-tools \
+    && v="$(/usr/bin/opencode --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)" \
+    && test -n "$v" && echo "v$v" > /usr/share/linux-tools/release
