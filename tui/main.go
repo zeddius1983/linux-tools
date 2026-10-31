@@ -509,8 +509,9 @@ func (m *model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, m.checkApps(true)
 		}
 	case "n":
-		m.info.notes = !m.info.notes
-		m.info.resetScroll()
+		if a, ok := m.current(); ok {
+			m.info.toggleNotes(a)
+		}
 	case "enter":
 		// Enter is the primary action: the wizard for apps that have pages, the
 		// review screen for those that do not. Opening a shell moved to "o" —
@@ -911,7 +912,7 @@ func (m *model) keysLine() string {
 	parts = append(parts, styKey.Render("o")+styDesc.Render(" shell"))
 	if m.showInfo() {
 		what := " notes"
-		if m.info.notes {
+		if a, ok := m.current(); ok && m.info.showsNotes(a, m.updateFor(a)) {
 			what = " readme"
 		}
 		parts = append(parts,
@@ -947,7 +948,7 @@ func (m *model) helpView() string {
 		{"tab / shift+tab", "previous / next category"},
 		{"g / end", "first / last row"},
 		{"PgDn / PgUp", "scroll the README panel"},
-		{"n", "switch the panel between README and release notes"},
+		{"n", "switch the panel between README and release notes (notes first when an update is out)"},
 		{"wheel", "scroll the pane under the pointer"},
 		{"/", "filter within category"},
 		{"⏎ / s", "setup — install (removes existing box+image)"},

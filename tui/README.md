@@ -107,7 +107,7 @@ would be cut short by its own resets.
 | `←`/`h` `→`/`l`, `tab`/`shift+tab` | previous / next category |
 | `g` / `end` | first / last row |
 | `PgDn` / `PgUp` | scroll the README panel |
-| `n` | switch the panel between the README and release notes (see [Update check](#update-check)) |
+| `n` | switch the panel between the README and release notes — it opens on the notes when the app has a newer release (see [Update check](#update-check)) |
 | wheel | scroll the pane under the pointer — README on the right, app list on the left |
 | `/` | filter within the category |
 | `⏎` / `s` | setup — the primary action: wizard, then the review screen |
@@ -365,10 +365,16 @@ hours, keyed by the installed release so a rebuild recomputes at once; failures
 are not cached. `R` rechecks everything, ignoring the cache.
 
 The footer shows `installed → latest`, `installed (latest)` or
-`installed (checking…)`. `n` switches the info panel to notes mode: every release
-between installed and latest, newest first, or the installed release's own
-notes when it is current. The picker lists at most ten versions, so an install
-more than ten behind shows the ten newest.
+`installed (checking…)`.
+
+The info panel opens on the release notes for an app with a newer release —
+what changed is then the thing to read — and on the README otherwise
+(`showsNotes` in `info.go`). That includes the moment a check finishes: an app
+still selected when its `↑` arrives switches to its notes. Notes mode lists every
+release between installed and latest, newest first, or the installed release's
+own notes when it is current. `n` flips the panel for the selected app only;
+moving to another app, or back, shows that app's default again. The picker lists
+at most ten versions, so an install more than ten behind shows the ten newest.
 
 ## State columns
 

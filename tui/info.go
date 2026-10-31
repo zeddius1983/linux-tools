@@ -19,9 +19,12 @@ type infoPanel struct {
 	icons   iconSet // for the distro glyphs in the compatibility badges
 	cache   map[string]string
 	top     int // scroll offset in rendered lines
-	// notes switches the panel from the README to the release notes of the
-	// versions an update would bring (key n).
-	notes bool
+	// The panel shows release notes instead of the README for an app with a
+	// newer release, and the README otherwise (showsNotes). n flips that for
+	// the selected app only: flipped applies while lastApp is still the one
+	// on screen, and moving to another app drops it.
+	flipped bool
+	lastApp string
 	// notesCache holds the notes mode's renderings; see releaseNotes.
 	notesCache map[string]renderedNotes
 }
@@ -92,8 +95,11 @@ func renderMarkdown(src string, width int) (string, error) {
 // Image/box state lives in the table columns, so repeating it here would only
 // steal rows from the README.
 func (p *infoPanel) view(a App, upd *appUpdate, width, height int) string {
+	if a.Name != p.lastApp {
+		p.lastApp, p.flipped = a.Name, false
+	}
 	src := p.readme(a.Name, width)
-	if p.notes {
+	if p.showsNotes(a, upd) {
 		src = p.releaseNotes(a, upd, width)
 	}
 	body := strings.Split(src, "\n")
@@ -134,3 +140,23 @@ func (p *infoPanel) scroll(delta int) {
 }
 
 func (p *infoPanel) resetScroll() { p.top = 0 }
+
+// showsNotes reports whether the panel shows release notes for this app: by
+// default when a newer release is out — what changed is then the thing to
+// read — and the README otherwise, unless n flipped it for this app.
+func (p *infoPanel) showsNotes(a App, upd *appUpdate) bool {
+	def := upd != nil && upd.State == updAvailable
+	if a.Name == p.lastApp && p.flipped {
+		return !def
+	}
+	return def
+}
+
+// toggleNotes is n: flip the panel for the selected app.
+func (p *infoPanel) toggleNotes(a App) {
+	if a.Name != p.lastApp {
+		p.lastApp, p.flipped = a.Name, false
+	}
+	p.flipped = !p.flipped
+	p.top = 0
+}
