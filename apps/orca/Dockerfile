@@ -12,11 +12,15 @@ RUN sh /tmp/distrobox-deps/apt.sh && rm -rf /tmp/distrobox-deps
 # $HOME dotfiles need it too. libpulse0 gives Chromium audio through the host's
 # PulseAudio/PipeWire socket. The Noto fonts cover emoji and CJK, which the
 # package's own dependencies do not pull in. (libsecret-1-0, for Electron
-# safeStorage on the host keyring, is already in the package's Depends.)
+# safeStorage on the host keyring, is already in the package's Depends.) jq is
+# for the agents run in Orca's terminals, which run inside this box: Claude Code's
+# ~/.claude/statusline.sh parses its JSON input with jq, and without it the
+# status line loses the model, tokens and 5h/7d usage segments.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     git \
+    jq \
     libpulse0 \
     fonts-noto-core \
     fonts-noto-color-emoji \
