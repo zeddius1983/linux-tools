@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Desktop launcher for Orca: the package's orca-ide.desktop is pointed here
+# (see the Dockerfile) so opening Orca from the menu also brings up orca-tray.
+#
+# Orca keeps its terminals in a background daemon that outlives the window, and
+# on Linux it shows no tray icon of its own, so after closing the window there
+# is nothing on screen saying sessions are still running and no way to stop
+# them short of the menu's "Quit Completely…". The tray is that indicator.
+#
+# Best effort on purpose: a desktop with no StatusNotifier host, or a missing
+# indicator library, must not stop Orca from opening. orca-tray takes a lock
+# and exits quietly if one is already running.
+setsid /usr/bin/orca-tray >/dev/null 2>&1 &
+disown 2>/dev/null || true
+
+exec /opt/Orca/orca-ide "$@"
