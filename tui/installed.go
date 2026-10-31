@@ -128,8 +128,8 @@ func isDigit(r rune) bool { return r >= '0' && r <= '9' }
 func (v tagVersion) prerelease() bool { return v.suffix != "" }
 
 // compareVersions orders two parsed tags by their numbers, missing ones
-// counting as zero, and then a release above any pre-release of the same
-// numbers.
+// counting as zero, then a release above any pre-release of the same numbers,
+// then two pre-releases by compareSuffix.
 func compareVersions(a, b tagVersion) int {
 	for i := 0; i < len(a.nums) || i < len(b.nums); i++ {
 		var x, y int
@@ -153,11 +153,73 @@ func compareVersions(a, b tagVersion) int {
 		return 1
 	case b.suffix == "":
 		return -1
-	case a.suffix < b.suffix:
+	default:
+		return compareSuffix(a.suffix, b.suffix)
+	}
+}
+
+// compareSuffix orders two pre-release suffixes run by run: digit runs as
+// numbers, everything else as text. Compared whole as strings, "rc10" sorts
+// below "rc2" and "-alpha.10" below "-alpha.2", which would report an rc2
+// install as current while offering an rc10 install a downgrade to rc2.
+// When one suffix runs out first, the shorter one is older ("-alpha" <
+// "-alpha.1").
+func compareSuffix(a, b string) int {
+	for a != "" && b != "" {
+		ra, restA := nextRun(a)
+		rb, restB := nextRun(b)
+		da, db := isDigit(rune(ra[0])), isDigit(rune(rb[0]))
+		var c int
+		switch {
+		case da && db:
+			c = compareDigits(ra, rb)
+		case da != db:
+			// A number against text has no natural order; text sorts first
+			// so the result is at least deterministic.
+			if da {
+				c = 1
+			} else {
+				c = -1
+			}
+		default:
+			c = strings.Compare(ra, rb)
+		}
+		if c != 0 {
+			return c
+		}
+		a, b = restA, restB
+	}
+	switch {
+	case a == b:
+		return 0
+	case a == "":
 		return -1
 	default:
 		return 1
 	}
+}
+
+// nextRun splits off the leading run of digits, or of non-digits.
+func nextRun(s string) (run, rest string) {
+	digits := isDigit(rune(s[0]))
+	i := 1
+	for i < len(s) && isDigit(rune(s[i])) == digits {
+		i++
+	}
+	return s[:i], s[i:]
+}
+
+// compareDigits compares two digit strings as numbers of any length, without
+// converting them: leading zeros dropped, then longer is larger, then text.
+func compareDigits(a, b string) int {
+	a, b = strings.TrimLeft(a, "0"), strings.TrimLeft(b, "0")
+	if len(a) != len(b) {
+		if len(a) < len(b) {
+			return -1
+		}
+		return 1
+	}
+	return strings.Compare(a, b)
 }
 
 // --- update state ------------------------------------------------------------

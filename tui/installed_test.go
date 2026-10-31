@@ -21,6 +21,13 @@ func TestCompareVersions(t *testing.T) {
 		{"v0.10.1rc1", "v0.10.1", -1}, // a release outranks its own rc
 		{"v0.10.1rc2", "v0.10.1rc1", 1},
 		{"0.166.0-alpha.6", "0.165.0", 1},
+		// Pre-release sequence numbers compare as numbers, not text.
+		{"v0.10.1rc10", "v0.10.1rc2", 1},
+		{"0.166.0-alpha.10", "0.166.0-alpha.2", 1},
+		{"2026.10.10-beta.5", "2026.10.10-beta.12", -1},
+		{"v1.0.0-alpha", "v1.0.0-alpha.1", -1},
+		{"v1.0.0-alpha.2", "v1.0.0-beta.1", -1},
+		{"v1.0.0rc01", "v1.0.0rc1", 0},
 	}
 	for _, c := range cases {
 		if got := compareVersions(parseVersion(c.a), parseVersion(c.b)); got != c.want {
@@ -140,6 +147,17 @@ func TestTrackPrereleases(t *testing.T) {
 	// An rc install is.
 	if u, _ := track("v0.10.1rc1", []pageItems{p}); u.State != updAvailable || u.Latest != "v0.11.0rc1" {
 		t.Errorf("rc: got %+v", u)
+	}
+	// Double-digit sequences: rc10 is newer than rc2, never the other way.
+	rcs := pageItems{Page: Page{ReleasesRepo: "x/y"}, Items: []Item{
+		{Name: "v0.10.1rc10", Prerelease: true},
+		{Name: "v0.10.1rc2", Prerelease: true},
+	}}
+	if u, _ := track("v0.10.1rc2", []pageItems{rcs}); u.State != updAvailable || u.Latest != "v0.10.1rc10" {
+		t.Errorf("rc2 install: got %+v", u)
+	}
+	if u, _ := track("v0.10.1rc10", []pageItems{rcs}); u.State != updCurrent {
+		t.Errorf("rc10 install offered a downgrade: got %+v", u)
 	}
 }
 
