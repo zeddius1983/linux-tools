@@ -44,6 +44,48 @@ box_exists() {
         | grep -qx "$(box_name "$1")"
 }
 
+# Stop processes that belong to a box but have left its cgroup. Removing a box
+# kills only what is in its libpod-<id>.scope, and Electron/Chromium apps move
+# themselves into their own app-<name>-<pid>.scope over the shared session bus,
+# so they outlive `distrobox rm` and keep running on the deleted image. Orca is
+# the costly case: its terminal daemon survives the window too, and a relaunched
+# Orca reconnects to it and keeps opening terminals in the old box.
+#
+# Processes are matched by the container ID in their own /run/.containerenv,
+# read through /proc/<pid>/root, which works whatever cgroup they are in and
+# even when the box is stopped. Podman only: docker writes no ID there.
+#
+# Run it before anything is removed: if it kills the terminal `tools` was
+# started from (an Orca terminal, say), the command dies with the old box and
+# image still in place instead of halfway through a rebuild.
+stop_box_processes() {
+    local box id pid d i
+    local -a left=()
+    box="$(box_name "$1")"
+    [[ "$RUNTIME" == podman ]] || return 0
+    id="$($RUNTIME inspect -f '{{.Id}}' "$box" 2>/dev/null)" || return 0
+    [[ -n "$id" ]] || return 0
+    local -a pids=()
+    for d in /proc/[0-9]*; do
+        grep -qs "^id=\"$id\"" "$d/root/run/.containerenv" || continue
+        grep -qs "libpod-$id" "$d/cgroup" && continue  # distrobox rm handles these
+        pids+=("${d#/proc/}")
+    done
+    ((${#pids[@]})) || return 0
+
+    echo "==> Stopping ${#pids[@]} process(es) still running from '$box' outside the container..."
+    kill -TERM "${pids[@]}" 2>/dev/null || true
+    for ((i = 0; i < 50; ++i)); do
+        left=()
+        for pid in "${pids[@]}"; do
+            kill -0 "$pid" 2>/dev/null && left+=("$pid")
+        done
+        ((${#left[@]})) || return 0
+        sleep 0.2
+    done
+    kill -KILL "${left[@]}" 2>/dev/null || true
+}
+
 app_description() {
     local f="$APPS_DIR/$1/description"
     [[ -f "$f" ]] && cat "$f" || echo "$1"

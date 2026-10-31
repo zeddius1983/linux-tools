@@ -29,8 +29,9 @@ The image picks the `amd64` or `arm64` package to match the host.
 
 | Entry | What it does |
 |---|---|
-| **Orca** (menu / `.desktop`) | Launches the app. It's the package's own `.desktop` entry, which keeps the `orca://` link handler |
+| **Orca** (menu / `.desktop`) | Launches the app and its tray icon. It's the package's own `.desktop` entry, which keeps the `orca://` link handler |
 | `orca-ide` (host `PATH`) | Orca's bundled command-line client, the one upstream installs as `/usr/bin/orca-ide` |
+| `orca-tray` (host `PATH`) | The tray icon, started with Orca from the menu (see below). Run it yourself to get the icon back after closing it |
 | **Orca (Terminal)** (menu) | Opens a shell inside `orca-box` |
 
 ```bash
@@ -39,6 +40,23 @@ orca-ide --help     # the CLI's commands
 
 The host command is `orca-ide`, not `orca`, as upstream names it. `orca` on Linux
 is GNOME's screen reader, and a `~/.local/bin/orca` would shadow it.
+
+### Tray icon
+
+Closing Orca's window, or a plain **Quit**, leaves its terminals running in a
+background daemon, agents included, so they're still there next time. Orca
+itself shows nothing for this on Linux, so the box adds a tray icon:
+
+- **Orca: window open / window closed** and the number of terminal sessions
+  still running.
+- **Open Orca** brings the window back.
+- **Quit Orca Completely…** asks first, then stops the app, the daemon and
+  every terminal session. It's the same as Orca's own **Quit Completely…** menu
+  item, but it works without the window.
+
+The icon closes by itself once nothing of Orca is running. It needs a desktop
+with a StatusNotifier tray (Cinnamon, KDE, or GNOME with the AppIndicator
+extension). Without one, Orca still starts normally.
 
 ## Updating
 
@@ -68,6 +86,16 @@ native install and survives `tools setup` rebuilds:
   work: their wrappers notice they are in a different box and go through
   `distrobox-host-exec` to the right one. That needs `flatpak` on the host; see
   the `distrobox-host-exec` notes in the main `CLAUDE.md`.
+- **`jq` is in the image** for scripts that agents run in Orca's terminals, such
+  as a Claude Code status line (`~/.claude/statusline.sh`) that parses its JSON
+  input with `jq`. Without it the status line drops the model, token counts and
+  5h/7d usage.
+- **Terminals outlive the window.** Orca keeps its terminals, and the agents
+  in them, in a background daemon that keeps running after you close the window
+  or choose Quit. The tray icon above shows that and can stop it, as can
+  **Quit Completely…** in Orca's menu. `tools setup orca` and `tools rm orca` stop Orca and the
+  daemon before removing the box, so they end every Orca terminal session. Run
+  them from the host or from another box's terminal, not from inside Orca.
 - **GitHub CLI.** `gh` is in the image for Orca's Tasks view and per-worktree
   PR/CI status. It reads the shared `~/.config/gh`, so a `gh auth login` on the
   host (or in any box) also covers Orca.

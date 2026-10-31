@@ -235,6 +235,7 @@ cmd_rm() {
 
     box="$(box_name "$app")"
 
+    stop_box_processes "$app"
     # distrobox rm handles exported binaries; we handle the desktop files it leaves behind
     echo "==> Removing distrobox '$box'..."
     distrobox rm --force "$box"
@@ -274,6 +275,7 @@ cmd_setup() {
         read -r previous_app < "$renamed_from_file"
         if [[ -n "$previous_app" && "$previous_app" != "$app" ]]; then
             if box_exists "$previous_app"; then
+                stop_box_processes "$previous_app"
                 echo "==> Removing renamed Distrobox '$(box_name "$previous_app")'..."
                 distrobox rm --force "$(box_name "$previous_app")"
             fi
@@ -283,7 +285,10 @@ cmd_setup() {
             fi
         fi
     fi
-    box_exists   "$app" && distrobox rm --force "$(box_name "$app")"
+    if box_exists "$app"; then
+        stop_box_processes "$app"
+        distrobox rm --force "$(box_name "$app")"
+    fi
     image_exists "$app" && $RUNTIME rmi "$(image_name "$app")"
     cmd_build  "$app"
     cmd_create "$app"
