@@ -1,0 +1,23 @@
+#!/bin/sh
+# Run a shell on the host, not in orca-box. orca-ide-launch sets SHELL to this,
+# so Orca's terminals, and the agents it launches in them, open on the host.
+#
+# Installed under three names; the name picks the shell:
+#   orca-host-shell  the host user's login shell (getent passwd, on the host)
+#   orca-host-zsh    /usr/bin/zsh
+#   orca-host-bash   /usr/bin/bash
+#
+# Arguments go to the shell unchanged. Orca hands its own flags (e.g. `-l`)
+# straight to the shell executable, so this must take them as a shell would;
+# pointing Orca at distrobox-host-exec itself fails with "Invalid flag '-l'".
+# The lookup runs on the host because the box's passwd entry need not match.
+lookup='s=$(getent passwd "$(id -un)" | cut -d: -f7); exec "${s:-/bin/sh}" "$@"'
+case "${0##*/}" in
+    orca-host-zsh)  set -- /usr/bin/zsh "$@" ;;
+    orca-host-bash) set -- /usr/bin/bash "$@" ;;
+    *)              set -- /bin/sh -c "$lookup" orca-host-shell "$@" ;;
+esac
+if [ -f /run/.containerenv ]; then
+    exec /usr/bin/distrobox-host-exec "$@"
+fi
+exec "$@"

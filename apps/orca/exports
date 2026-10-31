@@ -4,3 +4,6 @@
 app:orca-ide:Orca
 bin:orca-ide
 bin:orca-tray
+bin:orca-host-shell
+bin:orca-host-zsh
+bin:orca-host-bash

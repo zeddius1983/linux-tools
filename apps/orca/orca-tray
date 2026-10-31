@@ -262,7 +262,7 @@ class Tray:
     def on_open(self, *_):
         # Orca holds a single-instance lock, so a second start just raises
         # the existing window.
-        run_detached([ORCA_EXE])
+        run_detached(["/usr/bin/orca-ide-launch"])
 
     def on_quit(self, *_):
         dialog = Gtk.MessageDialog(

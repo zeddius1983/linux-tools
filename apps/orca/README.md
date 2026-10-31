@@ -32,6 +32,7 @@ The image picks the `amd64` or `arm64` package to match the host.
 | **Orca** (menu / `.desktop`) | Launches the app and its tray icon. It's the package's own `.desktop` entry, which keeps the `orca://` link handler |
 | `orca-ide` (host `PATH`) | Orca's bundled command-line client, the one upstream installs as `/usr/bin/orca-ide` |
 | `orca-tray` (host `PATH`) | The tray icon, started with Orca from the menu (see below). Run it yourself to get the icon back after closing it |
+| `orca-host-shell` (host `PATH`) | Runs your host login shell. Orca's terminals use it by default (see below); `orca-host-zsh` and `orca-host-bash` pick a fixed shell |
 | **Orca (Terminal)** (menu) | Opens a shell inside `orca-box` |
 
 ```bash
@@ -58,6 +59,33 @@ The icon closes by itself once nothing of Orca is running. It needs a desktop
 with a StatusNotifier tray (Cinnamon, KDE, or GNOME with the AppIndicator
 extension). Without one, Orca still starts normally.
 
+### Host terminals
+
+Orca's terminals, and the agents launched in them, open on the **host**, in your
+login shell (zsh, bash, fish or whatever `getent passwd` lists for you), not
+inside `orca-box`. Tools, `PATH` and dotfiles are the host's, as with a native
+install.
+
+This works because the launcher sets `SHELL` to `orca-host-shell`, and Orca uses
+`$SHELL` when its own **Custom shell** setting is empty. The setting wins when
+it is set, so you can still choose:
+
+| Custom shell | Terminals open |
+|---|---|
+| *(empty)* | on the host, in your login shell (the default) |
+| `/usr/bin/orca-host-zsh` or `/usr/bin/orca-host-bash` | on the host, in that shell |
+| `/bin/bash` | inside `orca-box` |
+
+Leave **Custom args** empty, or `-l` for a login shell. Don't set Custom shell
+to `distrobox-host-exec` itself: agents launched from Orca's menu ignore Custom
+args and pass `-l` straight to it, which fails with `ERROR: Invalid flag '-l'`.
+
+Going to the host needs `flatpak` installed on the host (see the
+`distrobox-host-exec` notes in the main `AGENTS.md`); without it the terminal
+closes as soon as it opens. Orca only gets the default when started from the
+menu entry or the tray. A bare `distrobox enter orca-box -- /opt/Orca/orca-ide`
+keeps in-box terminals.
+
 ## Updating
 
 Rerun `tools setup orca`, optionally with `ORCA_RELEASE=`, to move to another
@@ -80,13 +108,12 @@ native install and survives `tools setup` rebuilds:
 
 ## Notes
 
-- **Agents run inside `orca-box`.** Orca starts agent CLIs in the box, which
-  sees the same files because `$HOME` is shared. Agents you have exported from
-  other boxes (`claude`, `codex`, `opencode`, `copilot` in `~/.local/bin`) still
-  work: their wrappers notice they are in a different box and go through
-  `distrobox-host-exec` to the right one. That needs `flatpak` on the host; see
-  the `distrobox-host-exec` notes in the main `AGENTS.md`.
-- **`jq` is in the image** for scripts that agents run in Orca's terminals, such
+- **Agents run in Orca's terminals, so on the host by default** (see Host
+  terminals). Agents you have exported from other boxes (`claude`, `codex`,
+  `opencode`, `copilot` in `~/.local/bin`) work there as on any host shell. With
+  in-box terminals they still work: their wrappers notice they are in a
+  different box and go through `distrobox-host-exec` to the right one.
+- **`jq` is in the image** for scripts that agents run in in-box terminals, such
   as a Claude Code status line (`~/.claude/statusline.sh`) that parses its JSON
   input with `jq`. Without it the status line drops the model, token counts and
   5h/7d usage.
@@ -99,8 +126,8 @@ native install and survives `tools setup` rebuilds:
 - **GitHub CLI.** `gh` is in the image for Orca's Tasks view and per-worktree
   PR/CI status. It reads the shared `~/.config/gh`, so a `gh auth login` on the
   host (or in any box) also covers Orca.
-- **Toolchains installed only on the host are not on the box's `PATH`.** Install
-  what agents need with `distrobox enter orca-box -- sudo apt install …` (that
+- **With in-box terminals, toolchains installed only on the host are not on the
+  box's `PATH`.** Install what agents need with `distrobox enter orca-box -- sudo apt install …` (that
   lasts until the next `tools setup`), or use `dev-toolbox`.
 - **File associations.** The package registers Orca for Markdown, CSV and TSV
   files. Those are removed from the exported entry so Orca doesn't take over
