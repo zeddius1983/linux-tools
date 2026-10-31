@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Check every apps/<name>/ against the contract in CLAUDE.md.
+# Check every apps/<name>/ against the contract in AGENTS.md.
 #
 # This is a ratchet, not a gate: rules that the tree does not fully satisfy yet
 # carry an explicit list of the apps that predate them (LEGACY_* below). A new
@@ -17,14 +17,14 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
 APPS_DIR="$ROOT/apps"
 
-# Apps that predate the "every app has a README" rule (CLAUDE.md, "Adding a new
+# Apps that predate the "every app has a README" rule (AGENTS.md, "Adding a new
 # app"). The dashboard renders README.md in its info panel, so each of these is
 # an empty panel for that app.
 LEGACY_NO_README=()
 
 # Apps whose Dockerfile still has an unqualified FROM. Podman has no
 # unqualified-search registries configured, so these depend on the host having
-# one set up (CLAUDE.md, "Known pitfalls").
+# one set up (AGENTS.md, "Known pitfalls").
 LEGACY_UNQUALIFIED_FROM=()
 
 # `tools list` prints descriptions in a 30-character column. The dashboard sizes

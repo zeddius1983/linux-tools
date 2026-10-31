@@ -52,7 +52,7 @@ has_chrome_box() {
 
 # The FIRST distrobox-host-exec call in a freshly created box returns nothing at
 # all while it bootstraps its host-spawn helper (see the distrobox-host-exec
-# pattern in CLAUDE.md). A probe run as that first call therefore reports "no
+# pattern in AGENTS.md). A probe run as that first call therefore reports "no
 # chrome-box" on every brand-new install and silently downgrades to xdg-open.
 # Burn a throwaway call, then probe with one retry.
 distrobox-host-exec true >/dev/null 2>&1 || true
