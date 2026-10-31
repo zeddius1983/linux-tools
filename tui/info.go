@@ -22,10 +22,17 @@ type infoPanel struct {
 	// notes switches the panel from the README to the release notes of the
 	// versions an update would bring (key n).
 	notes bool
+	// notesCache holds the notes mode's renderings; see releaseNotes.
+	notesCache map[string]renderedNotes
 }
 
 func newInfoPanel(appsDir string, icons iconSet) *infoPanel {
-	return &infoPanel{appsDir: appsDir, icons: icons, cache: map[string]string{}}
+	return &infoPanel{
+		appsDir:    appsDir,
+		icons:      icons,
+		cache:      map[string]string{},
+		notesCache: map[string]renderedNotes{},
+	}
 }
 
 // readme returns the rendered README for an app, or a placeholder.

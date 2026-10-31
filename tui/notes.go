@@ -2,25 +2,44 @@ package main
 
 import (
 	"fmt"
+	"hash/fnv"
 	"strings"
 	"time"
 )
+
+// renderedNotes is one app's rendered notes at one width, with a hash of the
+// markdown it was rendered from.
+type renderedNotes struct {
+	sum uint64
+	out string
+}
 
 // releaseNotes renders the info panel's notes mode: every release between the
 // installed one and the newest, newest first, so skipping three releases shows
 // all three; or, when there is nothing newer, the installed release's own
 // notes.
+//
+// The markdown is rebuilt on every call (it is cheap); only the glamour render
+// is cached, and only while the markdown is unchanged. The check is on the
+// content itself: a rebuild between two equal-length tags, or a refresh that
+// swaps notes for others of the same size, changes it without changing its
+// length. One entry per app and width, replaced rather than added to, so
+// repeated refreshes do not accumulate renderings.
 func (p *infoPanel) releaseNotes(a App, upd *appUpdate, width int) string {
 	src := notesMarkdown(a, upd)
-	key := fmt.Sprintf("notes:%s@%d:%d", a.Name, width, len(src))
-	if v, ok := p.cache[key]; ok {
-		return v
+	h := fnv.New64a()
+	h.Write([]byte(src))
+	sum := h.Sum64()
+
+	key := fmt.Sprintf("%s@%d", a.Name, width)
+	if c, ok := p.notesCache[key]; ok && c.sum == sum {
+		return c.out
 	}
 	out, err := renderMarkdown(src, width)
 	if err != nil {
 		out = styWarn.Render("could not render release notes: " + err.Error())
 	}
-	p.cache[key] = out
+	p.notesCache[key] = renderedNotes{sum: sum, out: out}
 	return out
 }
 
