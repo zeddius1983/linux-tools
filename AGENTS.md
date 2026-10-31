@@ -366,3 +366,35 @@ Distribution is a GitHub Release per CalVer tag; full detail in
 - **`distrobox-host-exec` needs `curl` or `wget` in the container** to bootstrap its own `host-spawn` helper binary on a fresh box (it's installed per-container, not shared via `$HOME`, so every new box needs this at least once). Without either, the very first `distrobox-host-exec` call in a box silently fails: the wrapper script exits early under its own `set -o errexit`, and if the caller also uses `set -e` (common in this repo's wrapper scripts), the failure can look like nothing happened at all — no error text, just an early return. Symptom to watch for: a script that calls `distrobox-host-exec sudo insmod ...` (or similar) prints its "doing X..." message and then returns with no further output, and `dmesg` shows no corresponding kernel-side attempt (confirming the failure happened before reaching the host command at all). Any minimal/from-scratch base image (Arch, slim Ubuntu, etc.) is exposed to this — install `curl` alongside whatever else the app needs.
 - **Electron/Chromium apps escape the box's cgroup**: they move themselves into their own `app-<name>-<pid>.scope` over the shared session bus, so `distrobox rm --force` (which only kills the container's `libpod-<id>.scope`) leaves them running on the deleted image, and `podman ps` no longer shows anything. `stop_box_processes` (`lib/helpers.sh`) stops them before `tools setup`/`tools rm` remove a box, matching processes by the container ID in `/proc/<pid>/root/run/.containerenv`. Any new removal path must call it first. Orca is where this showed up: its terminal daemon reconnected a relaunched Orca to the old box (see `apps/orca/.memory.md`).
 - **Don't let a trailing `|| true` swallow failures from an earlier `&&` in the same `RUN`**: `cmd1 && cmd2 || true` masks a `cmd1` failure just as much as a `cmd2` failure, because `&&`/`||` chain left-to-right at the same precedence (`(cmd1 && cmd2) || true`, not `cmd1 && (cmd2 || true)`). If only `cmd2` (e.g. a best-effort cache-clean step) should be allowed to fail, wrap it explicitly: `cmd1 && (cmd2 || true)`. Otherwise a broken `cmd1` — like a pacman install with a typo'd package name — reports success and commits an image layer that's silently missing everything it was supposed to install.
+
+## Code Review Rules
+
+Deterministic checks (shellcheck, `scripts/lint-apps.sh`, Go tests) run in CI;
+these rules cover what they cannot see.
+
+### Removing and rebuilding boxes
+
+- Flag any new path that removes a box (`distrobox rm`, `podman rm`, image removal) without first stopping the box's escaped processes. Electron/Chromium apps leave the container's cgroup, so `distrobox rm --force` leaves them running on the deleted image and a relaunch reconnects to it.
+  Safe path: call `stop_box_processes` before removing, as `tools setup` and `tools rm` do.
+- Flag destructive steps that run before user input is validated. A bad `KEY=value` or wizard answer must fail before the existing box or image is removed, not after.
+
+### Host access from a box
+
+- Flag stderr redirected away from any `distrobox-host-exec sudo ...` call (`2>/dev/null`, `&>/dev/null` on the call itself). Each call can prompt for a password separately, and hiding the prompt makes the command silently never run.
+  Safe path: keep `|| true` if failure is acceptable, but leave stderr attached. Redirecting a backgrounded daemon's output *inside* `sudo bash -c "..."` is fine.
+- Flag scripts that run on both sides without checking where they are. `distrobox-host-exec` exits 126 on the host, and host-only commands (`tools`, `podman`, `distrobox`) are missing in a box.
+  Safe path: branch on `[ -f /run/.containerenv ]`.
+
+### Release installs
+
+- Flag anything that writes or links a path derived from `SCRIPT_DIR` (or otherwise inside `versions/<ver>/`) into the user's environment: `~/.local/bin`, `.desktop` `Icon=`/`Exec=`, shell rc files. `tools update` prunes old version directories, so the link dies after the next update.
+  Safe path: go through `<root>/current`, or copy the file out, as bundled icons are.
+
+### Dockerfiles and shell
+
+- Flag `cmd1 && cmd2 || true` in a `RUN` where only `cmd2` is meant to be best-effort. It also hides a failed `cmd1`, committing an image layer that silently lacks what it was meant to install.
+  Safe path: `cmd1 && (cmd2 || true)`.
+- Flag `((i++))` (and other post-increments starting from zero) in scripts under `set -e`; the first evaluation returns status 1 and ends the script.
+  Safe path: `((++i))`.
+- Flag an `app:` export whose `.desktop` file is written by the Dockerfile rather than installed by a package; `distrobox-export --app` cannot find it.
+  Safe path: a `gui:` export with a wrapper in `/usr/bin/`.
