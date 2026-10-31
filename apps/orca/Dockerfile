@@ -96,3 +96,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY icon.png /usr/share/orca-tray/orca-tray.png
 COPY orca-ide-launch orca-tray /usr/bin/
 RUN chmod 755 /usr/bin/orca-ide-launch /usr/bin/orca-tray
+
+# orca-host-shell: runs the host user's login shell (orca-host-zsh/-bash: a fixed
+# one). orca-ide-launch sets SHELL to it, so Orca's terminals open on the host
+# instead of in this box. One script; the name it is called by picks the shell.
+COPY orca-host-shell /usr/bin/
+RUN chmod 755 /usr/bin/orca-host-shell \
+    && ln -s orca-host-shell /usr/bin/orca-host-zsh \
+    && ln -s orca-host-shell /usr/bin/orca-host-bash

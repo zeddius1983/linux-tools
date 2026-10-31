@@ -10,6 +10,13 @@
 # Best effort on purpose: a desktop with no StatusNotifier host, or a missing
 # indicator library, must not stop Orca from opening. orca-tray takes a lock
 # and exits quietly if one is already running.
+#
+# SHELL points Orca's terminals at the host: with no Custom shell set in Orca's
+# settings it falls back to $SHELL, so this is a default that the setting still
+# overrides (set it to /bin/bash to get in-box terminals). Exported before the
+# tray starts, so the tray's "Open Orca" inherits it too.
+export SHELL=/usr/bin/orca-host-shell
+
 setsid /usr/bin/orca-tray >/dev/null 2>&1 &
 disown 2>/dev/null || true
 
