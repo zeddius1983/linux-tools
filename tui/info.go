@@ -19,6 +19,9 @@ type infoPanel struct {
 	icons   iconSet // for the distro glyphs in the compatibility badges
 	cache   map[string]string
 	top     int // scroll offset in rendered lines
+	// notes switches the panel from the README to the release notes of the
+	// versions an update would bring (key n).
+	notes bool
 }
 
 func newInfoPanel(appsDir string, icons iconSet) *infoPanel {
@@ -81,8 +84,12 @@ func renderMarkdown(src string, width int) (string, error) {
 // view renders the panel for one app: the rendered README, nothing else.
 // Image/box state lives in the table columns, so repeating it here would only
 // steal rows from the README.
-func (p *infoPanel) view(a App, width, height int) string {
-	body := strings.Split(p.readme(a.Name, width), "\n")
+func (p *infoPanel) view(a App, upd *appUpdate, width, height int) string {
+	src := p.readme(a.Name, width)
+	if p.notes {
+		src = p.releaseNotes(a, upd, width)
+	}
+	body := strings.Split(src, "\n")
 
 	if p.top > len(body)-height {
 		p.top = len(body) - height
@@ -106,7 +113,7 @@ func (p *infoPanel) view(a App, width, height int) string {
 	return strings.Join(lines, "\n")
 }
 
-// scrollInfo reports whether the README overflows the panel, for a hint.
+// canScroll reports whether the README overflows the panel, for a hint.
 func (p *infoPanel) canScroll(a App, width, height int) bool {
 	return len(strings.Split(p.readme(a.Name, width), "\n")) > height
 }

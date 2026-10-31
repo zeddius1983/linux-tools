@@ -107,13 +107,14 @@ would be cut short by its own resets.
 | `←`/`h` `→`/`l`, `tab`/`shift+tab` | previous / next category |
 | `g` / `end` | first / last row |
 | `PgDn` / `PgUp` | scroll the README panel |
+| `n` | switch the panel between the README and release notes (see [Update check](#update-check)) |
 | wheel | scroll the pane under the pointer — README on the right, app list on the left |
 | `/` | filter within the category |
 | `⏎` / `s` | setup — the primary action: wizard, then the review screen |
 | `b` `c` | build · create (wizard first when the app has pages for them) |
 | `e` `r` | export · rm — run immediately |
 | `o` | open a shell in the box |
-| `R` | reload app and container state |
+| `R` | reload app and container state, and recheck updates bypassing the cache |
 | `?` | toggle help |
 | `q` / `esc` | quit |
 
@@ -333,6 +334,42 @@ Each app carries a one-cell glyph beside its name saying where it runs:
 | containerised (20 of 23) | Docker (`--ascii`: `◆`) |
 | host-only (`shell-toolbox`, `nvidia-acs-service`, `nvidia-cdi-service`) | the host distro's logo, e.g. Mint (`--ascii`: `⌂`) |
 
+## Update check
+
+For every installed app with a release picker, the dashboard works out in the
+background whether the picker now offers something newer than what is
+installed. Nothing waits on it: the table draws immediately and the markers
+arrive as each app's check finishes.
+
+- **Installed** comes from the install record (`~/.local/state/linux-tools/installed/<app>`),
+  written by `record_install` in `lib/commands.sh` after every build from the
+  version the Dockerfile wrote to `/usr/share/linux-tools/release` (the
+  convention is in `CLAUDE.md`, "Release pickers record what they installed").
+  A record whose `IMAGE_ID` is not the current image's is ignored, and an image
+  built before records existed has none — those apps show nothing.
+- **Available** is the app's own `.buildarg` pages, listed exactly as the picker
+  would list them (`versionItems` in `updates.go`): a `releases|` page's one API
+  call, or the page's `items-cmd`. Notes for an `items-cmd` page are fetched
+  afterwards, through its `notes-repo|`, for the newer releases only.
+- **Newer** is decided in `track` (`installed.go`): the candidates are items of
+  the same tag prefix as the installed one (llama-cpp's `v…` Release page and
+  `b…` Build page are separate tracks), compared numerically — feed order is
+  publish order, and opencode publishes `v1.19.5` after `v2.2.0`. Pre-releases
+  only count for a pre-release install, or when the track has nothing else
+  (every llama.cpp `b####` is a GitHub pre-release). `latest`, aliases and
+  `extra|` values never count; an install *of* one (`master`, `nightly`) shows
+  as tracking a branch.
+
+Answers are cached per app in `~/.cache/linux-tools/updates/<app>.json` for six
+hours, keyed by the installed release so a rebuild recomputes at once; failures
+are not cached. `R` rechecks everything, ignoring the cache.
+
+The footer shows `installed → latest`, `installed (latest)` or
+`installed (checking…)`. `n` switches the info panel to notes mode: every release
+between installed and latest, newest first, or the installed release's own
+notes when it is current. The picker lists at most ten versions, so an install
+more than ten behind shows the ten newest.
+
 ## State columns
 
 IMAGE and BOX are glyph-only — two states and three respectively, few enough
@@ -341,6 +378,7 @@ that a word adds nothing:
 | Column | Glyph | Meaning |
 |---|---|---|
 | IMAGE | `✓` | image built |
+| IMAGE | `↑` | image built, and its release picker offers a newer version |
 | IMAGE | `✗` | not built |
 | BOX | `●` | box exists and is running |
 | BOX | `○` | box exists, stopped |

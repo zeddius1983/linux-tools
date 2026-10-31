@@ -293,6 +293,14 @@ Two `.buildarg` pages sharing an `arg|` (llama-cpp's Release and Build views) ar
 
 Apps with an `unmaintained` marker are greyed out in the dashboard, sorted to the bottom of their tab, and flagged in the footer and in `tools list`. They still install normally.
 
+### Release pickers record what they installed
+
+The dashboard marks an installed app whose release picker now offers a newer version (`↑` in the IMAGE column, `n` for the notes of every release in between). For that it has to know what is installed, and `latest` is only resolved *inside* the build — so **every app with a `.buildarg` page writes the version it actually installed to `/usr/share/linux-tools/release`**, one line, in the picker's own form (`v1.4.0` if the picker lists `v1.4.0`, `0.166.0` if it lists bare versions). Resolve it from the installed thing itself where possible (`--version`, `package.json`, `dpkg-query`, package metadata), not from the build arg, which may be `latest`. A moving ref (`master`, `nightly`) is written as itself; the dashboard shows those as "tracks master" and never as out of date. `scripts/lint-apps.sh` fails an app with a picker and no release file.
+
+`cmd_build` reads the file back right after the build (`record_install`, `lib/commands.sh`) and writes `${XDG_STATE_HOME:-~/.local/state}/linux-tools/installed/<app>`: `RELEASE`, `ARGS` (the build args), `VARIANT`, `IMAGE_ID`, `BUILT_AT`. The dashboard ignores a record whose `IMAGE_ID` is not the current image. An app built before records existed has none and shows no update state until its next build.
+
+What counts as "newer" is decided by the picker, not by GitHub: the candidates are the page's own items with the same tag prefix as the installed one (so llama-cpp's `v…` and `b…` pages are separate tracks), compared numerically, with pre-releases offered only to a pre-release install unless the track has nothing else. Keep a picker's list honest — a `tag-match|` for repos that publish several products — and the update check is honest too. Details: `tui/installed.go`, `tui/updates.go`, and "Update check" in `tui/README.md`.
+
 ## Working practices
 
 - **Read `.memory.md` first**: before touching any existing app, read `apps/<name>/.memory.md`. It contains implementation context, pitfalls, and decisions that are not obvious from the code.

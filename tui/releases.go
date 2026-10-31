@@ -161,6 +161,7 @@ func releaseItems(rels []ghRelease, repo string) []Item {
 			Desc:       releaseDesc(r),
 			Notes:      r.Body,
 			NotesTitle: releaseTitle(r, repo),
+			Prerelease: r.Prerelease,
 		})
 	}
 	return items
@@ -311,6 +312,7 @@ func attachNotes(ctx context.Context, p Page, items []Item) {
 		r, ok := byTag[notesTag(p.NotesTag, items[i].Name)]
 		if ok {
 			items[i].Notes, items[i].NotesTitle = r.Body, releaseTitle(r, p.NotesRepo)
+			items[i].Prerelease = r.Prerelease
 			if items[i].Desc == "" {
 				items[i].Desc = releaseDesc(r)
 			}

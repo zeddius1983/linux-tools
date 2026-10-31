@@ -44,6 +44,8 @@ Apps with choices ask them first. Nothing is built, removed or installed until y
 
 ![A wizard page listing FastFlowLM releases with the selected release's notes beside them](docs/images/wizard-release.png)
 
+**…and see when there is a newer one.** Once an app with a release picker is installed, the dashboard checks in the background (cached for six hours) whether the picker now offers a newer version. If it does, the app's IMAGE column shows `↑`, the footer shows `v1.2.0 → v1.4.0`, and `n` switches the side panel from the README to the release notes of every version in between. Versions are compared only within the track you installed from: a stable install isn't offered alphas, and `master`/`nightly` installs aren't compared at all.
+
 **3. Review, then go.** The last screen spells out what will be added, what will be removed, and the command it is about to run.
 
 ![The review screen listing three tools to install before the run starts](docs/images/wizard-review.png)
