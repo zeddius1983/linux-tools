@@ -442,14 +442,17 @@ cmd_build_tui() {
 
 # ── Dashboard ────────────────────────────────────────────────────────────────
 # A missing binary is built on the spot (the same ladder `tools install` runs),
-# so a clone that was never installed still opens the dashboard.
+# so a clone that was never installed still opens the dashboard. So is a stale
+# one in a checkout: after a pull or a local edit under tui/, launching the old
+# binary silently runs the old dashboard, which looks exactly like the new code
+# not working. A release install's shipped binary always counts as current
+# (tui_bin_is_current), so this never rebuilds there; a failed rebuild keeps
+# the old binary and still opens it.
 #
 #   LT_TUI_ASCII=1     plain Unicode markers instead of Nerd Font glyphs
 #   LT_TUI_NO_MOUSE=1  no mouse reporting, so the terminal keeps text selection
 cmd_menu() {
-    if [[ ! -x "$TUI_BIN" ]]; then
-        cmd_build_tui
-    fi
+    tui_bin_is_current || cmd_build_tui
     if [[ ! -x "$TUI_BIN" ]]; then
         echo "Error: the dashboard could not be built (see above)." >&2
         echo "       Every action is available as 'tools <command> <app>'; see 'tools help'." >&2

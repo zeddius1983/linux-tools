@@ -272,7 +272,7 @@ Distrobox mounts the host's `$HOME` inside the container. This means:
 
 `./tools.sh` with no arguments opens the **Go dashboard** in `tui/` (Bubble Tea v2, modelled on `gh-dash`): category tabs, an app table, a rendered-README panel, native wizard pages and a keybinding footer. `tools install` builds the binary — host Go if present, otherwise a throwaway `golang:1.25-alpine` container — and never fails the install if it cannot. See [`tui/README.md`](tui/README.md) and [`docs/tui-migration.md`](docs/tui-migration.md).
 
-There is no menu fallback any more: the old `whiptail` menu (`lib/tui.sh`) and its `LT_NO_GO_TUI` switch are gone. If the binary is missing, `tools` runs the build ladder once more and, if that fails too, points at the command-line interface (`tools <command> <app>`), which never depended on the dashboard. Nothing uses `whiptail` any more.
+There is no menu fallback any more: the old `whiptail` menu (`lib/tui.sh`) and its `LT_NO_GO_TUI` switch are gone. If the binary is missing — or, in a checkout, older than any `tui/*.go`, `go.mod` or `go.sum` (`tui_bin_is_current`), so a pull or a local edit never leaves you running the old dashboard — `tools` runs the build ladder once more and, if that fails too, points at the command-line interface (`tools <command> <app>`), which never depended on the dashboard. Nothing uses `whiptail` any more.
 
 ### Wizard pages and command-line parameters
 
