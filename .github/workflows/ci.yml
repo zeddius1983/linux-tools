@@ -58,7 +58,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # Checks every apps/<name>/ against the contract in CLAUDE.md. Rules the
+      # Checks every apps/<name>/ against the contract in AGENTS.md. Rules the
       # tree does not fully satisfy yet are grandfathered by name inside the
       # script, so this fails on new violations only.
       - run: |

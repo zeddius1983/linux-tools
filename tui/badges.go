@@ -14,7 +14,7 @@ import (
 // they are drawn as two-tone pills, so the same fact reaches both audiences
 // from one source — the README — with no per-app metadata file to drift.
 //
-// The row is raw HTML in the README on purpose (see CLAUDE.md): glamour
+// The row is raw HTML in the README on purpose (see AGENTS.md): glamour
 // expands a markdown image into three lines of "Image: <alt> -> <full URL>",
 // which would bury the app's description under shields.io URLs. Raw HTML it
 // skips entirely, which is why we lift the badges out ourselves.

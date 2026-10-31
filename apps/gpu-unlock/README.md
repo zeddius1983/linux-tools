@@ -33,7 +33,7 @@ kernel upgrades.
 - NVIDIA Container Toolkit and a working `/etc/cdi/nvidia.yaml`, for the bundled
   CUDA benchmark. The box requests `--device nvidia.com/gpu=all`.
 - `flatpak` on the host and a working `distrobox-host-exec`, as documented in
-  `CLAUDE.md`, for installing artifacts and changing boot settings from the box.
+  `AGENTS.md`, for installing artifacts and changing boot settings from the box.
 - With enforced Secure Boot signatures, the compiled module must be signed with
   an enrolled key before loading. Automatic key enrollment/signing is not included.
 

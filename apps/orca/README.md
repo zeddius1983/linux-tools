@@ -85,7 +85,7 @@ native install and survives `tools setup` rebuilds:
   other boxes (`claude`, `codex`, `opencode`, `copilot` in `~/.local/bin`) still
   work: their wrappers notice they are in a different box and go through
   `distrobox-host-exec` to the right one. That needs `flatpak` on the host; see
-  the `distrobox-host-exec` notes in the main `CLAUDE.md`.
+  the `distrobox-host-exec` notes in the main `AGENTS.md`.
 - **`jq` is in the image** for scripts that agents run in Orca's terminals, such
   as a Claude Code status line (`~/.claude/statusline.sh`) that parses its JSON
   input with `jq`. Without it the status line drops the model, token counts and

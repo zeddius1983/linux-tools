@@ -107,7 +107,7 @@ tools update --version v2026.09.1
 |---|---|
 | `shellcheck` | `tools.sh`, `install.sh`, `lib/`, `scripts/`, the completion script |
 | `dashboard` | `gofmt`, `go vet`, `go test`, and a cross-compile for both arches |
-| `app contract` | `scripts/lint-apps.sh` — the `apps/` rules from CLAUDE.md |
+| `app contract` | `scripts/lint-apps.sh` — the `apps/` rules from AGENTS.md |
 | `install.sh smoke test` | packages two versions, installs one, upgrades, rolls back |
 
 `scripts/lint-apps.sh` is a **ratchet**. Rules the tree does not fully satisfy

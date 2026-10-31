@@ -3,7 +3,7 @@
 **Status:** complete — `tools` opens the dashboard, and whiptail is gone
 entirely: the menu (`lib/tui.sh`), its `LT_NO_GO_TUI` gate, and the wizard
 dialogs a direct `tools setup` used to show. The command line now takes wizard
-answers as `KEY=value` arguments instead (see CLAUDE.md, *Wizard pages and
+answers as `KEY=value` arguments instead (see AGENTS.md, *Wizard pages and
 command-line parameters*). See [`tui/`](../tui). The sections below describe
 the migration as it was planned and are kept for the reasoning; function names
 and line numbers in them refer to code that has since been removed.
@@ -27,7 +27,7 @@ outside itself.
 
 **Rendering limits leaking into project policy.** `_fw` (`lib/tui.sh:31`) pads
 and truncates every menu row to fixed 26/34-column fields because whiptail has
-no table support. That 26-character budget is written into `CLAUDE.md` as a rule
+no table support. That 26-character budget is written into `AGENTS.md` as a rule
 every new app must follow.
 
 **A fragile selection round-trip.** The rendered detail line doubles as the
@@ -310,5 +310,5 @@ terminal's own wheel and text selection.
 - **Non-interactive parity.** `tools setup <app>` from a script must keep taking
   build defaults; the state-file loader treats "no file" as "no selections",
   which holds today and must not regress.
-- **9 of 23 apps have no `README.md`** despite `CLAUDE.md` requiring one. The
+- **9 of 23 apps have no `README.md`** despite `AGENTS.md` requiring one. The
   info panel makes the gap visible; it does not cause it.

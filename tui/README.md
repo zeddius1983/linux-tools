@@ -312,7 +312,7 @@ footer stops offering `PgDn`/`PgUp` when there is nothing to scroll.
 Shows only the rendered `apps/<name>/README.md` — image and box state live in
 the table columns, so repeating them here would just cost README rows. Rendered
 with Glamour, cached per app and width, scrollable. Apps without a README show a
-placeholder — currently 9 of 23 apps have none, even though `CLAUDE.md`
+placeholder — currently 9 of 23 apps have none, even though `AGENTS.md`
 requires one.
 
 ## Running from inside a container
@@ -344,7 +344,7 @@ arrive as each app's check finishes.
 - **Installed** comes from the install record (`~/.local/state/linux-tools/installed/<app>`),
   written by `record_install` in `lib/commands.sh` after every build from the
   version the Dockerfile wrote to `/usr/share/linux-tools/release` (the
-  convention is in `CLAUDE.md`, "Release pickers record what they installed").
+  convention is in `AGENTS.md`, "Release pickers record what they installed").
   A record whose `IMAGE_ID` is not the current image's is ignored, and an image
   built before records existed has none — those apps show nothing.
 - **Available** is the app's own `.buildarg` pages, listed exactly as the picker
