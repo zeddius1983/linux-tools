@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Pi, pinned to this container's Node.
+#
+# npm's own shim is `#!/usr/bin/env node`, which is a trap inside a Distrobox
+# box: $HOME is shared, ~/.local/bin sorts before /usr/bin on PATH, and any
+# OTHER box that ran `distrobox-export --bin node` (dev-toolbox does) owns that
+# name for every box on the machine. `env node` would then re-enter that box,
+# where Pi's entrypoint path doesn't exist. Naming the interpreter avoids it
+# and guarantees the Node >= 22.19 that Pi requires.
+#
+# Pi's own subprocesses hit the same trap: `pi install npm:...` runs `npm`,
+# whose shim is `env node` too, and dev-toolbox exports npm/npx as well. So
+# /usr/bin goes first on PATH for everything Pi starts, keeping npm, npx and
+# node in this box. (The side effect: bash commands Pi runs also prefer the
+# box's own tools over same-named host exports in ~/.local/bin.)
+#
+# The entrypoint path is resolved from npm's shim at image build time.
+export PATH="/usr/bin:$PATH"
+exec /usr/bin/node "$(cat /usr/lib/pi/entrypoint)" "$@"

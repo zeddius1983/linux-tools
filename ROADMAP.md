@@ -34,6 +34,7 @@ Priority order within each section: highest first.
   - Orca launches agent CLIs, and the already-exported ones reach it fine: `distrobox-export --bin` wrappers carry a branch for exactly this — from inside a *different* box they re-dispatch through `distrobox-host-exec`, which lands back on the host wrapper and enters the right box. Verified with `distrobox enter chrome-box -- ~/.local/bin/codex --version`, which prints `codex-cli 0.153.4`. So Orca needs neither the agents baked into its own image nor `host-only` status on that account.
   - What it does inherit is the `distrobox-host-exec` prerequisite chain already documented in CLAUDE.md: `flatpak` on the host, and `curl`/`wget` in the Orca image so `host-spawn` can bootstrap. Both fail silently when missing, so check them first if agents don't launch.
 - [x] `opencode` — AI coding agent CLI (https://opencode.ai/docs); release picker over published `anomalyco/opencode` releases
+- [x] `pi` — minimal, extensible coding agent (https://pi.dev); npm install on NodeSource Node 24, release picker over published `earendil-works/pi` releases, launcher pinned to the box's own Node
 - [ ] `cursor` — AI-powered code editor (Electron)
 - [ ] `windsurf` — Codeium Windsurf editor
 - [ ] `zed` — fast collaborative editor (GPU-rendered)
