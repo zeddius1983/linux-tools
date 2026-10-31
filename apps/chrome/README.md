@@ -37,6 +37,12 @@ box is created. To switch an existing install:
 `tools rm chrome && tools create chrome CHROME_GPU=nvidia && tools export chrome`
 (no rebuild).
 
+**Upgrading from a local `create_flags`:** earlier versions had NVIDIA hosts keep
+an uncommitted `apps/chrome/create_flags`. Delete it (`rm apps/chrome/create_flags`)
+and recreate the box with `CHROME_GPU` instead. While it exists it is used whenever
+no `create_flags.<gpu>` file matches, so `CHROME_GPU=amd` would still get the
+NVIDIA device flags and the EGL override that hides Mesa.
+
 ## What you get
 
 | Entry | What it does |
