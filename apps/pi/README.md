@@ -21,12 +21,13 @@ templates and Pi packages (`pi install npm:...` / `git:...`).
 tools setup pi
 ```
 
-Setup asks one question: **which release** to install. The list is Pi's
-published GitHub releases, newest first (the default). It can also be answered
-on the command line; `tools help pi` lists the releases:
+That installs the newest release without asking anything. To pick one, either
+install from the dashboard, which asks **which release** (Pi's published GitHub
+releases, newest first, with each release's notes beside it), or pass it on the
+command line; `tools help pi` lists the releases:
 
 ```bash
-tools setup pi PI_RELEASE=latest   # or a tag such as v1.4.0
+tools setup pi PI_RELEASE=v1.4.0   # a tag from tools help pi; latest is the default
 ```
 
 ## What you get
@@ -50,7 +51,8 @@ session, and `Enter` while the agent is working sends a steering message.
 
 ## Updating
 
-Rerun `tools setup pi` and pick a newer release. The install step always
+Rerun `tools setup pi` to move to the newest release, or pick one in the
+dashboard or with `PI_RELEASE=<tag>`. The install step always
 re-downloads, so the build cache never keeps an old version. Don't use
 `pi update` for Pi itself: it installs into the image, which is read-only to
 you and replaced on the next rebuild. `pi update --extensions` (packages only)
