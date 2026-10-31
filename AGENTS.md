@@ -2,6 +2,37 @@
 
 This file provides guidance to coding agents (Claude Code, Codex, OpenCode, and others) when working with code in this repository. It is the single source of truth: `CLAUDE.md` only imports it, so edit this file, not that one.
 
+## Contents
+
+- [What this project does](#what-this-project-does)
+- [Runtime environment](#runtime-environment)
+- [Common commands](#common-commands)
+- [Architecture](#architecture)
+  - [App memory file](#app-memory-file)
+  - [Adding a new app](#adding-a-new-app)
+  - [Export types](#export-types)
+  - [Wrapper script pattern](#wrapper-script-pattern)
+  - [Build-environment container pattern](#build-environment-container-pattern)
+  - [Multi-base-image pattern](#multi-base-image-pattern)
+  - [`distrobox-host-exec` pattern](#distrobox-host-exec-pattern)
+  - [Base image selection](#base-image-selection)
+  - [Distrobox first-start packages (`lib/distrobox-deps`)](#distrobox-first-start-packages-libdistrobox-deps)
+  - [Naming conventions](#naming-conventions)
+  - [Distrobox home sharing](#distrobox-home-sharing)
+  - [Icon resolution order](#icon-resolution-order)
+  - [Interactive TUI](#interactive-tui)
+  - [Wizard pages and command-line parameters](#wizard-pages-and-command-line-parameters)
+  - [Release pickers record what they installed](#release-pickers-record-what-they-installed)
+- [Working practices](#working-practices)
+- [Releases](#releases)
+- [Branching policy](#branching-policy)
+- [Known pitfalls](#known-pitfalls)
+- [Code Review Rules](#code-review-rules)
+  - [Removing and rebuilding boxes](#removing-and-rebuilding-boxes)
+  - [Host access from a box](#host-access-from-a-box)
+  - [Release installs](#release-installs)
+  - [Dockerfiles and shell](#dockerfiles-and-shell)
+
 ## What this project does
 
 Packages Linux GUI and CLI applications into [Distrobox](https://distrobox.it/) containers and exports them to the host so they behave like natively installed apps. Each app lives under `apps/<name>/` and is managed via `tools.sh`.
