@@ -322,10 +322,14 @@ type actionDoneMsg struct {
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// An open wizard owns the screen and every key until it is confirmed or
-	// cancelled; only the action result, which arrives after it has closed,
-	// bypasses it.
+	// cancelled. Only results that describe the dashboard rather than the
+	// wizard bypass it: the action result, which arrives after it has closed,
+	// and an update check that finishes while it is open (dropped, it would
+	// leave the app at "checking…" until the next refresh).
 	if m.wiz != nil {
-		if _, ok := msg.(actionDoneMsg); !ok {
+		switch msg.(type) {
+		case actionDoneMsg, appUpdateMsg:
+		default:
 			return m.wizardUpdate(msg)
 		}
 	}

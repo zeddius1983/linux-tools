@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -195,10 +196,21 @@ func versionItems(ctx context.Context, p Page) ([]Item, error) {
 		return nil, err
 	}
 	var items []Item
+	versions := 0
 	for _, l := range strings.Split(string(out), "\n") {
 		if l = strings.TrimSpace(l); l != "" {
 			items = append(items, Item{Name: l})
+			if !p.moving(l) {
+				versions++
+			}
 		}
+	}
+	// The items-cmd pipelines print their "latest"/"nightly" entry before the
+	// fetch and run without pipefail, so an unreachable GitHub still exits 0
+	// with nothing but that entry. Report it as the failure it is, so the
+	// answer is not cached for appUpdateEvery and the next launch tries again.
+	if versions == 0 {
+		return nil, fmt.Errorf("%s: no versions listed", p.ArgName)
 	}
 	return items, nil
 }
