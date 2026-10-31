@@ -3,3 +3,4 @@
 # bin     - export binary to ~/.local/bin
 app:orca-ide:Orca
 bin:orca-ide
+bin:orca-tray

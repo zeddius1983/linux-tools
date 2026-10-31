@@ -77,5 +77,21 @@ RUN echo "==> Installing Orca ${ORCA_RELEASE} (cache-bust: ${CACHE_BUST})" \
     && rm -f /tmp/orca.deb \
     && rm -rf /var/lib/apt/lists/* \
     && test -x /usr/bin/orca-ide \
-    && sed -i 's@^MimeType=.*@MimeType=x-scheme-handler/orca;@' \
-        /usr/share/applications/orca-ide.desktop
+    && sed -i -e 's@^MimeType=.*@MimeType=x-scheme-handler/orca;@' \
+              -e 's@^Exec=/opt/Orca/orca-ide@Exec=/usr/bin/orca-ide-launch@' \
+        /usr/share/applications/orca-ide.desktop \
+    && grep -q '^Exec=/usr/bin/orca-ide-launch ' /usr/share/applications/orca-ide.desktop
+
+# Tray icon (orca-tray) showing that Orca's terminal daemon is still running
+# after the window closes, with a Quit Completely item; Orca draws none on
+# Linux. The menu entry's Exec is pointed at orca-ide-launch above, which starts the
+# tray next to the window. PyGObject comes from the system python3. The icon is
+# staged into $HOME by the tray at startup, because the panel that draws it runs
+# on the host.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3-gi gir1.2-gtk-3.0 \
+        gir1.2-ayatanaappindicator3-0.1 libayatana-appindicator3-1 \
+    && rm -rf /var/lib/apt/lists/*
+COPY icon.png /usr/share/orca-tray/orca-tray.png
+COPY orca-ide-launch orca-tray /usr/bin/
+RUN chmod 755 /usr/bin/orca-ide-launch /usr/bin/orca-tray

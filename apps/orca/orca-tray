@@ -1,0 +1,309 @@
+#!/usr/bin/python3
+"""System tray icon for Orca (exported to the host as `orca-tray`).
+
+Orca hosts its terminals in a background daemon (`daemon-entry.js`) that keeps
+running after the window closes or a plain Quit, so agents and shells survive a
+restart. On Linux Orca draws no tray icon (it only creates one on win32/darwin),
+so once the window is gone nothing shows that sessions are still alive, and
+the only way to stop them is relaunching Orca to pick "Quit Completely…".
+This puts that status and a Quit Completely item in the notification area.
+
+Started by orca-ide-launch, alongside the window. It closes itself once neither
+the app nor the daemon is running, so it never lingers as a dead icon.
+
+Orca processes are recognised by /proc/<pid>/exe == /opt/Orca/orca-ide in this
+box's mount namespace. The namespace check matters: Distrobox shares the host
+PID namespace, and Orca moves itself into its own systemd scope, so a stale
+Orca left over from a previous image is visible here too and must not be
+counted, or stopped, as this box's.
+"""
+
+import fcntl
+import os
+import shutil
+import signal
+import subprocess
+import sys
+import threading
+import time
+
+import gi
+
+gi.require_version("Gtk", "3.0")
+# Ayatana is the maintained fork and what Ubuntu 24.04 ships; the older
+# AppIndicator3 name is still what some desktops provide.
+try:
+    gi.require_version("AyatanaAppIndicator3", "0.1")
+    from gi.repository import AyatanaAppIndicator3 as AppIndicator
+except (ValueError, ImportError):
+    gi.require_version("AppIndicator3", "0.1")
+    from gi.repository import AppIndicator3 as AppIndicator
+
+from gi.repository import GLib, Gtk  # noqa: E402
+
+ORCA_EXE = "/opt/Orca/orca-ide"
+ICON_NAME = "orca-tray"
+ICON_SRC = "/usr/share/orca-tray/orca-tray.png"
+# In shared $HOME, not under /usr: StatusNotifierItem hands the panel only an
+# icon name and a theme path, and the panel (xapp-sn-watcher, plasmashell, …)
+# runs on the HOST, where nothing this container installs under /usr exists.
+# Same trap as comfyui-tray (see apps/comfyui/.memory.md).
+STATE_DIR = os.path.expanduser("~/.local/share/orca-tray")
+ICON_DIR = os.path.join(STATE_DIR, "icons")
+LOCK_FILE = os.path.join(STATE_DIR, "tray.lock")
+POLL_SECONDS = 3
+# orca-ide-launch starts the tray a moment before Orca itself is up, so "nothing
+# running" only closes the tray after this much uptime.
+STARTUP_GRACE = 30
+# How long Orca and its daemon get to shut down on SIGTERM before SIGKILL.
+STOP_TIMEOUT = 10
+
+
+def install_icon():
+    """Stage the icon in shared $HOME, where the host's panel can read it.
+
+    Copied on every start so a rebuilt image's icon takes effect. Failure is
+    not fatal: a tray with a missing icon is still a working menu.
+    """
+    try:
+        os.makedirs(ICON_DIR, exist_ok=True)
+        shutil.copyfile(ICON_SRC, os.path.join(ICON_DIR, ICON_NAME + ".png"))
+    except OSError as e:
+        print(f"orca-tray: could not stage icon: {e}", file=sys.stderr)
+
+
+def single_instance():
+    """Hold a lock for the session, or exit if another tray already has it.
+
+    The lock fd is intentionally leaked: it must stay open for the process
+    lifetime, and the kernel drops it on exit however we die.
+    """
+    os.makedirs(STATE_DIR, exist_ok=True)
+    fd = os.open(LOCK_FILE, os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        print("orca-tray: already running", file=sys.stderr)
+        sys.exit(0)
+    return fd
+
+
+def _read(path):
+    try:
+        with open(path, "rb") as f:
+            return f.read()
+    except OSError:
+        return None
+
+
+def snapshot():
+    """Orca's processes in this box: (main, daemon, tree).
+
+    main and daemon are pid lists. tree is every pid descended from them,
+    themselves included: renderers, helpers, and the shells and agents in the
+    daemon's terminals.
+    """
+    try:
+        own_ns = os.readlink("/proc/self/ns/mnt")
+    except OSError:
+        return [], [], []
+    parent = {}
+    main, daemon = [], []
+    for name in os.listdir("/proc"):
+        if not name.isdigit():
+            continue
+        pid = int(name)
+        stat = _read(f"/proc/{pid}/stat")
+        if not stat:
+            continue
+        # ppid is the 2nd field after the parenthesised comm, which may itself
+        # contain spaces or parentheses.
+        try:
+            parent[pid] = int(stat.rsplit(b")", 1)[1].split()[1])
+        except (IndexError, ValueError):
+            continue
+        try:
+            if os.readlink(f"/proc/{pid}/exe") != ORCA_EXE:
+                continue
+            if os.readlink(f"/proc/{pid}/ns/mnt") != own_ns:
+                continue
+        except OSError:
+            continue
+        # Matched on the whole command line, not per argument: Chromium
+        # rewrites its children's argv into one space-separated string, so
+        # "--type=zygote" is not an argument of its own there.
+        cmdline = _read(f"/proc/{pid}/cmdline") or b""
+        if b"daemon-entry.js" in cmdline:
+            daemon.append(pid)
+        elif b"--type=" not in cmdline and b".js" not in cmdline:
+            main.append(pid)
+    roots = set(main) | set(daemon)
+    tree = []
+    for pid in parent:
+        p, seen = pid, 0
+        while p > 1 and seen < 64:
+            if p in roots:
+                tree.append(pid)
+                break
+            p, seen = parent.get(p, 0), seen + 1
+    return main, daemon, tree
+
+
+def session_count(daemon, tree):
+    """Terminal sessions: the daemon's direct children that aren't Orca itself."""
+    count = 0
+    for pid in tree:
+        stat = _read(f"/proc/{pid}/stat")
+        try:
+            ppid = int(stat.rsplit(b")", 1)[1].split()[1])
+            if ppid in daemon and os.readlink(f"/proc/{pid}/exe") != ORCA_EXE:
+                count += 1
+        except (AttributeError, IndexError, ValueError, OSError):
+            continue
+    return count
+
+
+def stop_orca():
+    """Quit Orca and its daemon, taking every terminal session with them.
+
+    SIGTERM, not Orca's own quit: in a packaged build the main process installs
+    no SIGTERM handler that stops the daemon (that path is dev-only), so it is
+    signalled separately. The daemon does handle SIGTERM and shuts its sessions
+    down. Whatever of the tree is still alive after STOP_TIMEOUT is SIGKILLed.
+    """
+    main, daemon, tree = snapshot()
+    for pid in main + daemon:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            pass
+    deadline = time.monotonic() + STOP_TIMEOUT
+    while time.monotonic() < deadline:
+        if not any(os.path.exists(f"/proc/{p}") for p in main + daemon):
+            break
+        time.sleep(0.2)
+    time.sleep(0.5)  # let the PTYs' SIGHUP reach the shells first
+    for pid in tree:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+
+
+def run_detached(argv):
+    subprocess.Popen(
+        argv,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
+
+class Tray:
+    def __init__(self):
+        self.indicator = AppIndicator.Indicator.new_with_path(
+            "orca",
+            ICON_NAME,
+            AppIndicator.IndicatorCategory.APPLICATION_STATUS,
+            ICON_DIR,
+        )
+        self.indicator.set_status(AppIndicator.IndicatorStatus.ACTIVE)
+        self.indicator.set_title("Orca")
+
+        self.menu = Gtk.Menu()
+        self.item_status = Gtk.MenuItem(label="Checking…")
+        self.item_status.set_sensitive(False)
+        self.item_sessions = Gtk.MenuItem(label="")
+        self.item_sessions.set_sensitive(False)
+        self.item_open = Gtk.MenuItem(label="Open Orca")
+        self.item_open.connect("activate", self.on_open)
+        self.item_quit = Gtk.MenuItem(label="Quit Orca Completely…")
+        self.item_quit.connect("activate", self.on_quit)
+
+        for item in (
+            self.item_status,
+            self.item_sessions,
+            Gtk.SeparatorMenuItem(),
+            self.item_open,
+            self.item_quit,
+        ):
+            self.menu.append(item)
+        self.menu.show_all()
+        self.indicator.set_menu(self.menu)
+
+        self.started = time.monotonic()
+        self.busy = False
+        self.sessions = 0
+        self.refresh()
+        GLib.timeout_add_seconds(POLL_SECONDS, self.refresh)
+
+    def refresh(self):
+        if self.busy:
+            return True
+        main, daemon, tree = snapshot()
+        if not main and not daemon:
+            if time.monotonic() - self.started > STARTUP_GRACE:
+                Gtk.main_quit()
+                return False
+            self.item_status.set_label("Orca: starting…")
+            self.item_sessions.hide()
+            return True
+        self.sessions = session_count(daemon, tree)
+        self.item_status.set_label(
+            "Orca: window open" if main else "Orca: window closed"
+        )
+        self.item_sessions.set_label(
+            f"{self.sessions} terminal session(s) running"
+            if daemon else "Terminal daemon: not running"
+        )
+        self.item_sessions.show()
+        return True
+
+    def on_open(self, *_):
+        # Orca holds a single-instance lock, so a second start just raises
+        # the existing window.
+        run_detached([ORCA_EXE])
+
+    def on_quit(self, *_):
+        dialog = Gtk.MessageDialog(
+            transient_for=None,
+            modal=True,
+            message_type=Gtk.MessageType.WARNING,
+            buttons=Gtk.ButtonsType.NONE,
+            text="Quit Orca completely?",
+        )
+        dialog.format_secondary_text(
+            f"This closes Orca and stops {self.sessions} terminal session(s), "
+            "including any agents running in them."
+        )
+        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        dialog.add_button("Stop Sessions and Quit", Gtk.ResponseType.OK)
+        dialog.set_default_response(Gtk.ResponseType.CANCEL)
+        response = dialog.run()
+        dialog.destroy()
+        if response != Gtk.ResponseType.OK:
+            return
+        self.busy = True
+        self.item_status.set_label("Orca: stopping…")
+        self.item_open.set_sensitive(False)
+        self.item_quit.set_sensitive(False)
+
+        def worker():
+            stop_orca()
+            GLib.idle_add(Gtk.main_quit)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+
+def main():
+    single_instance()
+    install_icon()
+    # Let Ctrl-C work when the tray is run from a terminal; GTK would otherwise
+    # swallow it.
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    Tray()
+    Gtk.main()
+
+
+if __name__ == "__main__":
+    main()
