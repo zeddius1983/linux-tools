@@ -10,14 +10,35 @@
 # Arguments go to the shell unchanged. Orca hands its own flags (e.g. `-l`)
 # straight to the shell executable, so this must take them as a shell would;
 # pointing Orca at distrobox-host-exec itself fails with "Invalid flag '-l'".
-# The lookup runs on the host because the box's passwd entry need not match.
-lookup='s=$(getent passwd "$(id -un)" | cut -d: -f7); exec "${s:-/bin/sh}" "$@"'
-case "${0##*/}" in
+# Run both the lookup and PTY repair on the host. The box's passwd entry need
+# not match, and host-spawn's container PTY may not exist in the host's /dev/pts.
+host_shell=$(cat <<'SH'
+case "$0" in
     orca-host-zsh)  set -- /usr/bin/zsh "$@" ;;
     orca-host-bash) set -- /usr/bin/bash "$@" ;;
-    *)              set -- /bin/sh -c "$lookup" orca-host-shell "$@" ;;
+    *)
+        shell=$(getent passwd "$(id -un)" | cut -d: -f7)
+        set -- "${shell:-/bin/sh}" "$@"
+        ;;
 esac
-if [ -f /run/.containerenv ]; then
-    exec /usr/bin/distrobox-host-exec "$@"
+# Only repair terminals whose device name cannot be resolved on the host.
+# Pipes (including Orca's environment capture) must stay noninteractive.
+if [ -t 0 ] && [ -t 1 ] && ! tty >/dev/null 2>&1; then
+    # script -c works on Ubuntu/Mint too, where script has no argv form yet.
+    # Quote every argument, keeping the closing quote inside the substitution
+    # so arguments ending in newlines survive command substitution unchanged.
+    command=exec
+    for arg in env "SHELL=$1" "$@"; do
+        command="$command '$(printf '%s' "$arg" | sed "s/'/'\\\\''/g"; printf "'")"
+    done
+    # Use sh to parse the quoted command, then restore SHELL for the child.
+    # No transcript is saved; -e preserves exit status, -f flushes output.
+    SHELL=/bin/sh exec script -qefc "$command" /dev/null
 fi
 exec "$@"
+SH
+)
+if [ -f /run/.containerenv ]; then
+    exec /usr/bin/distrobox-host-exec /bin/sh -c "$host_shell" "${0##*/}" "$@"
+fi
+exec /bin/sh -c "$host_shell" "${0##*/}" "$@"
