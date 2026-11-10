@@ -224,6 +224,15 @@ check_app() {
     # Warned about, never failed: it is a working note for whoever touches the
     # app next, and a missing one blocks nothing at runtime.
     [[ -f "$d/.memory.md" ]] || printf 'note:   %s: no .memory.md\n' "$app"
+
+    # ── host-paths ──────────────────────────────────────────────────────────
+    # The parser `tools rm` uses; the subshell keeps helpers.sh out of this script.
+    local err
+    # shellcheck source=lib/helpers.sh
+    if [[ -f "$d/host-paths" ]] \
+        && ! err="$(source "$ROOT/lib/helpers.sh"; host_paths "$app" 2>&1 >/dev/null)"; then
+        fail "$app" "$err"
+    fi
 }
 
 # ── Run ─────────────────────────────────────────────────────────────────────

@@ -108,6 +108,7 @@ reports from other distros are welcome.
 | [`amdgpu_top`](apps/amdgpu_top/README.md) | AMD GPU monitor |
 | [`corefreq`](apps/corefreq/README.md) | CPU monitor with a kernel module built against your host kernel |
 | [`gpu-unlock`](apps/gpu-unlock/README.md) | Container-built NVIDIA tensor unlock, `gpu_unlock` on/off control and bundled PyTorch benchmarks |
+| [`gputaskman`](apps/gputaskman/README.md) | GPU task manager: per-process VRAM, engine load and LLM breakdown, run on the host |
 | [`memtest_vulkan`](apps/memtest_vulkan/README.md) | GPU memory stress test (Vulkan) |
 | [`nvtop`](apps/nvtop/README.md) | GPU process monitor |
 | [`nvbandwidth`](apps/nvbandwidth/README.md) | NVIDIA GPU/NVLink bandwidth test |

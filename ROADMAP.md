@@ -49,6 +49,7 @@ Priority order within each section: highest first.
 - [x] `gpu-unlock` — Zagitta's NVIDIA tensor throughput unlock (Arch/Ubuntu build containers, exported `gpu_unlock` install/on/off/status, bundled CUDA PyTorch benchmark with saved before/after comparisons; validated on CachyOS/Limine with an RTX 3080 across on/off reboots: ~1.7× FP16/BF16/TF32 GEMM, 1.52× llama.cpp BF16 prefill, 1.50× ComfyUI SDXL; Ubuntu/Mint pending)
   - Review fixes: root-owned firmware/license installation, verified privileged snapshots, persisted initramfs backend with explicit selection on ambiguous hosts, independent removal, temporary-build cleanup and actionable objtool dependency errors.
   - CachyOS/Limine: ignore compatibility-only update-initramfs wrappers, detect active Limine generator hooks, regenerate through the Limine entrypoint, and preflight before compilation/sudo.
+- [x] `gputaskman` — GPU task manager (release picker; the box carries the release and runs it on the host, where the per-process data is readable; `tools rm` deletes the host copy)
 - [x] `nvtop` — GPU process monitor (NVIDIA / AMD), Fedora package + GPU picker (default passthrough / NVIDIA CDI)
 - [x] `nvbandwidth` — NVIDIA GPU memory-bandwidth / NVLink benchmark (CUDA build container + CDI passthrough)
 - [x] `nvidia-cdi-service` — host-only boot service; regenerates the CDI spec each boot to match installed GPUs

@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Run gputaskman on the host, from the release this image carries.
+#
+# Its process table comes from /proc/<pid>/fd, fdinfo and maps. A rootless box
+# is in a user namespace of its own, and the kernel refuses those reads on any
+# process outside it, whatever the UID or container capabilities. Run in the box,
+# gputaskman lists no GPU users at all. So the bundle is copied to the shared
+# $HOME, once per release, and started on the host. `tools rm` deletes the copy
+# (apps/gputaskman/host-paths).
+set -euo pipefail
+
+bundle=/opt/gputaskman
+release="$(cat /usr/share/linux-tools/release)"
+root="$HOME/.local/share/gputaskman"
+target="$root/$release"
+
+# The first call in a new box only bootstraps host-spawn and returns nothing,
+# hence the second try. Without the host's flatpak package every call returns
+# nothing, which is why this checks for output and not the exit status.
+host_reachable() {
+    [ "$(distrobox-host-exec --yes echo ok </dev/null 2>/dev/null || true)" = ok ]
+}
+
+if ! host_reachable && ! host_reachable; then
+    echo "gputaskman: cannot reach the host (is the flatpak package installed there?)." >&2
+    echo "gputaskman: running in the box, where the process table stays empty." >&2
+    exec "$bundle/gputaskman" "$@"
+fi
+
+if [ ! -x "$target/gputaskman" ]; then
+    mkdir -p "$root"
+    # Built aside and renamed, so an interrupted copy is never taken for a
+    # complete one. A concurrent launch may win the rename; its copy is as good.
+    staging="$(mktemp -d "$root/.staging.XXXXXX")"
+    cp -R "$bundle/." "$staging/"
+    mv -T "$staging" "$target" 2>/dev/null || rm -rf "$staging"
+    find "$root" -mindepth 1 -maxdepth 1 ! -name "$release" ! -name '.staging.*' \
+        -exec rm -rf {} +
+fi
+
+exec distrobox-host-exec "$target/gputaskman" "$@"
