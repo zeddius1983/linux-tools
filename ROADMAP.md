@@ -34,7 +34,7 @@ Priority order within each section: highest first.
   - [x] Host terminals by default: the launcher sets `SHELL` to `orca-host-shell` (host login shell; `orca-host-zsh`/`-bash` for a fixed one), which Orca's Custom shell setting still overrides
   - Orca launches agent CLIs, and the already-exported ones reach it fine: `distrobox-export --bin` wrappers carry a branch for exactly this — from inside a *different* box they re-dispatch through `distrobox-host-exec`, which lands back on the host wrapper and enters the right box. Verified with `distrobox enter chrome-box -- ~/.local/bin/codex --version`, which prints `codex-cli 0.153.4`. So Orca needs neither the agents baked into its own image nor `host-only` status on that account.
   - What it does inherit is the `distrobox-host-exec` prerequisite chain already documented in AGENTS.md: `flatpak` on the host, and `curl`/`wget` in the Orca image so `host-spawn` can bootstrap. Both fail silently when missing, so check them first if agents don't launch.
-- [x] `opencode` — AI coding agent CLI (https://opencode.ai/docs); release picker over published `anomalyco/opencode` releases
+- [x] `opencode` — AI coding agent CLI (https://opencode.ai/docs); release picker over published `anomalyco/opencode` releases; a bundled plugin lists running llama.cpp, FastFlowLM and other local servers as providers
 - [x] `pi` — minimal, extensible coding agent (https://pi.dev); npm install on NodeSource Node 24, release picker over published `earendil-works/pi` releases, launcher pinned to the box's own Node
 - [ ] `cursor` — AI-powered code editor (Electron)
 - [ ] `windsurf` — Codeium Windsurf editor
