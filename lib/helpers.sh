@@ -102,6 +102,26 @@ is_hostonly_installer() {
        && ! -f "$APPS_DIR/$app/Dockerfile.ubuntu" ]]
 }
 
+# What an app leaves on the host outside its box, as absolute paths, read from
+# apps/<app>/host-paths for `tools rm` to delete. The last component of each
+# entry must contain the app's name, so a slip cannot delete something shared
+# like ~/.local/share. Fails on the first bad entry.
+host_paths() {
+    local app="$1" file="$APPS_DIR/$1/host-paths" line base
+    [[ -f "$file" ]] || return 0
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line="${line%$'\r'}"
+        [[ -z "$line" || "$line" == \#* ]] && continue
+        base="${line##*/}"
+        if [[ "$line" != \~/* || "$line" == *[[:space:]*?\[]* \
+              || "/$line/" == */../* || "$base" != *"$app"* ]]; then
+            echo "Error: bad entry in $file: '$line' (needs ~/..., no globs or '..', last part naming '$app')" >&2
+            return 1
+        fi
+        printf '%s\n' "$HOME/${line#\~/}"
+    done < "$file"
+}
+
 list_apps() {
     local app_dir app
     for app_dir in "$APPS_DIR"/*/; do

@@ -1,0 +1,6 @@
+Select gputaskman release
+Choose a gputaskman release to install:
+setup,build
+arg|GPUTASKMAN_RELEASE
+releases|shanselman/gputaskman
+tag-match|^v(0\.([2-9]|[1-9][0-9])|[1-9][0-9]*\.[0-9]+)\.[0-9]+$

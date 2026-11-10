@@ -277,6 +277,10 @@ cmd_rm() {
         return
     fi
 
+    # Read first: a bad list has to fail before the box is removed.
+    local host_files path
+    host_files="$(host_paths "$app")" || exit 1
+
     box="$(box_name "$app")"
 
     stop_box_processes "$app"
@@ -288,6 +292,12 @@ cmd_rm() {
     rm -f "$HOME/.local/share/applications/${box}"-*.desktop
     rm -f "$HOME/.local/share/icons/hicolor/256x256/apps/${box}"-*.png
     rm -f "$HOME/.local/share/icons/hicolor/scalable/apps/${box}"-*.svg
+
+    while IFS= read -r path; do
+        [[ -n "$path" && -e "$path" ]] || continue
+        echo "==> Removing host files '$path'..."
+        rm -rf -- "$path"
+    done <<<"$host_files"
 }
 
 cmd_enter() {

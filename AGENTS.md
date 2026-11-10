@@ -142,6 +142,7 @@ Create `apps/<name>/` with the files below — `Dockerfile`, `exports`, `descrip
 | `host-only` | Optional. Marker file (contents ignored). Tells `tools setup` the app installs straight to the host instead of running in a container (see `apps/shell-toolbox`). |
 | `unmaintained` | Optional. Marker file for an app that still works but is not being kept current. The dashboard greys it out and sorts it last in its tab, and `tools list` flags it. Its optional one-line contents are the reason, shown in the dashboard footer. |
 | `renamed-from` | Optional. Previous app name. During setup, removes that app's obsolete Distrobox and image before building the renamed app; shared-home data is preserved. |
+| `host-paths` | Optional. Files or directories the app puts on the host outside its box, one `~/...` path per line (`#` comments allowed). `tools rm` deletes them; `tools setup` does not. Only for copies the app can recreate, never user data. No globs or `..`, and each path's last part must contain the app's name. |
 
 Optionally add `icon.png` or `icon.svg` — if present, it overrides whatever icon the container has. All export types share the same bundled icon.
 
