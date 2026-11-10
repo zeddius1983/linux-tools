@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Keeps the local-server discovery plugin in the user's OpenCode config in step
+# with this image, then runs OpenCode. The plugin lives in $HOME, which the image
+# can't write to at build time. It needs the V2 plugin API, so a 1.x install
+# removes it rather than installing it.
+
+src=/usr/share/opencode/opencode-local-discover.ts
+dir="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plugins"
+dst="$dir/opencode-local-discover.ts"
+
+case "$(cat /usr/share/linux-tools/release 2>/dev/null)" in
+    v0.* | v1.*)
+        rm -f "$dst"
+        ;;
+    *)
+        cmp -s "$src" "$dst" || { mkdir -p "$dir" && cp "$src" "$dst"; } || true
+        ;;
+esac
+
+exec /usr/libexec/opencode/opencode "$@"
