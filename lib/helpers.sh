@@ -113,7 +113,7 @@ host_paths() {
         line="${line%$'\r'}"
         [[ -z "$line" || "$line" == \#* ]] && continue
         base="${line##*/}"
-        if [[ "$line" != "~/"* || "$line" == *[[:space:]*?\[]* \
+        if [[ "$line" != \~/* || "$line" == *[[:space:]*?\[]* \
               || "/$line/" == */../* || "$base" != *"$app"* ]]; then
             echo "Error: bad entry in $file: '$line' (needs ~/..., no globs or '..', last part naming '$app')" >&2
             return 1
