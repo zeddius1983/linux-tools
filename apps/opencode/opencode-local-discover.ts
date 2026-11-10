@@ -123,7 +123,11 @@ async function probe(port: number, session: Session | undefined, previous: Serve
       context = Number(flagValue(session, ["--ctx-len"])) || undefined
     } else if (res.headers.get("server")?.toLowerCase() === "llama.cpp") {
       label = `llama.cpp (port ${port})`
-      const props: any = await getJSON(`${base}/props`).catch(() => undefined)
+      const props: any = await getJSON(`${base}/props`).catch((error) => {
+        // Left to the handler below: guessing the size here could advertise more
+        // context than the server has.
+        if (error?.name === "TimeoutError") throw error
+      })
       context = props?.default_generation_settings?.n_ctx
     }
 
