@@ -41,9 +41,9 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
 #
 # Both installers always write to $HOME/.opencode/bin and have no install-dir
 # option, so they run against a throwaway HOME and the binary is moved to
-# /usr/bin, where `command -pv` (used to resolve exports) looks. (v2 also drops
-# an `opencode2` shim there; it is discarded with the throwaway HOME.) They
-# need bash, not dash: they use `set -o pipefail`.
+# /usr/libexec/opencode, behind the /usr/bin/opencode wrapper below. (v2 also
+# drops an `opencode2` shim there; it is discarded with the throwaway HOME.)
+# They need bash, not dash: they use `set -o pipefail`.
 ARG CACHE_BUST=0
 ARG OPENCODE_RELEASE=latest
 RUN echo "==> Installing OpenCode ${OPENCODE_RELEASE} (cache-bust: ${CACHE_BUST})" \
@@ -53,13 +53,21 @@ RUN echo "==> Installing OpenCode ${OPENCODE_RELEASE} (cache-bust: ${CACHE_BUST}
     && if [ "$version" = latest ]; then set --; \
        else set -- --version "$version"; fi \
     && HOME=/opt/opencode-install bash /tmp/opencode-install.sh --no-modify-path "$@" \
-    && mv /opt/opencode-install/.opencode/bin/opencode /usr/bin/opencode \
-    && /usr/bin/opencode --version \
+    && mkdir -p /usr/libexec/opencode \
+    && mv /opt/opencode-install/.opencode/bin/opencode /usr/libexec/opencode/opencode \
+    && /usr/libexec/opencode/opencode --version \
     && rm -rf /opt/opencode-install /tmp/opencode-install.sh
+
+# /usr/bin, where `command -pv` (used to resolve exports) looks. The wrapper
+# copies the local-server discovery plugin into the user's config on launch: the
+# config is in $HOME, which is only there at runtime.
+COPY opencode-wrapper /usr/bin/opencode
+COPY opencode-local-discover.ts /usr/share/opencode/opencode-local-discover.ts
+RUN chmod +x /usr/bin/opencode
 
 # The release actually installed, as the picker writes it ("v2.2.5"), for the
 # dashboard's update check; read back by record_install (lib/commands.sh). 2.x
 # prints "opencode v2.2.5" and 1.x a bare "1.18.35", hence the re-prefixing.
 RUN mkdir -p /usr/share/linux-tools \
-    && v="$(/usr/bin/opencode --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)" \
+    && v="$(/usr/libexec/opencode/opencode --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)" \
     && test -n "$v" && echo "v$v" > /usr/share/linux-tools/release

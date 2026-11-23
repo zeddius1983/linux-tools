@@ -56,6 +56,39 @@ opencode auth login           # add a provider API key
 opencode --version
 ```
 
+## Local model servers
+
+On OpenCode 2, a plugin lists whatever local LLM servers are running, so there is
+nothing to configure when you load a different model. Each server becomes a
+provider named after its port, and its models appear as `local-<port>/<model>`:
+
+```text
+local-8000/Qwen3.6-35B-A3B-Q8_0
+local-8001/qwen3.6-moe:35b-a3b
+```
+
+The list is rechecked every 30 seconds, so a model started or stopped in `llmctl`
+shows up or disappears within that time. Pick one with `/models` in the TUI, or
+`opencode run --model local-8000/<model> "..."`.
+
+| Server | How it is found | Models shown | Context size from |
+|---|---|---|---|
+| llama.cpp | `/v1/models` | The loaded model | The server (`/props`) |
+| FastFlowLM | `/v1/models`, then `/api/ps` | Only the loaded model, not its whole catalog | `--ctx-len` in the `llmctl` session; 32768 if started by hand |
+| Strata, others | `/v1/models` | What the server lists | The server's `/v1/models`, or 32768 |
+
+Ports checked: **8000-8099** (llama.cpp, and Strata's 8080), **52625-52634**
+(FastFlowLM's default 52625 and the ports after it), and any port an `llmctl`
+session uses. To replace the two ranges, create
+`~/.config/opencode/local-discover.json`. It is read on each check:
+
+```json
+{ "ports": "8000-8099,52625-52634,9000" }
+```
+
+vLLM is skipped because OpenCode already detects it. The plugin isn't installed
+for a `v1.x` release, which can't run V2 plugins.
+
 ## Updating
 
 Rerun `tools setup opencode` and pick a newer release. The install step always
@@ -68,6 +101,7 @@ re-downloads, so the build cache never keeps an old version.
 | Path | Contents |
 |---|---|
 | `~/.config/opencode/` | Config (`opencode.json`/`opencode.jsonc`) and installed plugins |
+| `~/.config/opencode/plugins/opencode-local-discover.ts` | The local-server plugin. Overwritten from the image on each launch, and removed by `tools rm opencode` |
 | `~/.local/share/opencode/` | Provider logins (`auth.json`), sessions (`opencode.db`), logs |
 | `~/.cache/opencode/` | Cached model list (`models.json`) and helper binaries it downloads |
 
