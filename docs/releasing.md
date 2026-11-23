@@ -59,17 +59,25 @@ dashboard binary for that arch. `.github`, `.claude` and `.codex` are dropped.
 ```bash
 ./scripts/package.sh v2026.09.1 dist
 test_home=$(mktemp -d)
-HOME=$test_home ./install.sh --tarball dist/linux-tools-linux-amd64.tar.gz --no-modify-rc
+HOME=$test_home ./install.sh --tarball dist/linux-tools-linux-amd64.tar.gz \
+    --prefix "$test_home/linux-tools" --no-modify-rc
 HOME=$test_home "$test_home/.local/bin/tools" version
 ```
 
-The temporary `HOME` is what keeps a test install away from the real one.
-`--prefix` is not enough: it moves the release directory, but the installer
-always links `$HOME/.local/bin/tools` to the new install, so `--prefix` alone
-repoints your own `tools` command at the test copy, and leaves it dangling once
-that copy is deleted. `scripts/test-install-e2e.sh` uses a temporary `HOME` for
-the same reason. `--tarball` skips the download entirely, which is also how CI
-smoke-tests the installer without a published release to point at.
+Both the temporary `HOME` and `--prefix` are needed to keep a test install away
+from the real one, because each covers only half of it:
+
+- **`--prefix`** moves the release directory. Without it, `install.sh` picks
+  `$LT_PREFIX` or `$XDG_DATA_HOME/linux-tools` before anything under `$HOME`,
+  so with either of those exported the test would unpack into your real
+  release directory, switch its `current` link and prune its old versions.
+- **The temporary `HOME`** moves the command link. The installer always links
+  `$HOME/.local/bin/tools` to the new install, so `--prefix` alone repoints your
+  own `tools` command at the test copy, which dangles once that copy is deleted.
+
+`scripts/test-install-e2e.sh` uses both for the same reasons. `--tarball` skips
+the download entirely, which is also how CI smoke-tests the installer without a
+published release to point at.
 
 `package.sh` archives **HEAD**, not the working tree — the dashboard binary is
 built from the archived tree too, so an uncommitted change cannot ship as a
