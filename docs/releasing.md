@@ -58,12 +58,18 @@ dashboard binary for that arch. `.github`, `.claude` and `.codex` are dropped.
 
 ```bash
 ./scripts/package.sh v2026.09.1 dist
-./install.sh --tarball dist/linux-tools-linux-amd64.tar.gz --prefix /tmp/lt-test --no-modify-rc
+test_home=$(mktemp -d)
+HOME=$test_home ./install.sh --tarball dist/linux-tools-linux-amd64.tar.gz --no-modify-rc
+HOME=$test_home "$test_home/.local/bin/tools" version
 ```
 
-`--prefix` keeps a test install away from the real one; `--tarball` skips the
-download entirely, which is also how CI smoke-tests the installer without a
-published release to point at.
+The temporary `HOME` is what keeps a test install away from the real one.
+`--prefix` is not enough: it moves the release directory, but the installer
+always links `$HOME/.local/bin/tools` to the new install, so `--prefix` alone
+repoints your own `tools` command at the test copy, and leaves it dangling once
+that copy is deleted. `scripts/test-install-e2e.sh` uses a temporary `HOME` for
+the same reason. `--tarball` skips the download entirely, which is also how CI
+smoke-tests the installer without a published release to point at.
 
 `package.sh` archives **HEAD**, not the working tree — the dashboard binary is
 built from the archived tree too, so an uncommitted change cannot ship as a
