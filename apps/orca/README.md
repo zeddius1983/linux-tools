@@ -86,6 +86,11 @@ closes as soon as it opens. Orca only gets the default when started from the
 menu entry or the tray. A bare `distrobox enter orca-box -- /opt/Orca/orca-ide`
 keeps in-box terminals.
 
+If the bridge supplies a terminal whose device name is unavailable on the host,
+the wrapper creates a host PTY with `script` (from `util-linux`). This prevents
+`tty: ttyname error: No such device` during login startup. No session transcript
+is saved, and noninteractive commands continue to use pipes.
+
 ## Updating
 
 Rerun `tools setup orca`, optionally with `ORCA_RELEASE=`, to move to another
