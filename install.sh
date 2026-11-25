@@ -61,6 +61,7 @@ Usage: install.sh [options]
   --version <tag>     install a specific release (e.g. v2026.09.1) instead of
                       the latest one; also how you roll back
   --prefix <dir>      install root (default: $DATA_DIR)
+                      (the command is still linked as $BIN_DIR/tools)
   --tarball <path>    install from a local tarball, skipping the download
   --keep <n>          keep the n most recent versions (default: $KEEP)
   --no-modify-rc      do not touch ~/.bashrc or the zsh completion fragment
